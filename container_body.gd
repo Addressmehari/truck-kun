@@ -220,21 +220,77 @@ func _draw() -> void:
 		zoom_requested = truck.is_zoom_requested()
 		
 	if zoom_requested:
+		# Draw cargo hold dark interior recess
+		draw_rect(Rect2(container_left + 2.0, container_top + 2.0, 108.0, 75.0), Color(0.08, 0.09, 0.11, 0.8), true)
+		
 		for i in range(6):
 			var rect = slot_rects[i]
 			var item = inventory[i]
 			
 			if item == null:
-				draw_rect(rect, Color(0, 0, 0, 0.25), true)
-				draw_rect(rect, Color(0.92, 0.72, 0.05, 0.6), false, 1.5) # Glowing yellow slot border
+				# 3D Recessed Slot Frame
+				draw_rect(rect, Color(0.04, 0.04, 0.05, 0.6), true) # Slot interior
+				draw_rect(rect, Color(0.25, 0.28, 0.32), false, 1.5) # Steel slot rim
+				
+				# Subtle inner shadow
+				draw_line(rect.position, Vector2(rect.end.x, rect.position.y), Color(0, 0, 0, 0.5), 1.0)
+				draw_line(rect.position, Vector2(rect.position.x, rect.end.y), Color(0, 0, 0, 0.5), 1.0)
+				
+				# Blueprint-style dashed icon inside slot
+				var inner_dash = rect.grow(-6)
+				draw_rect(inner_dash, Color(0.25, 0.28, 0.32, 0.4), false, 1.0)
+				
+				# Empty slot LED (Soft Glowing Red/Amber)
+				draw_circle(Vector2(rect.end.x - 4, rect.position.y + 4), 1.8, Color(0.95, 0.35, 0.15))
+				draw_circle(Vector2(rect.end.x - 4, rect.position.y + 4), 0.8, Color(1.0, 0.7, 0.5)) # light core
 			else:
 				var inner_color = item.get("color", Color(0.82, 0.53, 0.28))
-				var inner_rect = rect.grow(-2)
-				draw_rect(inner_rect, inner_color, true)
 				
-				draw_rect(inner_rect, Color.BLACK, false, 2.0)
-				draw_line(inner_rect.position, inner_rect.end, Color.BLACK, 2.0)
-				draw_line(Vector2(inner_rect.end.x, inner_rect.position.y), Vector2(inner_rect.position.x, inner_rect.end.y), Color.BLACK, 2.0)
+				# Draw base crate shape
+				draw_rect(rect, inner_color, true)
+				
+				# Shading (top-left highlight, bottom-right shadow)
+				var shadow_color = Color(0.0, 0.0, 0.0, 0.25)
+				var highlight_color = Color(1.0, 1.0, 1.0, 0.2)
+				# Left/Top highlights
+				draw_line(rect.position + Vector2(1, 1), Vector2(rect.end.x - 1, rect.position.y + 1), highlight_color, 1.5)
+				draw_line(rect.position + Vector2(1, 1), Vector2(rect.position.x + 1, rect.end.y - 1), highlight_color, 1.5)
+				# Right/Bottom shadows
+				draw_line(Vector2(rect.end.x - 1, rect.position.y + 1), rect.end - Vector2(1, 1), shadow_color, 1.5)
+				draw_line(Vector2(rect.position.x + 1, rect.end.y - 1), rect.end - Vector2(1, 1), shadow_color, 1.5)
+				
+				# Outer frame planks
+				var frame_color = inner_color.darkened(0.28)
+				var frame_t = 3.0
+				draw_rect(rect, frame_color, false, frame_t)
+				
+				# Diagonal crossbeam plank
+				var start_pt = rect.position + Vector2(2, 2)
+				var end_pt = rect.end - Vector2(2, 2)
+				draw_line(start_pt, end_pt, frame_color, 3.0)
+				
+				# Corner Metal Plates / Brackets
+				var plate_color = Color(0.18, 0.18, 0.22)
+				var p_size = 4.0
+				# Top Left
+				draw_rect(Rect2(rect.position.x, rect.position.y, p_size, p_size), plate_color, true)
+				# Top Right
+				draw_rect(Rect2(rect.end.x - p_size, rect.position.y, p_size, p_size), plate_color, true)
+				# Bottom Left
+				draw_rect(Rect2(rect.position.x, rect.end.y - p_size, p_size, p_size), plate_color, true)
+				# Bottom Right
+				draw_rect(Rect2(rect.end.x - p_size, rect.end.y - p_size, p_size, p_size), plate_color, true)
+				
+				# Small iron rivets
+				var rivet_color = Color(0.55, 0.55, 0.6)
+				draw_circle(rect.position + Vector2(2, 2), 0.8, rivet_color)
+				draw_circle(Vector2(rect.end.x - 2, rect.position.y + 2), 0.8, rivet_color)
+				draw_circle(Vector2(rect.position.x + 2, rect.end.y - 2), 0.8, rivet_color)
+				draw_circle(rect.end - Vector2(2, 2), 0.8, rivet_color)
+				
+				# Active/Loaded slot LED (Glowing Emerald Green)
+				draw_circle(Vector2(rect.end.x - 4, rect.position.y + 4), 1.8, Color(0.15, 0.85, 0.25))
+				draw_circle(Vector2(rect.end.x - 4, rect.position.y + 4), 0.8, Color(0.7, 1.0, 0.8)) # light core
 
 
 # Helper function to draw dynamic coil springs
