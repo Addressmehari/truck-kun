@@ -9,9 +9,6 @@
 
 [node name="main" type="Node2D"]
 
-[node name="truck" parent="." instance=ExtResource("1_truck")]
-position = Vector2(-109, -195)
-
 [node name="Road" type="StaticBody2D" parent="."]
 physics_material_override = SubResource("PhysicsMaterial_road")
 script = ExtResource("3_road_gd")
@@ -44,3 +41,6 @@ position = Vector2(-320, -100)
 
 [node name="crate" parent="." instance=ExtResource("4_1bvp3")]
 position = Vector2(285, -142)
+
+[node name="truck" parent="." instance=ExtResource("1_truck")]
+position = Vector2(-166, -239)
