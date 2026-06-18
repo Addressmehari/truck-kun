@@ -131,7 +131,7 @@ func _check_drop_on_container() -> void:
 					return
 
 func _draw() -> void:
-	var rect = Rect2(-width/2.0, -height/2.0, width, height)
+	var rect = Rect2(-width / 2.0, -height / 2.0, width, height)
 	
 	var current_color = color
 	# Render as translucent if it acts as a sensor (due to either dragging or issensor)
@@ -149,5 +149,5 @@ func _draw() -> void:
 	draw_rect(rect, border_color, false, 2.0)
 	
 	# Draw diagonal lines (wooden crate look)
-	draw_line(Vector2(-width/2.0, -height/2.0), Vector2(width/2.0, height/2.0), border_color, 2.0)
-	draw_line(Vector2(width/2.0, -height/2.0), Vector2(-width/2.0, height/2.0), border_color, 2.0)
+	draw_line(Vector2(-width / 2.0, -height / 2.0), Vector2(width / 2.0, height / 2.0), border_color, 2.0)
+	draw_line(Vector2(width / 2.0, -height / 2.0), Vector2(-width / 2.0, height / 2.0), border_color, 2.0)

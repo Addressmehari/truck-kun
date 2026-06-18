@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cbfysr7tnjtrc" path="res://truck.gd" id="1_truck_gd"]
 [ext_resource type="PackedScene" uid="uid://bo6otg6erdwgb" path="res://tyre.tscn" id="2_tyre_scene"]
-[ext_resource type="Script" path="res://container_body.gd" id="3_container_body_gd"]
+[ext_resource type="Script" uid="uid://cvxsn60hgik2a" path="res://container_body.gd" id="3_container_body_gd"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_cab"]
 size = Vector2(67, 69)
@@ -45,6 +45,12 @@ offset_bottom = -1.0
 offset_left = -117.0
 offset_top = -7.0
 offset_right = -5.0
+offset_bottom = -3.0
+
+[node name="backdoor" type="ColorRect" parent="container_body"]
+offset_left = -120.0
+offset_top = -79.0
+offset_right = -115.0
 offset_bottom = -3.0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="container_body"]

@@ -69,4 +69,7 @@ func is_any_crate_dragged_near() -> bool:
 	return false
 
 func is_zoom_requested() -> bool:
+	if is_instance_valid(container_body) and container_body.get("backdoor_blocked"):
+		return false
 	return is_e_toggled or is_any_crate_dragged_near()
+

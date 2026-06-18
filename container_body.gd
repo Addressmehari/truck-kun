@@ -14,6 +14,9 @@ var slot_rects = [
 ]
 
 @onready var truck = get_parent()
+@onready var backdoor = get_node_or_null("backdoor")
+
+var backdoor_blocked: bool = false
 
 func _ready() -> void:
 	# Force children (ColorRects) to render behind the parent's custom _draw() call.
@@ -24,10 +27,46 @@ func _ready() -> void:
 	var rim_rect = get_node_or_null("rim_back")
 	if rim_rect:
 		rim_rect.show_behind_parent = true
+		
+	# Setup backdoor pivot at the bottom center and color
+	if backdoor:
+		backdoor.pivot_offset = Vector2(2.5, 76.0)
+		backdoor.color = Color(0.25, 0.25, 0.25) # dark shutter metal color
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	# Refresh slot visuals
 	queue_redraw()
+	
+	# Check if any physical crate is blocking the backdoor's opening path
+	backdoor_blocked = false
+	if backdoor:
+		var backdoor_pivot_global = to_global(Vector2(-117.5, -3.0))
+		for crate in get_tree().get_nodes_in_group("crates"):
+			if is_instance_valid(crate) and not crate.get("is_dragging"):
+				var dist = backdoor_pivot_global.distance_to(crate.global_position)
+				if dist < 75.0: # door swing radius sweep
+					backdoor_blocked = true
+					break
+
+		# Warn by modulating color if blocked and player is trying to open (E toggled)
+		if backdoor_blocked and is_instance_valid(truck) and truck.get("is_e_toggled"):
+			# Pulse modulation color between normal and warnings red
+			var pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.015)
+			backdoor.modulate = Color(1.0, 1.0, 1.0).lerp(Color(1.0, 0.2, 0.2), pulse)
+		else:
+			backdoor.modulate = Color(1.0, 1.0, 1.0)
+	
+	# Smoothly animate backdoor rotation to drop it backwards (rotate left)
+	if backdoor and is_instance_valid(truck):
+		var target_rotation = 0.0
+		if truck.has_method("is_zoom_requested") and truck.is_zoom_requested():
+			# Drop backwards/downwards (approx -110 degrees = -1.92 radians)
+			target_rotation = -1.92
+		else:
+			target_rotation = 0.0
+		backdoor.rotation = lerp(backdoor.rotation, target_rotation, 8.0 * delta)
+
+
 
 func _draw() -> void:
 	if not is_instance_valid(truck):
