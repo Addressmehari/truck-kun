@@ -3,8 +3,9 @@ extends Camera2D
 @export var target_path: NodePath
 var target: Node2D
 
-var default_zoom := Vector2(1.2, 1.2)
-var zoomed_zoom := Vector2(1.8, 1.8)
+@export var default_zoom := Vector2(1.8, 1.8)
+@export var zoomed_zoom := Vector2(2.6, 2.6)
+
 
 func _ready():
 	if target_path:

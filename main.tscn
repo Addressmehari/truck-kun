@@ -30,7 +30,7 @@ default_color = Color(0, 0.9, 0.46, 1)
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2(2, 0)
-zoom = Vector2(1.2, 1.2)
+zoom = Vector2(1.75, 1.75)
 script = ExtResource("2_camera_gd")
 
 [node name="crate1" parent="." instance=ExtResource("4_1bvp3")]

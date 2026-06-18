@@ -12,6 +12,10 @@ extends Node2D
 
 var is_e_toggled: bool = false
 
+func _ready() -> void:
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+
 func _physics_process(_delta):
 	# Calculate input from keyboard keys
 	var move_input = 0.0
