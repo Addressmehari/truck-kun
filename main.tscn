@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3 uid="uid://bcg1yj1wjk1uu"]
+[gd_scene load_steps=6 format=3 uid="uid://bcg1yj1wjk1uu"]
 
 [ext_resource type="PackedScene" uid="uid://y4vbinwdj2t8" path="res://truck.tscn" id="1_truck"]
 [ext_resource type="Script" uid="uid://bt8r8k7o4sb33" path="res://camera.gd" id="2_camera_gd"]
 [ext_resource type="Script" uid="uid://cm11vylvjc2os" path="res://road.gd" id="3_road_gd"]
+[ext_resource type="PackedScene" path="res://crate.tscn" id="4_1bvp3"]
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_road"]
 
@@ -31,3 +32,6 @@ default_color = Color(0, 0.9, 0.46, 1)
 position = Vector2(2, 0)
 zoom = Vector2(1.2, 1.2)
 script = ExtResource("2_camera_gd")
+
+[node name="crate" parent="." instance=ExtResource("4_1bvp3")]
+position = Vector2(285, -142)
