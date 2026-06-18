@@ -69,6 +69,7 @@ shape = SubResource("RectangleShape2D_container")
 position = Vector2(-2, -25)
 node_a = NodePath("../chassis")
 node_b = NodePath("../container_body")
+disable_collision = false
 
 [node name="tyre-1" parent="." instance=ExtResource("2_tyre_scene")]
 position = Vector2(35, 0)
