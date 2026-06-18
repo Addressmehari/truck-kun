@@ -2,7 +2,17 @@
 extends RigidBody2D
 
 # 6 slots inside the container
-var inventory = [null, null, null, null, null, null]
+var inventory = [
+	{"type": "glass", "color": Color(0.4, 0.75, 0.9, 0.55), "width": 40.0, "height": 40.0, "health": 100.0},
+	null,
+	null,
+	null,
+	null,
+	null
+]
+var glass_break_particles: CPUParticles2D
+var last_linear_velocity := Vector2.ZERO
+var time_alive := 0.0
 
 # Local coordinates for the slots in the container space (width 112, height 79)
 var slot_rects = [
@@ -81,6 +91,29 @@ func _ready() -> void:
 	dust_particles_3.local_coords = false
 	add_child(dust_particles_3)
 
+	# Setup glass break particles
+	glass_break_particles = CPUParticles2D.new()
+	glass_break_particles.position = Vector2(-120, -38)
+	glass_break_particles.amount = 40
+	glass_break_particles.lifetime = 1.0
+	glass_break_particles.direction = Vector2(-1.0, 0.4)
+	glass_break_particles.spread = 40.0
+	glass_break_particles.gravity = Vector2(0, 240)
+	glass_break_particles.initial_velocity_min = 100.0
+	glass_break_particles.initial_velocity_max = 220.0
+	glass_break_particles.scale_amount_min = 1.5
+	glass_break_particles.scale_amount_max = 4.0
+	
+	var glass_ramp = Gradient.new()
+	glass_ramp.set_color(0, Color(0.5, 0.85, 0.95, 0.85))
+	glass_ramp.set_color(0.6, Color(0.5, 0.8, 0.95, 0.6))
+	glass_ramp.set_color(1, Color(0.5, 0.8, 0.95, 0.0))
+	glass_break_particles.color_ramp = glass_ramp
+	glass_break_particles.one_shot = true
+	glass_break_particles.emitting = false
+	glass_break_particles.local_coords = false
+	add_child(glass_break_particles)
+
 	# Enable tyre contacts reporting for ground checking
 	if tyre_2:
 		tyre_2.contact_monitor = true
@@ -92,6 +125,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
+	time_alive += delta
 	# Refresh visuals
 	queue_redraw()
 	
@@ -151,6 +185,52 @@ func _physics_process(delta: float) -> void:
 		else:
 			target_rotation = 0.0
 		backdoor.rotation = lerp(backdoor.rotation, target_rotation, 8.0 * delta)
+
+	# Dynamic damage to glass items inside inventory due to vibration/shake and hard landings
+	var on_ground = false
+	if (is_instance_valid(tyre_2) and tyre_2.get_colliding_bodies().size() > 0) or \
+	   (is_instance_valid(tyre_3) and tyre_3.get_colliding_bodies().size() > 0):
+		on_ground = true
+		
+	# 1. Bumpy road/vibration damage based on speed limits (km/h)
+	var speed_dmg_rate = 0.0
+	var speed_kmh = speed * 0.08
+	
+	if on_ground:
+		if speed_kmh >= 40.0 and speed_kmh < 60.0:
+			# Slowly reduce health (approx 0.15% to 3.0% per second)
+			speed_dmg_rate = (speed_kmh - 40.0) * 0.15
+		elif speed_kmh >= 60.0:
+			# Fast health reduction (approx 3% to 33%+ per second)
+			speed_dmg_rate = 3.0 + (speed_kmh - 60.0) * 1.5
+		
+	# 2. Swaying/flipping damage (less sensitive, triggers on extreme sway)
+	if abs(angular_velocity) > 1.2:
+		speed_dmg_rate += (abs(angular_velocity) - 1.2) * 5.0
+		
+	# Apply continuous speed/sway damage (after startup grace period)
+	if time_alive > 1.5 and speed_dmg_rate > 0.0:
+		for i in range(6):
+			if inventory[i] != null and inventory[i].get("type") == "glass":
+				inventory[i]["health"] -= speed_dmg_rate * delta
+				if inventory[i]["health"] <= 0.0:
+					inventory[i] = null
+					emit_glass_break()
+					
+	# 3. Bump & Landing damage (sudden vertical acceleration/deceleration - after startup grace period)
+	if delta > 0.0:
+		var accel = (linear_velocity - last_linear_velocity) / delta
+		# Raised threshold to 800.0 to prevent normal driving vibrations from cracking glass
+		if time_alive > 1.5 and accel.length() > 800.0:
+			# Decreased multiplier to 0.00015 (100x less damage) to make glass extremely resilient to bumps
+			var landing_dmg = (accel.length() - 800.0) * 0.00006
+			for i in range(6):
+				if inventory[i] != null and inventory[i].get("type") == "glass":
+					inventory[i]["health"] -= landing_dmg
+					if inventory[i]["health"] <= 0.0:
+						inventory[i] = null
+						emit_glass_break()
+	last_linear_velocity = linear_velocity
 
 
 func _draw() -> void:
@@ -244,53 +324,99 @@ func _draw() -> void:
 				draw_circle(Vector2(rect.end.x - 4, rect.position.y + 4), 1.8, Color(0.95, 0.35, 0.15))
 				draw_circle(Vector2(rect.end.x - 4, rect.position.y + 4), 0.8, Color(1.0, 0.7, 0.5)) # light core
 			else:
-				var inner_color = item.get("color", Color(0.82, 0.53, 0.28))
+				var is_glass = (item.get("type") == "glass")
 				
-				# Draw base crate shape
-				draw_rect(rect, inner_color, true)
-				
-				# Shading (top-left highlight, bottom-right shadow)
-				var shadow_color = Color(0.0, 0.0, 0.0, 0.25)
-				var highlight_color = Color(1.0, 1.0, 1.0, 0.2)
-				# Left/Top highlights
-				draw_line(rect.position + Vector2(1, 1), Vector2(rect.end.x - 1, rect.position.y + 1), highlight_color, 1.5)
-				draw_line(rect.position + Vector2(1, 1), Vector2(rect.position.x + 1, rect.end.y - 1), highlight_color, 1.5)
-				# Right/Bottom shadows
-				draw_line(Vector2(rect.end.x - 1, rect.position.y + 1), rect.end - Vector2(1, 1), shadow_color, 1.5)
-				draw_line(Vector2(rect.position.x + 1, rect.end.y - 1), rect.end - Vector2(1, 1), shadow_color, 1.5)
-				
-				# Outer frame planks
-				var frame_color = inner_color.darkened(0.28)
-				var frame_t = 3.0
-				draw_rect(rect, frame_color, false, frame_t)
-				
-				# Diagonal crossbeam plank
-				var start_pt = rect.position + Vector2(2, 2)
-				var end_pt = rect.end - Vector2(2, 2)
-				draw_line(start_pt, end_pt, frame_color, 3.0)
-				
-				# Corner Metal Plates / Brackets
-				var plate_color = Color(0.18, 0.18, 0.22)
-				var p_size = 4.0
-				# Top Left
-				draw_rect(Rect2(rect.position.x, rect.position.y, p_size, p_size), plate_color, true)
-				# Top Right
-				draw_rect(Rect2(rect.end.x - p_size, rect.position.y, p_size, p_size), plate_color, true)
-				# Bottom Left
-				draw_rect(Rect2(rect.position.x, rect.end.y - p_size, p_size, p_size), plate_color, true)
-				# Bottom Right
-				draw_rect(Rect2(rect.end.x - p_size, rect.end.y - p_size, p_size, p_size), plate_color, true)
-				
-				# Small iron rivets
-				var rivet_color = Color(0.55, 0.55, 0.6)
-				draw_circle(rect.position + Vector2(2, 2), 0.8, rivet_color)
-				draw_circle(Vector2(rect.end.x - 2, rect.position.y + 2), 0.8, rivet_color)
-				draw_circle(Vector2(rect.position.x + 2, rect.end.y - 2), 0.8, rivet_color)
-				draw_circle(rect.end - Vector2(2, 2), 0.8, rivet_color)
-				
-				# Active/Loaded slot LED (Glowing Emerald Green)
-				draw_circle(Vector2(rect.end.x - 4, rect.position.y + 4), 1.8, Color(0.15, 0.85, 0.25))
-				draw_circle(Vector2(rect.end.x - 4, rect.position.y + 4), 0.8, Color(0.7, 1.0, 0.8)) # light core
+				if is_glass:
+					# Draw glass base
+					var glass_color = Color(0.3, 0.7, 0.9, 0.55) # translucent blue
+					draw_rect(rect, glass_color, true)
+					
+					# Shine diagonal lines
+					var shine_color = Color(1.0, 1.0, 1.0, 0.4)
+					draw_line(rect.position + Vector2(2, 6), rect.position + Vector2(24, 28), shine_color, 1.5)
+					draw_line(rect.position + Vector2(2, 12), rect.position + Vector2(18, 28), shine_color, 0.8)
+					
+					# Shining icy borders
+					var border_color = Color(0.6, 0.85, 1.0, 0.9)
+					draw_rect(rect, border_color, false, 1.5)
+					
+					# Corners
+					var corner_color = Color(0.2, 0.5, 0.8, 0.7)
+					var clen = 4.0
+					draw_line(rect.position, rect.position + Vector2(clen, 0), corner_color, 1.0)
+					draw_line(rect.position, rect.position + Vector2(0, clen), corner_color, 1.0)
+					draw_line(Vector2(rect.end.x, rect.position.y), Vector2(rect.end.x - clen, rect.position.y), corner_color, 1.0)
+					draw_line(Vector2(rect.end.x, rect.position.y), Vector2(rect.end.x, rect.position.y + clen), corner_color, 1.0)
+					draw_line(Vector2(rect.position.x, rect.end.y), Vector2(rect.position.x + clen, rect.end.y), corner_color, 1.0)
+					draw_line(Vector2(rect.position.x, rect.end.y), Vector2(rect.position.x, rect.end.y - clen), corner_color, 1.0)
+					draw_line(rect.end, rect.end - Vector2(clen, 0), corner_color, 1.0)
+					draw_line(rect.end, rect.end - Vector2(0, clen), corner_color, 1.0)
+					
+					# Active LED (blue/cyan for glass!)
+					draw_circle(Vector2(rect.end.x - 4, rect.position.y + 4), 1.8, Color(0.15, 0.75, 0.95))
+					draw_circle(Vector2(rect.end.x - 4, rect.position.y + 4), 0.8, Color(0.7, 0.95, 1.0))
+					
+					# Health bar at the top of the slot
+					var health_ratio = item.get("health", 100.0) / 100.0
+					var bar_rect = Rect2(rect.position.x + 3, rect.position.y + 2, rect.size.x - 6, 2)
+					# Dark background
+					draw_rect(bar_rect, Color(0.15, 0.15, 0.15, 0.8), true)
+					# Health fill
+					var fill_color = Color(0.2, 0.9, 0.3, 0.9)
+					if health_ratio < 0.35:
+						fill_color = Color(1.0, 0.2, 0.2, 0.9)
+					elif health_ratio < 0.7:
+						fill_color = Color(1.0, 0.7, 0.2, 0.9)
+					var fill_rect = Rect2(rect.position.x + 3, rect.position.y + 2, (rect.size.x - 6) * health_ratio, 2)
+					draw_rect(fill_rect, fill_color, true)
+				else:
+					var inner_color = item.get("color", Color(0.82, 0.53, 0.28))
+					
+					# Draw base crate shape
+					draw_rect(rect, inner_color, true)
+					
+					# Shading (top-left highlight, bottom-right shadow)
+					var shadow_color = Color(0.0, 0.0, 0.0, 0.25)
+					var highlight_color = Color(1.0, 1.0, 1.0, 0.2)
+					# Left/Top highlights
+					draw_line(rect.position + Vector2(1, 1), Vector2(rect.end.x - 1, rect.position.y + 1), highlight_color, 1.5)
+					draw_line(rect.position + Vector2(1, 1), Vector2(rect.position.x + 1, rect.end.y - 1), highlight_color, 1.5)
+					# Right/Bottom shadows
+					draw_line(Vector2(rect.end.x - 1, rect.position.y + 1), rect.end - Vector2(1, 1), shadow_color, 1.5)
+					draw_line(Vector2(rect.position.x + 1, rect.end.y - 1), rect.end - Vector2(1, 1), shadow_color, 1.5)
+					
+					# Outer frame planks
+					var frame_color = inner_color.darkened(0.28)
+					var frame_t = 3.0
+					draw_rect(rect, frame_color, false, frame_t)
+					
+					# Diagonal crossbeam plank
+					var start_pt = rect.position + Vector2(2, 2)
+					var end_pt = rect.end - Vector2(2, 2)
+					draw_line(start_pt, end_pt, frame_color, 3.0)
+					
+					# Corner Metal Plates / Brackets
+					var plate_color = Color(0.18, 0.18, 0.22)
+					var p_size = 4.0
+					# Top Left
+					draw_rect(Rect2(rect.position.x, rect.position.y, p_size, p_size), plate_color, true)
+					# Top Right
+					draw_rect(Rect2(rect.end.x - p_size, rect.position.y, p_size, p_size), plate_color, true)
+					# Bottom Left
+					draw_rect(Rect2(rect.position.x, rect.end.y - p_size, p_size, p_size), plate_color, true)
+					# Bottom Right
+					draw_rect(Rect2(rect.end.x - p_size, rect.end.y - p_size, p_size, p_size), plate_color, true)
+					
+					# Small iron rivets
+					var rivet_color = Color(0.55, 0.55, 0.6)
+					draw_circle(rect.position + Vector2(2, 2), 0.8, rivet_color)
+					draw_circle(Vector2(rect.end.x - 2, rect.position.y + 2), 0.8, rivet_color)
+					draw_circle(Vector2(rect.position.x + 2, rect.end.y - 2), 0.8, rivet_color)
+					draw_circle(rect.end - Vector2(2, 2), 0.8, rivet_color)
+					
+					# Active/Loaded slot LED (Glowing Emerald Green)
+					draw_circle(Vector2(rect.end.x - 4, rect.position.y + 4), 1.8, Color(0.15, 0.85, 0.25))
+					draw_circle(Vector2(rect.end.x - 4, rect.position.y + 4), 0.8, Color(0.7, 1.0, 0.8)) # light core
 
 
 # Helper function to draw dynamic coil springs
@@ -329,14 +455,22 @@ func draw_spring(from_pos: Vector2, to_pos: Vector2, width: float, coils: int) -
 	
 	draw_polyline(points, Color(0.9, 0.15, 0.15), 2.8)
 
+func emit_glass_break() -> void:
+	if is_instance_valid(glass_break_particles):
+		glass_break_particles.restart()
+		glass_break_particles.emitting = true
+
 func try_add_to_slot(slot_index: int, crate) -> bool:
 	if slot_index < 0 or slot_index >= 6:
 		return false
 	if inventory[slot_index] == null:
+		var is_glass = crate.get("is_glass_prop") == true
 		inventory[slot_index] = {
+			"type": "glass" if is_glass else "crate",
 			"color": crate.color,
 			"width": crate.width,
-			"height": crate.height
+			"height": crate.height,
+			"health": crate.health if is_glass else 100.0
 		}
 		return true
 	return false
@@ -358,13 +492,16 @@ func _unload_slot(slot_index: int) -> void:
 	var item_data = inventory[slot_index]
 	inventory[slot_index] = null
 	
-	# Spawn a new crate at the mouse position
-	var crate_scene = load("res://crate.tscn")
-	if crate_scene:
-		var new_crate = crate_scene.instantiate()
+	var is_glass = (item_data.get("type") == "glass")
+	var scene_path = "res://glass.tscn" if is_glass else "res://crate.tscn"
+	var scene = load(scene_path)
+	if scene:
+		var new_crate = scene.instantiate()
 		new_crate.color = item_data.get("color", Color(0.82, 0.53, 0.28))
 		new_crate.width = item_data.get("width", 40.0)
 		new_crate.height = item_data.get("height", 40.0)
+		if is_glass:
+			new_crate.health = item_data.get("health", 100.0)
 		
 		# Add it to the main scene
 		get_tree().current_scene.add_child(new_crate)

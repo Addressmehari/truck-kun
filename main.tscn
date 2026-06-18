@@ -1,9 +1,10 @@
-[gd_scene load_steps=6 format=3 uid="uid://bcg1yj1wjk1uu"]
+[gd_scene load_steps=7 format=3 uid="uid://bcg1yj1wjk1uu"]
 
 [ext_resource type="PackedScene" uid="uid://y4vbinwdj2t8" path="res://truck.tscn" id="1_truck"]
 [ext_resource type="Script" uid="uid://bt8r8k7o4sb33" path="res://camera.gd" id="2_camera_gd"]
 [ext_resource type="Script" uid="uid://cm11vylvjc2os" path="res://road.gd" id="3_road_gd"]
 [ext_resource type="PackedScene" path="res://crate.tscn" id="4_1bvp3"]
+[ext_resource type="PackedScene" path="res://glass.tscn" id="5_glass"]
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_road"]
 
@@ -42,5 +43,11 @@ position = Vector2(-320, -100)
 [node name="crate" parent="." instance=ExtResource("4_1bvp3")]
 position = Vector2(285, -142)
 
+[node name="glass1" parent="." instance=ExtResource("5_glass")]
+position = Vector2(-273, 20)
+
+[node name="glass2" parent="." instance=ExtResource("5_glass")]
+position = Vector2(-224, 20)
+
 [node name="truck" parent="." instance=ExtResource("1_truck")]
-position = Vector2(-166, -239)
+position = Vector2(-21, -176)

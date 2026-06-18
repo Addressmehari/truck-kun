@@ -7,3 +7,6 @@ truck.tscn
  fix them without passing
 }
 
+2 : {
+    fix glass shattering
+}
