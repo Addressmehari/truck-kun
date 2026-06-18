@@ -10,55 +10,185 @@ extends Node2D
 @onready var tyre_2: RigidBody2D = $"tyre-2"
 @onready var tyre_3: RigidBody2D = $"tyre-3"
 
+@onready var park_btn: Button = $HUD/ShifterPanel/VBox/ParkBtn
+@onready var rev_btn: Button = $HUD/ShifterPanel/VBox/RevBtn
+@onready var drv_btn: Button = $HUD/ShifterPanel/VBox/DrvBtn
+@onready var shifter_panel: PanelContainer = $HUD/ShifterPanel
+
+enum Gear { PARK, DRIVE, REVERSE }
+var current_gear: Gear = Gear.DRIVE
 var is_e_toggled: bool = false
 
 func _ready() -> void:
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	setup_shifter_ui()
 
-
-func _physics_process(_delta):
-	# Calculate input from keyboard keys
-	var move_input = 0.0
-	if Input.is_key_pressed(KEY_A) or Input.is_action_pressed("ui_left"):
-		move_input -= 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_action_pressed("ui_right"):
-		move_input += 1.0
+func setup_shifter_ui() -> void:
+	# Style Shifter Panel (wooden panel backboard)
+	var style_panel = StyleBoxFlat.new()
+	style_panel.bg_color = Color(0.24, 0.15, 0.10) # Dark mahogany
+	style_panel.border_color = Color(0.35, 0.22, 0.12) # Oak trim
+	style_panel.border_width_left = 3
+	style_panel.border_width_top = 3
+	style_panel.border_width_right = 3
+	style_panel.border_width_bottom = 3
+	style_panel.corner_radius_top_left = 0
+	style_panel.corner_radius_top_right = 0
+	style_panel.corner_radius_bottom_left = 0
+	style_panel.corner_radius_bottom_right = 0
+	shifter_panel.add_theme_stylebox_override("panel", style_panel)
 	
-	if move_input != 0:
-		# Apply torque to wheels to move the truck.
-		tyre_1.apply_torque(move_input * torque_power)
-		tyre_2.apply_torque(move_input * torque_power)
-		tyre_3.apply_torque(move_input * torque_power)
+	# Connect signals for cursor-only click
+	park_btn.pressed.connect(_on_gear_button_pressed.bind(Gear.PARK))
+	rev_btn.pressed.connect(_on_gear_button_pressed.bind(Gear.REVERSE))
+	drv_btn.pressed.connect(_on_gear_button_pressed.bind(Gear.DRIVE))
+	
+	update_shifter_visuals()
+
+func update_shifter_visuals() -> void:
+	# Active Style (glowing, bright pine wood block)
+	var active_style = StyleBoxFlat.new()
+	active_style.bg_color = Color(0.65, 0.46, 0.28) # Warm golden pine
+	active_style.border_color = Color(0.92, 0.72, 0.05) # Gold highlight
+	active_style.border_width_left = 2
+	active_style.border_width_top = 2
+	active_style.border_width_right = 2
+	active_style.border_width_bottom = 6 # 3D look
+	active_style.corner_radius_top_left = 0
+	active_style.corner_radius_top_right = 0
+	active_style.corner_radius_bottom_left = 0
+	active_style.corner_radius_bottom_right = 0
+	
+	# Inactive Style (flat, dark oak wood block)
+	var inactive_style = StyleBoxFlat.new()
+	inactive_style.bg_color = Color(0.42, 0.28, 0.15) # Dark oak
+	inactive_style.border_color = Color(0.25, 0.15, 0.08)
+	inactive_style.border_width_left = 2
+	inactive_style.border_width_top = 2
+	inactive_style.border_width_right = 2
+	inactive_style.border_width_bottom = 2
+	inactive_style.corner_radius_top_left = 0
+	inactive_style.corner_radius_top_right = 0
+	inactive_style.corner_radius_bottom_left = 0
+	inactive_style.corner_radius_bottom_right = 0
+	
+	# Apply overrides
+	park_btn.add_theme_stylebox_override("normal", active_style if current_gear == Gear.PARK else inactive_style)
+	rev_btn.add_theme_stylebox_override("normal", active_style if current_gear == Gear.REVERSE else inactive_style)
+	drv_btn.add_theme_stylebox_override("normal", active_style if current_gear == Gear.DRIVE else inactive_style)
+	
+	# Color overrides for active/inactive text
+	var active_color = Color(1.0, 0.95, 0.8)
+	var inactive_color = Color(0.65, 0.55, 0.45)
+	
+	park_btn.add_theme_color_override("font_color", active_color if current_gear == Gear.PARK else inactive_color)
+	rev_btn.add_theme_color_override("font_color", active_color if current_gear == Gear.REVERSE else inactive_color)
+	drv_btn.add_theme_color_override("font_color", active_color if current_gear == Gear.DRIVE else inactive_color)
+	
+	# Hover style
+	var hover_style = active_style.duplicate()
+	hover_style.bg_color = Color(0.72, 0.52, 0.32)
+	
+	park_btn.add_theme_stylebox_override("hover", hover_style)
+	rev_btn.add_theme_stylebox_override("hover", hover_style)
+	drv_btn.add_theme_stylebox_override("hover", hover_style)
+	
+	# Font sizes
+	park_btn.add_theme_font_size_override("font_size", 22)
+	rev_btn.add_theme_font_size_override("font_size", 22)
+	drv_btn.add_theme_font_size_override("font_size", 22)
+
+func _physics_process(_delta: float) -> void:
+	# Read user input for gas pedal (W, D, Up, Right, Space)
+	var gas_pressed = Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT)
+	
+	# Read user input for brake pedal (S, A, Down, Left)
+	var brake_pressed = Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT)
+	
+	var move_input = 0.0
+	if gas_pressed:
+		if current_gear == Gear.DRIVE:
+			move_input = 1.0
+		elif current_gear == Gear.REVERSE:
+			move_input = -1.0
+			
+	# Read user input for air tilting (A/D or Left/Right)
+	var tilt_input = 0.0
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+		tilt_input -= 1.0
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+		tilt_input += 1.0
 		
-		# Apply opposite torque to both cab and trailer parts of the body.
-		# This rotates them individually and feels very dynamic in mid-air.
-		chassis.apply_torque(-move_input * air_tilt_power)
-		container_body.apply_torque(-move_input * air_tilt_power * 1.5)
+	# Apply driving state or parking handbrake
+	if current_gear == Gear.PARK:
+		tyre_1.freeze = true
+		tyre_2.freeze = true
+		tyre_3.freeze = true
+		tyre_1.angular_velocity = 0.0
+		tyre_2.angular_velocity = 0.0
+		tyre_3.angular_velocity = 0.0
+	else:
+		tyre_1.freeze = false
+		tyre_2.freeze = false
+		tyre_3.freeze = false
 		
-	# Synchronize wheel speeds (locked differential)
-	var avg_vel = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
-	tyre_1.angular_velocity = avg_vel
-	tyre_2.angular_velocity = avg_vel
-	tyre_3.angular_velocity = avg_vel
-		
-	# Cap the angular velocity of the wheels so they do not spin out of control
-	tyre_1.angular_velocity = clamp(tyre_1.angular_velocity, -max_angular_velocity, max_angular_velocity)
-	tyre_2.angular_velocity = clamp(tyre_2.angular_velocity, -max_angular_velocity, max_angular_velocity)
-	tyre_3.angular_velocity = clamp(tyre_3.angular_velocity, -max_angular_velocity, max_angular_velocity)
+		# Apply driving torque (only if not actively braking)
+		if move_input != 0.0 and not brake_pressed:
+			tyre_1.apply_torque(move_input * torque_power)
+			tyre_2.apply_torque(move_input * torque_power)
+			tyre_3.apply_torque(move_input * torque_power)
+			
+		# Apply active braking/friction to quickly halt wheels
+		if brake_pressed:
+			tyre_1.angular_velocity = lerp(tyre_1.angular_velocity, 0.0, 12.0 * _delta)
+			tyre_2.angular_velocity = lerp(tyre_2.angular_velocity, 0.0, 12.0 * _delta)
+			tyre_3.angular_velocity = lerp(tyre_3.angular_velocity, 0.0, 12.0 * _delta)
+			
+		# Synchronize wheel speeds (locked differential)
+		var avg_vel = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
+		tyre_1.angular_velocity = avg_vel
+		tyre_2.angular_velocity = avg_vel
+		tyre_3.angular_velocity = avg_vel
+			
+		# Cap wheel spin velocity
+		tyre_1.angular_velocity = clamp(tyre_1.angular_velocity, -max_angular_velocity, max_angular_velocity)
+		tyre_2.angular_velocity = clamp(tyre_2.angular_velocity, -max_angular_velocity, max_angular_velocity)
+		tyre_3.angular_velocity = clamp(tyre_3.angular_velocity, -max_angular_velocity, max_angular_velocity)
+
+	# Apply air tilting torque (active in mid-air or balance controls)
+	if tilt_input != 0.0:
+		chassis.apply_torque(-tilt_input * air_tilt_power)
+		container_body.apply_torque(-tilt_input * air_tilt_power * 1.5)
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_E:
-		is_e_toggled = not is_e_toggled
-		if not is_e_toggled:
-			# Force drop all dragging crates when closing inventory
-			for crate in get_tree().get_nodes_in_group("crates"):
-				if crate.get("is_dragging"):
-					crate.set("is_dragging", false)
-					if crate.has_method("_update_physics_state"):
-						crate.call("_update_physics_state")
-					if crate.has_method("_check_drop_on_container"):
-						crate.call("_check_drop_on_container")
+	if event is InputEventKey and event.pressed:
+		match event.keycode:
+			KEY_E:
+				if current_gear != Gear.PARK:
+					set_gear(Gear.PARK)
+				else:
+					set_gear(Gear.DRIVE)
 
+func _on_gear_button_pressed(gear_type: Gear) -> void:
+	set_gear(gear_type)
+
+func set_gear(new_gear: Gear) -> void:
+	current_gear = new_gear
+	is_e_toggled = (current_gear == Gear.PARK)
+	
+	if current_gear != Gear.PARK:
+		_drop_all_dragging_crates()
+	
+	update_shifter_visuals()
+
+func _drop_all_dragging_crates() -> void:
+	for crate in get_tree().get_nodes_in_group("crates"):
+		if crate.get("is_dragging"):
+			crate.set("is_dragging", false)
+			if crate.has_method("_update_physics_state"):
+				crate.call("_update_physics_state")
+			if crate.has_method("_check_drop_on_container"):
+				crate.call("_check_drop_on_container")
 
 func is_any_crate_dragged_near() -> bool:
 	for crate in get_tree().get_nodes_in_group("crates"):
@@ -71,5 +201,6 @@ func is_any_crate_dragged_near() -> bool:
 func is_zoom_requested() -> bool:
 	if is_instance_valid(container_body) and container_body.get("backdoor_blocked"):
 		return false
-	return is_e_toggled or is_any_crate_dragged_near()
+	return (current_gear == Gear.PARK) or is_any_crate_dragged_near()
+
 

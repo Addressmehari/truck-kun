@@ -100,3 +100,38 @@ node_b = NodePath("../tyre-2")
 position = Vector2(-93, 0)
 node_a = NodePath("../container_body")
 node_b = NodePath("../tyre-3")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="ShifterPanel" type="PanelContainer" parent="HUD"]
+offset_left = 25.0
+offset_top = 25.0
+offset_right = 115.0
+offset_bottom = 325.0
+
+[node name="VBox" type="VBoxContainer" parent="HUD/ShifterPanel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ParkBtn" type="Button" parent="HUD/ShifterPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 0
+theme_override_font_sizes/font_size = 20
+text = "P"
+
+[node name="RevBtn" type="Button" parent="HUD/ShifterPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 0
+theme_override_font_sizes/font_size = 20
+text = "R"
+
+[node name="DrvBtn" type="Button" parent="HUD/ShifterPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 0
+theme_override_font_sizes/font_size = 20
+text = "D"
+
+
