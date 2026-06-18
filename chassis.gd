@@ -67,12 +67,14 @@ func _ready() -> void:
 	add_child(dust_particles)
 	
 	# Enable contact monitoring for tyre-1 to track road contact
-	if tyre_1:
+	if not Engine.is_editor_hint() and tyre_1:
 		tyre_1.contact_monitor = true
 		tyre_1.max_contacts_reported = max(tyre_1.max_contacts_reported, 2)
 
 func _physics_process(_delta: float) -> void:
 	queue_redraw()
+	if Engine.is_editor_hint():
+		return
 	
 	# Control exhaust smoke emission based on speed
 	var speed = linear_velocity.length()

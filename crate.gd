@@ -25,6 +25,8 @@ extends RigidBody2D
 
 var is_dragging: bool = false
 var drag_offset: Vector2 = Vector2.ZERO
+var unloaded_from_slot: int = -1
+var drag_start_position: Vector2 = Vector2.ZERO
 
 var original_collision_layer: int = 1
 var original_collision_mask: int = 1
@@ -61,16 +63,19 @@ func _update_physics_state() -> void:
 		# Act as a sensor (pass through all objects) while dragging
 		collision_layer = 0
 		collision_mask = 0
+		z_index = 5
 	else:
 		if issensor:
 			freeze = true
 			collision_layer = 0
 			collision_mask = 0
+			z_index = 0
 		else:
 			freeze = false
 			collision_layer = original_collision_layer
 			collision_mask = original_collision_mask
 			gravity_scale = 1.0
+			z_index = 0
 	
 	queue_redraw()
 
@@ -88,6 +93,8 @@ func _input_event(viewport: Viewport, event: InputEvent, shape_idx: int) -> void
 					
 			is_dragging = true
 			drag_offset = global_position - get_global_mouse_position()
+			drag_start_position = global_position
+			unloaded_from_slot = -1
 			_update_physics_state()
 			get_viewport().set_input_as_handled()
 
@@ -119,8 +126,8 @@ func _check_drop_on_container() -> void:
 	var container_body = truck.get_node_or_null("container_body")
 	if not container_body or not container_body.has_method("try_add_to_slot"):
 		return
-
 		
+	# 1. Try placing in a slot first
 	if truck.has_method("is_zoom_requested") and truck.is_zoom_requested():
 		var local_pos = container_body.to_local(global_position)
 		for i in range(6):
@@ -129,6 +136,44 @@ func _check_drop_on_container() -> void:
 				if container_body.try_add_to_slot(i, self):
 					queue_free()
 					return
+					
+	# 2. Check if we drop-overlapped the truck to prevent damage
+	if _is_overlapping_truck(truck):
+		if unloaded_from_slot != -1:
+			# Try putting it back in its original slot
+			if container_body.try_add_to_slot(unloaded_from_slot, self):
+				queue_free()
+				return
+			# Fallback: try any empty slot
+			for i in range(6):
+				if container_body.try_add_to_slot(i, self):
+					queue_free()
+					return
+		
+		# Teleport back to safe starting position (on ground or initial drag start)
+		global_position = drag_start_position
+
+func _is_overlapping_truck(truck) -> bool:
+	var container_body = truck.get_node_or_null("container_body")
+	var chassis = truck.get_node_or_null("chassis")
+	
+	if container_body:
+		var local_to_container = container_body.to_local(global_position)
+		# Container box bounds: left -117, right -5, top -80, bottom -1
+		# We expand these bounds slightly for safety
+		if (local_to_container.x > -140.0 and local_to_container.x < 20.0 and 
+			local_to_container.y > -110.0 and local_to_container.y < 30.0):
+			return true
+			
+	if chassis:
+		var local_to_chassis = chassis.to_local(global_position)
+		# Chassis box bounds: left 1, right 68, top -72, bottom 0
+		# We expand these bounds slightly for safety
+		if (local_to_chassis.x > -20.0 and local_to_chassis.x < 90.0 and 
+			local_to_chassis.y > -90.0 and local_to_chassis.y < 20.0):
+			return true
+			
+	return false
 
 func _draw() -> void:
 	var rect = Rect2(-width / 2.0, -height / 2.0, width, height)

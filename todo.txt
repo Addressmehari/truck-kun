@@ -1,0 +1,9 @@
+1 : {
+    
+truck.tscn
+ ok welll, since the head and the container 
+ has seperate collision boxes, why they are 
+ passing through each other in some cases? 
+ fix them without passing
+}
+

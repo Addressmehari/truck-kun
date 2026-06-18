@@ -32,6 +32,9 @@ func _ready() -> void:
 	if rim_rect:
 		rim_rect.visible = false
 		
+	if Engine.is_editor_hint():
+		return
+		
 	# Setup backdoor pivot at the bottom center and color
 	if backdoor:
 		backdoor.pivot_offset = Vector2(2.5, 76.0)
@@ -82,6 +85,8 @@ func _ready() -> void:
 		tyre_3.max_contacts_reported = max(tyre_3.max_contacts_reported, 2)
 
 func _physics_process(delta: float) -> void:
+	if Engine.is_editor_hint():
+		return
 	# Refresh visuals
 	queue_redraw()
 	
@@ -188,7 +193,11 @@ func _draw() -> void:
 		draw_polyline(arch_points, Color(0.12, 0.12, 0.14), 4.5)
 
 	# --- 8. Draw Inventory Slots (if zoom requested) ---
-	if truck.has_method("is_zoom_requested") and truck.is_zoom_requested():
+	var zoom_requested = false
+	if not Engine.is_editor_hint() and is_instance_valid(truck) and truck.has_method("is_zoom_requested"):
+		zoom_requested = truck.is_zoom_requested()
+		
+	if zoom_requested:
 		for i in range(6):
 			var rect = slot_rects[i]
 			var item = inventory[i]
@@ -255,6 +264,8 @@ func try_add_to_slot(slot_index: int, crate) -> bool:
 	return false
 
 func _input(event: InputEvent) -> void:
+	if Engine.is_editor_hint():
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		if truck.has_method("is_zoom_requested") and truck.is_zoom_requested():
 			var local_mouse = to_local(get_global_mouse_position())
@@ -283,7 +294,9 @@ func _unload_slot(slot_index: int) -> void:
 		# Position it at mouse
 		new_crate.global_position = get_global_mouse_position()
 		
-		# Enable dragging immediately
+		# Enable dragging immediately and track initial slot/safe position
 		new_crate.is_dragging = true
 		new_crate.drag_offset = Vector2.ZERO
+		new_crate.drag_start_position = new_crate.global_position
+		new_crate.unloaded_from_slot = slot_index
 		new_crate._update_physics_state()
