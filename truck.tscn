@@ -1,34 +1,54 @@
-[gd_scene load_steps=2 format=3 uid="uid://y4vbinwdj2t8"]
+[gd_scene load_steps=3 format=3 uid="uid://y4vbinwdj2t8"]
 
-[ext_resource type="PackedScene" uid="uid://bo6otg6erdwgb" path="res://tyre.tscn" id="1_ysele"]
+[ext_resource type="Script" uid="uid://cbfysr7tnjtrc" path="res://truck.gd" id="1_truck_gd"]
+[ext_resource type="PackedScene" uid="uid://bo6otg6erdwgb" path="res://tyre.tscn" id="2_tyre_scene"]
 
 [node name="truck" type="Node2D"]
+script = ExtResource("1_truck_gd")
 
-[node name="container" type="ColorRect" parent="."]
+[node name="chassis" type="RigidBody2D" parent="."]
+mass = 5.0
+
+[node name="container" type="ColorRect" parent="chassis"]
 offset_left = -117.0
 offset_top = -80.0
 offset_right = -5.0
 offset_bottom = -1.0
 
-[node name="head" type="ColorRect" parent="."]
+[node name="head" type="ColorRect" parent="chassis"]
 offset_left = 1.0
 offset_top = -72.0
 offset_right = 68.0
 
-[node name="rim" type="ColorRect" parent="."]
+[node name="rim" type="ColorRect" parent="chassis"]
 offset_left = -117.0
 offset_top = -7.0
 offset_right = 68.0
 offset_bottom = -3.0
 
-[node name="tyre-1" parent="." instance=ExtResource("1_ysele")]
-position = Vector2(35.000004, 4.7683716e-07)
-color = Color(1, 0, 0, 1)
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="chassis"]
+polygon = PackedVector2Array(68, -3, -117, -3, -117, -80, -5, -80, 1, -72, 68, -72)
 
-[node name="tyre-2" parent="." instance=ExtResource("1_ysele")]
-position = Vector2(-32.99999, 2.842171e-14)
-color = Color(1, 0, 0, 1)
+[node name="tyre-1" parent="." instance=ExtResource("2_tyre_scene")]
+position = Vector2(35, 0)
 
-[node name="tyre-3" parent="." instance=ExtResource("1_ysele")]
-position = Vector2(-93.00001, 1)
-color = Color(1, 0, 0, 1)
+[node name="tyre-2" parent="." instance=ExtResource("2_tyre_scene")]
+position = Vector2(-33, 0)
+
+[node name="tyre-3" parent="." instance=ExtResource("2_tyre_scene")]
+position = Vector2(-93, 0)
+
+[node name="PinJoint2D1" type="PinJoint2D" parent="."]
+position = Vector2(35, 0)
+node_a = NodePath("../chassis")
+node_b = NodePath("../tyre-1")
+
+[node name="PinJoint2D2" type="PinJoint2D" parent="."]
+position = Vector2(-33, 0)
+node_a = NodePath("../chassis")
+node_b = NodePath("../tyre-2")
+
+[node name="PinJoint2D3" type="PinJoint2D" parent="."]
+position = Vector2(-93, 0)
+node_a = NodePath("../chassis")
+node_b = NodePath("../tyre-3")

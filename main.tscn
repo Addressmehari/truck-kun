@@ -1,20 +1,31 @@
-[gd_scene load_steps=3 format=3 uid="uid://bcg1yj1wjk1uu"]
+[gd_scene load_steps=5 format=3 uid="uid://bcg1yj1wjk1uu"]
 
-[ext_resource type="PackedScene" uid="uid://y4vbinwdj2t8" path="res://truck.tscn" id="3_truck"]
+[ext_resource type="PackedScene" uid="uid://y4vbinwdj2t8" path="res://truck.tscn" id="1_truck"]
+[ext_resource type="Script" path="res://camera.gd" id="2_camera_gd"]
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_road"]
+friction = 1.0
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ig7tw"]
-size = Vector2(995, 17)
+size = Vector2(995, 14)
 
 [node name="main" type="Node2D"]
 
-[node name="truck" parent="." instance=ExtResource("3_truck")]
+[node name="truck" parent="." instance=ExtResource("1_truck")]
 
-[node name="Road" type="ColorRect" parent="."]
+[node name="Road" type="StaticBody2D" parent="."]
+physics_material_override = SubResource("PhysicsMaterial_road")
+
+[node name="ColorRect" type="ColorRect" parent="Road"]
 offset_left = -442.0
 offset_top = 42.0
 offset_right = 543.0
 offset_bottom = 56.0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Road"]
-position = Vector2(487.5, 7.5)
+position = Vector2(45.5, 49.0)
 shape = SubResource("RectangleShape2D_ig7tw")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+zoom = Vector2(1.5, 1.5)
+script = ExtResource("2_camera_gd")
