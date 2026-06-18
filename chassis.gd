@@ -182,6 +182,40 @@ func _draw() -> void:
 	draw_circle(Vector2(26, -53) + wobble_offset, 4.5, Color(0.08, 0.08, 0.1, 0.8)) # head
 	draw_rect(Rect2(Vector2(22, -48) + wobble_offset, Vector2(9, 3)), Color(0.08, 0.08, 0.1, 0.8), true) # shoulders
 
+	# --- 4.5 Draw Tiny Miniature Dashboard inside cabin window ---
+	var dash_pos = Vector2(44, -51) + wobble_offset
+	# Black mini gauge backing
+	draw_circle(dash_pos, 4.0, Color(0.08, 0.08, 0.1))
+	draw_circle(dash_pos, 3.2, Color(0.04, 0.04, 0.06))
+	
+	# Calculate speed for mini needle
+	var mini_speed = linear_velocity.length() * 0.08
+	mini_speed = clamp(mini_speed, 0.0, 120.0)
+	
+	# Mini needle angle (from 150 deg to 390 deg)
+	var mini_angle = lerp(deg_to_rad(150), deg_to_rad(390), mini_speed / 120.0)
+	var mini_dir = Vector2(cos(mini_angle), sin(mini_angle))
+	# Draw mini needle (tiny red line)
+	draw_line(dash_pos, dash_pos + mini_dir * 2.8, Color(0.95, 0.15, 0.15), 1.0)
+	
+	# Tiny Gear LED next to the gauge
+	var led_pos = Vector2(49, -54) + wobble_offset
+	var mini_gear = 1 # DRIVE default
+	if not Engine.is_editor_hint():
+		var parent_node = get_parent()
+		if parent_node and "current_gear" in parent_node:
+			mini_gear = parent_node.current_gear
+		
+	var led_color = Color(0.25, 0.95, 0.35) # DRIVE: Green
+	if mini_gear == 0: # PARK
+		led_color = Color(1.0, 0.55, 0.15) # PARK: Amber
+	elif mini_gear == 2: # REVERSE
+		led_color = Color(1.0, 0.25, 0.25) # REVERSE: Red
+		
+	# Draw led glow
+	draw_circle(led_pos, 1.2, led_color)
+	draw_circle(led_pos, 0.5, Color(1, 1, 1, 0.8)) # light core
+
 	# --- 5. Draw Front Grille details ---
 	# Grille lines (black metallic slots)
 	for i in range(4):
