@@ -10,6 +10,8 @@ extends Node2D
 @onready var tyre_2: RigidBody2D = $"tyre-2"
 @onready var tyre_3: RigidBody2D = $"tyre-3"
 
+var is_e_toggled: bool = false
+
 func _physics_process(_delta):
 	# Calculate input from keyboard keys
 	var move_input = 0.0
@@ -39,3 +41,28 @@ func _physics_process(_delta):
 	tyre_1.angular_velocity = clamp(tyre_1.angular_velocity, -max_angular_velocity, max_angular_velocity)
 	tyre_2.angular_velocity = clamp(tyre_2.angular_velocity, -max_angular_velocity, max_angular_velocity)
 	tyre_3.angular_velocity = clamp(tyre_3.angular_velocity, -max_angular_velocity, max_angular_velocity)
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_E:
+		is_e_toggled = not is_e_toggled
+		if not is_e_toggled:
+			# Force drop all dragging crates when closing inventory
+			for crate in get_tree().get_nodes_in_group("crates"):
+				if crate.get("is_dragging"):
+					crate.set("is_dragging", false)
+					if crate.has_method("_update_physics_state"):
+						crate.call("_update_physics_state")
+					if crate.has_method("_check_drop_on_container"):
+						crate.call("_check_drop_on_container")
+
+
+func is_any_crate_dragged_near() -> bool:
+	for crate in get_tree().get_nodes_in_group("crates"):
+		if crate.get("is_dragging"):
+			var dist = container_body.global_position.distance_to(crate.global_position)
+			if dist < 250.0:
+				return true
+	return false
+
+func is_zoom_requested() -> bool:
+	return is_e_toggled or is_any_crate_dragged_near()

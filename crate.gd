@@ -33,6 +33,7 @@ func _ready() -> void:
 	if Engine.is_editor_hint():
 		return
 		
+	add_to_group("crates")
 	input_pickable = true
 	original_collision_layer = collision_layer
 	original_collision_mask = collision_mask
@@ -78,10 +79,18 @@ func _input_event(viewport: Viewport, event: InputEvent, shape_idx: int) -> void
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
+			# Check if inventory mode is open (E pressed)
+			var parent_node = get_parent()
+			if parent_node:
+				var truck = parent_node.get_node_or_null("truck")
+				if truck and "is_e_toggled" in truck and not truck.is_e_toggled:
+					return # Only allow dragging if inventory zoom is opened via 'E' key
+					
 			is_dragging = true
 			drag_offset = global_position - get_global_mouse_position()
 			_update_physics_state()
 			get_viewport().set_input_as_handled()
+
 
 func _input(event: InputEvent) -> void:
 	if Engine.is_editor_hint():
@@ -90,6 +99,7 @@ func _input(event: InputEvent) -> void:
 		if not event.pressed and is_dragging:
 			is_dragging = false
 			_update_physics_state()
+			_check_drop_on_container()
 
 func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint():
@@ -98,6 +108,27 @@ func _physics_process(_delta: float) -> void:
 		global_position = get_global_mouse_position() + drag_offset
 		linear_velocity = Vector2.ZERO
 		angular_velocity = 0.0
+
+func _check_drop_on_container() -> void:
+	var parent_node = get_parent()
+	if not parent_node:
+		return
+	var truck = parent_node.get_node_or_null("truck")
+	if not truck:
+		return
+	var container_body = truck.get_node_or_null("container_body")
+	if not container_body or not container_body.has_method("try_add_to_slot"):
+		return
+
+		
+	if truck.has_method("is_zoom_requested") and truck.is_zoom_requested():
+		var local_pos = container_body.to_local(global_position)
+		for i in range(6):
+			var slot_rect = container_body.slot_rects[i]
+			if slot_rect.has_point(local_pos):
+				if container_body.try_add_to_slot(i, self):
+					queue_free()
+					return
 
 func _draw() -> void:
 	var rect = Rect2(-width/2.0, -height/2.0, width, height)
