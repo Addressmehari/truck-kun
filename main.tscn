@@ -1,10 +1,9 @@
 [gd_scene load_steps=5 format=3 uid="uid://bcg1yj1wjk1uu"]
 
 [ext_resource type="PackedScene" uid="uid://y4vbinwdj2t8" path="res://truck.tscn" id="1_truck"]
-[ext_resource type="Script" path="res://camera.gd" id="2_camera_gd"]
+[ext_resource type="Script" uid="uid://bt8r8k7o4sb33" path="res://camera.gd" id="2_camera_gd"]
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_road"]
-friction = 1.0
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ig7tw"]
 size = Vector2(995, 14)
@@ -23,7 +22,7 @@ offset_right = 543.0
 offset_bottom = 56.0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Road"]
-position = Vector2(45.5, 49.0)
+position = Vector2(45.499878, 48.999996)
 shape = SubResource("RectangleShape2D_ig7tw")
 
 [node name="Camera2D" type="Camera2D" parent="."]

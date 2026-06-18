@@ -5,6 +5,7 @@ extends Node2D
 @export var max_angular_velocity := 45.0
 
 @onready var chassis: RigidBody2D = $chassis
+@onready var container_body: RigidBody2D = $container_body
 @onready var tyre_1: RigidBody2D = $"tyre-1"
 @onready var tyre_2: RigidBody2D = $"tyre-2"
 @onready var tyre_3: RigidBody2D = $"tyre-3"
@@ -19,18 +20,16 @@ func _physics_process(_delta):
 	
 	if move_input != 0:
 		# Apply torque to wheels to move the truck.
-		# A positive torque spins wheels clockwise (moving right).
-		# A negative torque spins wheels counter-clockwise (moving left).
 		tyre_1.apply_torque(move_input * torque_power)
 		tyre_2.apply_torque(move_input * torque_power)
 		tyre_3.apply_torque(move_input * torque_power)
 		
-		# Apply opposite torque to chassis to simulate rotational acceleration reaction.
-		# This also gives the player rotational control while in mid-air.
+		# Apply opposite torque to both cab and trailer parts of the body.
+		# This rotates them individually and feels very dynamic in mid-air.
 		chassis.apply_torque(-move_input * air_tilt_power)
+		container_body.apply_torque(-move_input * air_tilt_power * 1.5)
 		
-	# Synchronize wheel speeds (simulating a locked differential)
-	# This prevents any individual wheel from spinning out of control when it loses contact
+	# Synchronize wheel speeds (locked differential)
 	var avg_vel = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
 	tyre_1.angular_velocity = avg_vel
 	tyre_2.angular_velocity = avg_vel

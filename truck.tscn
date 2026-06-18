@@ -1,33 +1,58 @@
-[gd_scene load_steps=3 format=3 uid="uid://y4vbinwdj2t8"]
+[gd_scene load_steps=5 format=3 uid="uid://y4vbinwdj2t8"]
 
 [ext_resource type="Script" uid="uid://cbfysr7tnjtrc" path="res://truck.gd" id="1_truck_gd"]
 [ext_resource type="PackedScene" uid="uid://bo6otg6erdwgb" path="res://tyre.tscn" id="2_tyre_scene"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_cab"]
+size = Vector2(67, 69)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_container"]
+size = Vector2(112, 77)
 
 [node name="truck" type="Node2D"]
 script = ExtResource("1_truck_gd")
 
 [node name="chassis" type="RigidBody2D" parent="."]
-mass = 5.0
-
-[node name="container" type="ColorRect" parent="chassis"]
-offset_left = -117.0
-offset_top = -80.0
-offset_right = -5.0
-offset_bottom = -1.0
+mass = 2.0
 
 [node name="head" type="ColorRect" parent="chassis"]
 offset_left = 1.0
 offset_top = -72.0
 offset_right = 68.0
 
-[node name="rim" type="ColorRect" parent="chassis"]
-offset_left = -117.0
+[node name="rim_front" type="ColorRect" parent="chassis"]
+offset_left = 1.0
 offset_top = -7.0
 offset_right = 68.0
 offset_bottom = -3.0
 
-[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="chassis"]
-polygon = PackedVector2Array(68, -3, -117, -3, -117, -80, -5, -80, 1, -72, 68, -72)
+[node name="CollisionShape2D" type="CollisionShape2D" parent="chassis"]
+position = Vector2(34.5, -37.5)
+shape = SubResource("RectangleShape2D_cab")
+
+[node name="container_body" type="RigidBody2D" parent="."]
+mass = 3.0
+
+[node name="container" type="ColorRect" parent="container_body"]
+offset_left = -117.0
+offset_top = -80.0
+offset_right = -5.0
+offset_bottom = -1.0
+
+[node name="rim_back" type="ColorRect" parent="container_body"]
+offset_left = -117.0
+offset_top = -7.0
+offset_right = -5.0
+offset_bottom = -3.0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="container_body"]
+position = Vector2(-61, -41.5)
+shape = SubResource("RectangleShape2D_container")
+
+[node name="CabinJoint" type="PinJoint2D" parent="."]
+position = Vector2(-2, -25)
+node_a = NodePath("../chassis")
+node_b = NodePath("../container_body")
 
 [node name="tyre-1" parent="." instance=ExtResource("2_tyre_scene")]
 position = Vector2(35, 0)
@@ -45,10 +70,10 @@ node_b = NodePath("../tyre-1")
 
 [node name="PinJoint2D2" type="PinJoint2D" parent="."]
 position = Vector2(-33, 0)
-node_a = NodePath("../chassis")
+node_a = NodePath("../container_body")
 node_b = NodePath("../tyre-2")
 
 [node name="PinJoint2D3" type="PinJoint2D" parent="."]
 position = Vector2(-93, 0)
-node_a = NodePath("../chassis")
+node_a = NodePath("../container_body")
 node_b = NodePath("../tyre-3")
