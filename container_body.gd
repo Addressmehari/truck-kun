@@ -304,8 +304,23 @@ func _draw() -> void:
 		draw_rect(Rect2(container_left + 2.0, container_top + 2.0, 108.0, 75.0), Color(0.08, 0.09, 0.11, 0.8), true)
 		
 		for i in range(6):
-			var rect = slot_rects[i]
 			var item = inventory[i]
+			
+			if item != null and item.get("type") == "part":
+				continue # Skip, it will be drawn by the root slot
+				
+			var rect = slot_rects[i]
+			if item != null:
+				var grid_w = item.get("grid_w", 1)
+				var grid_h = item.get("grid_h", 1)
+				var col = i % 3
+				var row = i / 3
+				var end_col = col + grid_w - 1
+				var end_row = row + grid_h - 1
+				var end_slot = end_col + end_row * 3
+				if end_slot >= 0 and end_slot < 6:
+					var end_rect = slot_rects[end_slot]
+					rect = Rect2(rect.position, end_rect.end - rect.position)
 			
 			if item == null:
 				# 3D Recessed Slot Frame
@@ -463,17 +478,66 @@ func emit_glass_break() -> void:
 func try_add_to_slot(slot_index: int, crate) -> bool:
 	if slot_index < 0 or slot_index >= 6:
 		return false
-	if inventory[slot_index] == null:
-		var is_glass = crate.get("is_glass_prop") == true
-		inventory[slot_index] = {
-			"type": "glass" if is_glass else "crate",
-			"color": crate.color,
-			"width": crate.width,
-			"height": crate.height,
-			"health": crate.health if is_glass else 100.0
-		}
-		return true
-	return false
+		
+	var root_col = slot_index % 3
+	var root_row = slot_index / 3
+	
+	var is_glass = crate.get("is_glass_prop") == true
+	var size_type = "1x1"
+	var grid_w = 1
+	var grid_h = 1
+	
+	if not is_glass:
+		size_type = crate.get("size_type")
+		if size_type == null:
+			size_type = "1x1"
+		match size_type:
+			"1x1":
+				grid_w = 1
+				grid_h = 1
+			"2x1":
+				grid_w = 2
+				grid_h = 1
+			"1x2":
+				grid_w = 1
+				grid_h = 2
+			"2x2":
+				grid_w = 2
+				grid_h = 2
+				
+	# Check bounds
+	if root_col + grid_w > 3 or root_row + grid_h > 2:
+		return false
+		
+	# Check if all required slots are empty
+	for dx in range(grid_w):
+		for dy in range(grid_h):
+			var idx = (root_col + dx) + (root_row + dy) * 3
+			if inventory[idx] != null:
+				return false
+				
+	# All checks passed, fill the slots
+	for dx in range(grid_w):
+		for dy in range(grid_h):
+			var idx = (root_col + dx) + (root_row + dy) * 3
+			if dx == 0 and dy == 0:
+				inventory[idx] = {
+					"type": "glass" if is_glass else "crate",
+					"size_type": size_type,
+					"color": crate.color,
+					"width": crate.width,
+					"height": crate.height,
+					"health": crate.health if is_glass else 100.0,
+					"grid_w": grid_w,
+					"grid_h": grid_h,
+					"root_slot": slot_index
+				}
+			else:
+				inventory[idx] = {
+					"type": "part",
+					"root_slot": slot_index
+				}
+	return true
 
 func _input(event: InputEvent) -> void:
 	if Engine.is_editor_hint():
@@ -483,15 +547,30 @@ func _input(event: InputEvent) -> void:
 			var local_mouse = to_local(get_global_mouse_position())
 			for i in range(6):
 				if inventory[i] != null and slot_rects[i].has_point(local_mouse):
+					# Find root slot if clicking on a part
+					var unload_index = i
+					if inventory[i].get("type") == "part":
+						unload_index = inventory[i].get("root_slot")
 					# Unload crate!
-					_unload_slot(i)
+					_unload_slot(unload_index)
 					get_viewport().set_input_as_handled()
 					break
 
 func _unload_slot(slot_index: int) -> void:
 	var item_data = inventory[slot_index]
-	inventory[slot_index] = null
-	
+	if item_data == null:
+		return
+		
+	# Clear all slots occupied by this item
+	var root_col = slot_index % 3
+	var root_row = slot_index / 3
+	var grid_w = item_data.get("grid_w", 1)
+	var grid_h = item_data.get("grid_h", 1)
+	for dx in range(grid_w):
+		for dy in range(grid_h):
+			var idx = (root_col + dx) + (root_row + dy) * 3
+			inventory[idx] = null
+			
 	var is_glass = (item_data.get("type") == "glass")
 	var scene_path = "res://glass.tscn" if is_glass else "res://crate.tscn"
 	var scene = load(scene_path)
@@ -502,6 +581,8 @@ func _unload_slot(slot_index: int) -> void:
 		new_crate.height = item_data.get("height", 40.0)
 		if is_glass:
 			new_crate.health = item_data.get("health", 100.0)
+		else:
+			new_crate.size_type = item_data.get("size_type", "1x1")
 		
 		# Add it to the main scene
 		get_tree().current_scene.add_child(new_crate)

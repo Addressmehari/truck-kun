@@ -6,6 +6,11 @@ extends RigidBody2D
 		issensor = val
 		_update_physics_state()
 
+@export_enum("1x1", "2x1", "1x2", "2x2") var size_type: String = "1x1":
+	set(val):
+		size_type = val
+		_update_dimensions()
+
 @export var width: float = 40.0:
 	set(val):
 		width = max(10.0, val)
@@ -32,6 +37,7 @@ var original_collision_layer: int = 1
 var original_collision_mask: int = 1
 
 func _ready() -> void:
+	_update_dimensions()
 	if Engine.is_editor_hint():
 		return
 		
@@ -46,6 +52,21 @@ func _ready() -> void:
 		shape_node.shape = shape_node.shape.duplicate()
 	_update_collision_shape()
 	_update_physics_state()
+
+func _update_dimensions() -> void:
+	match size_type:
+		"1x1":
+			width = 40.0
+			height = 40.0
+		"2x1":
+			width = 80.0
+			height = 40.0
+		"1x2":
+			width = 40.0
+			height = 80.0
+		"2x2":
+			width = 80.0
+			height = 80.0
 
 func _update_collision_shape() -> void:
 	if not is_node_ready():
@@ -107,6 +128,24 @@ func _input(event: InputEvent) -> void:
 			is_dragging = false
 			_update_physics_state()
 			_check_drop_on_container()
+			
+	# Rotate / Flip crate if 'R' or Right-Click is pressed while dragging
+	if is_dragging:
+		var request_rotation = false
+		if event is InputEventKey and event.pressed and event.keycode == KEY_R:
+			request_rotation = true
+		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+			request_rotation = true
+			
+		if request_rotation:
+			if size_type == "2x1":
+				size_type = "1x2"
+				_update_dimensions()
+				get_viewport().set_input_as_handled()
+			elif size_type == "1x2":
+				size_type = "2x1"
+				_update_dimensions()
+				get_viewport().set_input_as_handled()
 
 func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint():
@@ -130,10 +169,20 @@ func _check_drop_on_container() -> void:
 	# 1. Try placing in a slot first
 	if truck.has_method("is_zoom_requested") and truck.is_zoom_requested():
 		var local_pos = container_body.to_local(global_position)
+		
+		# Sort slots by distance from local_pos to slot center
+		var slots_with_dist = []
 		for i in range(6):
-			var slot_rect = container_body.slot_rects[i]
-			if slot_rect.has_point(local_pos):
-				if container_body.try_add_to_slot(i, self):
+			var slot_center = container_body.slot_rects[i].get_center()
+			var dist = local_pos.distance_to(slot_center)
+			slots_with_dist.append({"index": i, "dist": dist})
+			
+		slots_with_dist.sort_custom(func(a, b): return a.dist < b.dist)
+		
+		# Try adding to the closest valid slot within range
+		for slot_info in slots_with_dist:
+			if slot_info.dist < 60.0:
+				if container_body.try_add_to_slot(slot_info.index, self):
 					queue_free()
 					return
 					
@@ -188,11 +237,44 @@ func _draw() -> void:
 	# Draw background fill
 	draw_rect(rect, current_color, true)
 	
-	# Draw outline border
-	var border_color = Color.BLACK
-	border_color.a = current_color.a
-	draw_rect(rect, border_color, false, 2.0)
+	# Shading (top-left highlight, bottom-right shadow)
+	var shadow_color = Color(0.0, 0.0, 0.0, 0.25 * current_color.a)
+	var highlight_color = Color(1.0, 1.0, 1.0, 0.2 * current_color.a)
+	# Left/Top highlights
+	draw_line(rect.position + Vector2(1, 1), Vector2(rect.end.x - 1, rect.position.y + 1), highlight_color, 1.5)
+	draw_line(rect.position + Vector2(1, 1), Vector2(rect.position.x + 1, rect.end.y - 1), highlight_color, 1.5)
+	# Right/Bottom shadows
+	draw_line(Vector2(rect.end.x - 1, rect.position.y + 1), rect.end - Vector2(1, 1), shadow_color, 1.5)
+	draw_line(Vector2(rect.position.x + 1, rect.end.y - 1), rect.end - Vector2(1, 1), shadow_color, 1.5)
 	
-	# Draw diagonal lines (wooden crate look)
-	draw_line(Vector2(-width / 2.0, -height / 2.0), Vector2(width / 2.0, height / 2.0), border_color, 2.0)
-	draw_line(Vector2(width / 2.0, -height / 2.0), Vector2(-width / 2.0, height / 2.0), border_color, 2.0)
+	# Outer frame planks
+	var frame_color = current_color.darkened(0.28)
+	frame_color.a = current_color.a
+	var frame_t = 3.0
+	draw_rect(rect, frame_color, false, frame_t)
+	
+	# Diagonal crossbeam plank
+	var start_pt = rect.position + Vector2(2, 2)
+	var end_pt = rect.end - Vector2(2, 2)
+	draw_line(start_pt, end_pt, frame_color, 3.0)
+	
+	# Corner Metal Plates / Brackets
+	var plate_color = Color(0.18, 0.18, 0.22)
+	plate_color.a = current_color.a
+	var p_size = 4.0
+	# Top Left
+	draw_rect(Rect2(rect.position.x, rect.position.y, p_size, p_size), plate_color, true)
+	# Top Right
+	draw_rect(Rect2(rect.end.x - p_size, rect.position.y, p_size, p_size), plate_color, true)
+	# Bottom Left
+	draw_rect(Rect2(rect.position.x, rect.end.y - p_size, p_size, p_size), plate_color, true)
+	# Bottom Right
+	draw_rect(Rect2(rect.end.x - p_size, rect.end.y - p_size, p_size, p_size), plate_color, true)
+	
+	# Small iron rivets
+	var rivet_color = Color(0.55, 0.55, 0.6)
+	rivet_color.a = current_color.a
+	draw_circle(rect.position + Vector2(2, 2), 0.8, rivet_color)
+	draw_circle(Vector2(rect.end.x - 2, rect.position.y + 2), 0.8, rivet_color)
+	draw_circle(Vector2(rect.position.x + 2, rect.end.y - 2), 0.8, rivet_color)
+	draw_circle(rect.end - Vector2(2, 2), 0.8, rivet_color)

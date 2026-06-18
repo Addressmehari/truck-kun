@@ -32,16 +32,24 @@ zoom = Vector2(1.75, 1.75)
 script = ExtResource("2_camera_gd")
 
 [node name="crate1" parent="." instance=ExtResource("4_1bvp3")]
-position = Vector2(-379, -86)
+position = Vector2(-475, -101)
+size_type = "1x2"
+height = 80.0
 
 [node name="crate2" parent="." instance=ExtResource("4_1bvp3")]
 position = Vector2(-334, -45)
+size_type = "2x1"
+width = 80.0
 
 [node name="crate3" parent="." instance=ExtResource("4_1bvp3")]
 position = Vector2(-320, -100)
+size_type = "2x2"
+width = 80.0
+height = 80.0
 
 [node name="crate" parent="." instance=ExtResource("4_1bvp3")]
 position = Vector2(285, -142)
+size_type = null
 
 [node name="glass1" parent="." instance=ExtResource("5_glass")]
 position = Vector2(-273, 20)

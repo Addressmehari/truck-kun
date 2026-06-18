@@ -169,10 +169,20 @@ func _check_drop_on_container() -> void:
 		
 	if truck.has_method("is_zoom_requested") and truck.is_zoom_requested():
 		var local_pos = container_body.to_local(global_position)
+		
+		# Sort slots by distance from local_pos to slot center
+		var slots_with_dist = []
 		for i in range(6):
-			var slot_rect = container_body.slot_rects[i]
-			if slot_rect.has_point(local_pos):
-				if container_body.try_add_to_slot(i, self):
+			var slot_center = container_body.slot_rects[i].get_center()
+			var dist = local_pos.distance_to(slot_center)
+			slots_with_dist.append({"index": i, "dist": dist})
+			
+		slots_with_dist.sort_custom(func(a, b): return a.dist < b.dist)
+		
+		# Try adding to the closest valid slot within range
+		for slot_info in slots_with_dist:
+			if slot_info.dist < 60.0:
+				if container_body.try_add_to_slot(slot_info.index, self):
 					queue_free()
 					return
 					
