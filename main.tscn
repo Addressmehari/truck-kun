@@ -1,0 +1,20 @@
+[gd_scene load_steps=3 format=3 uid="uid://bcg1yj1wjk1uu"]
+
+[ext_resource type="PackedScene" uid="uid://y4vbinwdj2t8" path="res://truck.tscn" id="3_truck"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_ig7tw"]
+size = Vector2(995, 17)
+
+[node name="main" type="Node2D"]
+
+[node name="truck" parent="." instance=ExtResource("3_truck")]
+
+[node name="Road" type="ColorRect" parent="."]
+offset_left = -442.0
+offset_top = 42.0
+offset_right = 543.0
+offset_bottom = 56.0
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Road"]
+position = Vector2(487.5, 7.5)
+shape = SubResource("RectangleShape2D_ig7tw")
