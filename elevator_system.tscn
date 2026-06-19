@@ -1,0 +1,30 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://elevator_system.gd" id="1_sys_gd"]
+[ext_resource type="Script" path="res://pressure_plate.gd" id="2_plate_gd"]
+[ext_resource type="Script" path="res://elevator.gd" id="3_elev_gd"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_plate"]
+size = Vector2(120, 20)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_elev"]
+size = Vector2(188, 12)
+
+[node name="ElevatorSystem" type="Node2D"]
+script = ExtResource("1_sys_gd")
+
+[node name="PressurePlate" type="Area2D" parent="."]
+position = Vector2(60, 0)
+script = ExtResource("2_plate_gd")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="PressurePlate"]
+position = Vector2(0, -10)
+shape = SubResource("RectangleShape2D_plate")
+
+[node name="Elevator" type="AnimatableBody2D" parent="."]
+position = Vector2(402, 0)
+script = ExtResource("3_elev_gd")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Elevator"]
+position = Vector2(0, -6)
+shape = SubResource("RectangleShape2D_elev")

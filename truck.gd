@@ -1,6 +1,6 @@
 extends Node2D
 
-@export var torque_power := 12000.0
+@export var torque_power := 25000.0
 @export var air_tilt_power := 6000.0
 @export var max_angular_velocity := 45.0
 
@@ -121,16 +121,16 @@ func _physics_process(_delta: float) -> void:
 		
 	# Apply driving state or parking handbrake
 	if current_gear == Gear.PARK:
-		tyre_1.freeze = true
-		tyre_2.freeze = true
-		tyre_3.freeze = true
+		tyre_1.lock_rotation = true
+		tyre_2.lock_rotation = true
+		tyre_3.lock_rotation = true
 		tyre_1.angular_velocity = 0.0
 		tyre_2.angular_velocity = 0.0
 		tyre_3.angular_velocity = 0.0
 	else:
-		tyre_1.freeze = false
-		tyre_2.freeze = false
-		tyre_3.freeze = false
+		tyre_1.lock_rotation = false
+		tyre_2.lock_rotation = false
+		tyre_3.lock_rotation = false
 		
 		# Apply driving torque (only if not actively braking)
 		if move_input != 0.0 and not brake_pressed:

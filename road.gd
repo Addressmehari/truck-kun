@@ -1,19 +1,55 @@
 @tool
 extends StaticBody2D
 
-@export var road_length := 15000.0
-@export var step_size := 30.0 # Distance between points on the curve (lower is smoother)
-@export var road_bottom := 800.0 # How deep the ground polygon extends
+@export var road_length := 15000.0:
+	set(val):
+		road_length = val
+		generate_road()
 
-@onready var collision_polygon: CollisionPolygon2D = $CollisionPolygon2D
-@onready var road_fill: Polygon2D = $RoadFill
-@onready var line_2d: Line2D = $Line2D
+@export var step_size := 30.0: # Distance between points on the curve (lower is smoother)
+	set(val):
+		step_size = max(5.0, val) # Prevent infinite loops
+		generate_road()
 
-func _ready():
+@export var road_bottom := 800.0: # How deep the ground polygon extends
+	set(val):
+		road_bottom = val
+		generate_road()
+
+@export_group("Road Shape Settings")
+@export var is_flat := true:
+	set(val):
+		is_flat = val
+		generate_road()
+
+@export var flat_height := 42.0:
+	set(val):
+		flat_height = val
+		generate_road()
+
+@export var hill_amplitude_multiplier := 1.0:
+	set(val):
+		hill_amplitude_multiplier = val
+		generate_road()
+
+# Fetch children nodes dynamically in editor (setters can run before _ready)
+func _get_collision_polygon() -> CollisionPolygon2D:
+	return get_node_or_null("CollisionPolygon2D")
+
+func _get_road_fill() -> Polygon2D:
+	return get_node_or_null("RoadFill")
+
+func _get_line_2d() -> Line2D:
+	return get_node_or_null("Line2D")
+
+func _ready() -> void:
 	generate_road()
 
 # Math function defining the height of the road at any X coordinate
 func get_road_height(x: float) -> float:
+	if is_flat:
+		return flat_height
+		
 	# Make a flat starting zone around the spawn area (x = 0)
 	if abs(x) < 400.0:
 		return 42.0
@@ -26,10 +62,17 @@ func get_road_height(x: float) -> float:
 	var medium_waves = cos(x * 0.004) * 50.0   # Medium slopes
 	var small_bumps = sin(x * 0.012) * 12.0     # Small bumpy texture
 	
-	var height = 42.0 + long_hills + medium_waves + small_bumps
+	var height = 42.0 + (long_hills + medium_waves + small_bumps) * hill_amplitude_multiplier
 	return lerp(42.0, height, factor)
 
-func generate_road():
+func generate_road() -> void:
+	var col_poly = _get_collision_polygon()
+	var fill = _get_road_fill()
+	var line = _get_line_2d()
+	
+	if not col_poly or not fill or not line:
+		return
+		
 	var surface_points = PackedVector2Array()
 	
 	# Generate points along the road surface
@@ -51,13 +94,16 @@ func generate_road():
 	polygon_points.append(Vector2(start_x, road_bottom))
 	
 	# Apply to collision shape
-	if collision_polygon:
-		collision_polygon.polygon = polygon_points
+	col_poly.polygon = polygon_points
 		
 	# Apply to visual ground fill
-	if road_fill:
-		road_fill.polygon = polygon_points
+	fill.polygon = polygon_points
 		
 	# Apply to visual surface line
-	if line_2d:
-		line_2d.points = surface_points
+	line.points = surface_points
+	
+	# If running in editor, notify dependent components like elevator systems to snap
+	if Engine.is_editor_hint():
+		for child in get_parent().get_children():
+			if child.has_method("snap_to_road"):
+				child.call("snap_to_road")

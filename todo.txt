@@ -10,3 +10,11 @@ truck.tscn
 2 : {
     fix glass shattering
 }
+
+3 : [DONE] {
+    to make the elevator, and pressure place, 
+    if any object on pressure plate means just raise the elevator.
+    space between plate and elevator should be 1 truck length.
+    elevator lenghth should be 1 truck length.
+    height is adjustable in the inspector.
+}
