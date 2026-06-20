@@ -157,15 +157,16 @@ func rebuild_grass() -> void:
 						"sway_phase": 0.0,
 						"scale": Vector2(scale_val, scale_val),
 						"slope_angle": segment_dir.angle(),
-						"can_sway": false
+						"can_sway": false,
+						"category": "bush"
 					})
-					dist += rng.randf_range(30.0, 45.0) # Spawn spacing for bushes
+					dist += rng.randf_range(45.0, 70.0) # Spawn spacing for bushes
 					
 				# 2. Flowers: Frame 2, 3, 4 (can sway, size varies a little)
 				elif roll < 0.32 and has_flowers:
 					var frame_idx = rng.randi_range(2, min(4, size - 1))
 					var texture = active_textures[frame_idx]
-					var scale_val = 0.125 * rng.randf_range(0.7, 1.3) # Varies around grass scale
+					var scale_val = 0.25 * rng.randf_range(0.7, 1.3) # Varies around grass scale
 					
 					sprites.append({
 						"pos": pos,
@@ -173,15 +174,16 @@ func rebuild_grass() -> void:
 						"sway_phase": rng.randf_range(0.0, PI * 2),
 						"scale": Vector2(scale_val, scale_val),
 						"slope_angle": segment_dir.angle(),
-						"can_sway": true
+						"can_sway": true,
+						"category": "flower"
 					})
-					dist += rng.randf_range(16.0, 26.0) # Medium spacing
+					dist += rng.randf_range(30.0, 50.0) # Medium spacing
 					
 				# 3. Grass: Frame 0, 1 (can sway, small and frequent)
 				else:
 					var frame_idx = rng.randi_range(0, min(1, size - 1)) if has_grass else 0
 					var texture = active_textures[frame_idx]
-					var scale_val = 0.125 * rng.randf_range(0.85, 1.15) # Scaled down 8 times (1/8 = 0.125)
+					var scale_val = 0.25 * rng.randf_range(0.85, 1.15) # Scaled down 4 times (1/4 = 0.25)
 					
 					sprites.append({
 						"pos": pos,
@@ -189,9 +191,10 @@ func rebuild_grass() -> void:
 						"sway_phase": rng.randf_range(0.0, PI * 2),
 						"scale": Vector2(scale_val, scale_val),
 						"slope_angle": segment_dir.angle(),
-						"can_sway": true
+						"can_sway": true,
+						"category": "grass"
 					})
-					dist += rng.randf_range(8.0, 14.0) # Dense spacing for grass
+					dist += rng.randf_range(16.0, 28.0) # Dense spacing for grass
 	else:
 		# Fallback to optimized procedural line-based grass
 		var grass_spacing := rng.randf_range(14.0, 20.0)
@@ -251,6 +254,15 @@ func rebuild_grass() -> void:
 				dist += rng.randf_range(12.0, 18.0)
 
 func _draw() -> void:
+	# Fetch truck chassis to calculate draft forces
+	var chassis = road.get_node_or_null("../truck/chassis") if road else null
+	var chassis_pos_x := 0.0
+	var chassis_vel_x := 0.0
+	var has_chassis := is_instance_valid(chassis)
+	if has_chassis:
+		chassis_pos_x = chassis.global_position.x
+		chassis_vel_x = chassis.linear_velocity.x
+
 	# If textures/sprites are active, draw them
 	if not sprites.is_empty():
 		for sprite in sprites:
@@ -258,19 +270,41 @@ func _draw() -> void:
 			var sway = 0.0
 			if sprite.can_sway:
 				sway = sin(time * wind_speed + sprite.pos.x * 0.03 + sprite.sway_phase) * (wind_amplitude * 0.015)
-			var angle = sprite.slope_angle + sway
+				
+			# Calculate truck draft effect (only affects grass category!)
+			var draft_rotation := 0.0
+			var scale_multiplier := Vector2.ONE
+			
+			if has_chassis and sprite.category == "grass":
+				var dx = sprite.pos.x - chassis_pos_x
+				var dist_x = abs(dx)
+				var radius = 250.0
+				if dist_x < radius:
+					var factor = (radius - dist_x) / radius
+					var smooth_factor = factor * factor # Quadratic falloff
+					
+					# Bends grass in the direction of the truck's speed
+					var target_draft = clamp(chassis_vel_x * 0.0012 * smooth_factor, -1.1, 1.1)
+					draft_rotation = target_draft
+					
+					# Squish: scale down height (Y) and widen slightly (X) to simulate compression
+					scale_multiplier.y = 1.0 - abs(target_draft) * 0.45
+					scale_multiplier.x = 1.0 + abs(target_draft) * 0.15
+					
+			var angle = sprite.slope_angle + sway + draft_rotation
+			var final_scale = sprite.scale * scale_multiplier
 			
 			if sprite.texture:
 				var tex: Texture2D = sprite.texture
 				var size = tex.get_size()
 				
 				# Set translation, rotation, and scale for rotating from the bottom-center base
-				draw_set_transform(sprite.pos, angle, sprite.scale)
+				draw_set_transform(sprite.pos, angle, final_scale)
 				# Draw bottom-centered; draw_texture_rect natively supports AtlasTextures/slicing
 				draw_texture_rect(tex, Rect2(-size * Vector2(0.5, 1.0), size), false)
 			else:
 				# Set transform for the placeholder
-				draw_set_transform(sprite.pos, angle, sprite.scale)
+				draw_set_transform(sprite.pos, angle, final_scale)
 				
 				# Developer placeholder: semi-transparent green box with a bright green outline
 				var ph_rect = Rect2(-10, -24, 20, 24)
@@ -313,7 +347,19 @@ func _draw() -> void:
 	for i in range(blades.size()):
 		var blade = blades[i]
 		var sway = sin(time * wind_speed + blade.base.x * 0.03 + blade.sway_phase) * wind_amplitude
-		var tip = blade.base + blade.up * blade.height + Vector2.RIGHT * sway
+		
+		# Apply draft to vector line blades (fallback mode)
+		var height_mult := 1.0
+		var draft_sway := 0.0
+		if has_chassis:
+			var dx = blade.base.x - chassis_pos_x
+			if abs(dx) < 250.0:
+				var factor = (250.0 - abs(dx)) / 250.0
+				var smooth_factor = factor * factor
+				draft_sway = clamp(chassis_vel_x * 0.015 * smooth_factor, -20.0, 20.0)
+				height_mult = clamp(1.0 - abs(chassis_vel_x) * 0.0006 * smooth_factor, 0.5, 1.0)
+				
+		var tip = blade.base + blade.up * (blade.height * height_mult) + Vector2.RIGHT * (sway + draft_sway)
 		tips[i] = tip
 		
 		if blade.color_group == 0:
