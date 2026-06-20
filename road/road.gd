@@ -300,7 +300,7 @@ func update_chunks(player_x: float) -> void:
 			destroy_chunk(i)
 
 func spawn_tunnel_node(chunk_index: int, tunnel_data: Dictionary) -> Node2D:
-	var tunnel_scene = load("res://tunnel.tscn")
+	var tunnel_scene = load("res://road/tunnel.tscn")
 	if not tunnel_scene:
 		return null
 	var tunnel = tunnel_scene.instantiate() as Node2D

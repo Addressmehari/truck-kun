@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3 uid="uid://fn7rii5p01qg"]
 
-[ext_resource type="Script" uid="uid://wgk5sui4brwd" path="res://tunnel.gd" id="1_tunnel_gd"]
+[ext_resource type="Script" uid="uid://wgk5sui4brwd" path="res://road/tunnel.gd" id="1_tunnel_gd"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_trigger"]
 size = Vector2(920, 320)

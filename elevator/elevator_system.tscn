@@ -1,8 +1,8 @@
 [gd_scene load_steps=6 format=3]
 
-[ext_resource type="Script" path="res://elevator_system.gd" id="1_sys_gd"]
-[ext_resource type="Script" path="res://pressure_plate.gd" id="2_plate_gd"]
-[ext_resource type="Script" path="res://elevator.gd" id="3_elev_gd"]
+[ext_resource type="Script" path="res://elevator/elevator_system.gd" id="1_sys_gd"]
+[ext_resource type="Script" path="res://elevator/pressure_plate.gd" id="2_plate_gd"]
+[ext_resource type="Script" path="res://elevator/elevator.gd" id="3_elev_gd"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_plate"]
 size = Vector2(120, 20)

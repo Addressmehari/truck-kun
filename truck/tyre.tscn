@@ -1,6 +1,6 @@
 [gd_scene load_steps=4 format=3 uid="uid://bo6otg6erdwgb"]
 
-[ext_resource type="Script" uid="uid://b2xru1n46x52" path="res://tyre.gd" id="1_s25gb"]
+[ext_resource type="Script" uid="uid://b2xru1n46x52" path="res://truck/tyre.gd" id="1_s25gb"]
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_tyre"]
 friction = 1.5
