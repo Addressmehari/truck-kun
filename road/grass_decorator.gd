@@ -51,6 +51,11 @@ var sprite_frames: SpriteFrames = null :
 		sprite_frames = val
 		rebuild_grass()
 
+var density_multiplier := 1.0 :
+	set(val):
+		density_multiplier = max(0.01, val)
+		rebuild_grass()
+
 # Wind animation properties
 var time := 0.0
 var wind_speed := 3.0
@@ -182,12 +187,9 @@ func rebuild_grass() -> void:
 		var has_flowers = size > 2
 		var has_bushes = size > 5
 		
-		# Define our 4 visual layers extending much further down into the dirt layer with random jitter
+		# Define only the surface grass layer (no parallax)
 		var LAYERS = [
-			{ "y_offset": 30.0, "y_jitter": 20.0, "parallax": -0.05, "scale_mult": 0.7, "is_fg": false },  # Deep Background
-			{ "y_offset": 0.0, "y_jitter": 4.0, "parallax": 0.0, "scale_mult": 1.0, "is_fg": false },    # Midground (surface)
-			{ "y_offset": 65.0, "y_jitter": 30.0, "parallax": 0.06, "scale_mult": 1.3, "is_fg": true },  # Foreground
-			{ "y_offset": 130.0, "y_jitter": 45.0, "parallax": 0.12, "scale_mult": 1.6, "is_fg": true }   # Deep Foreground
+			{ "y_offset": 0.0, "y_jitter": 4.0, "parallax": 0.0, "scale_mult": 1.0, "is_fg": false }
 		]
 		
 		for layer_idx in range(LAYERS.size()):
@@ -196,17 +198,9 @@ func rebuild_grass() -> void:
 			# Deterministic seed per layer per chunk to maintain visual consistency
 			rng.seed = hash(str(road_seed) + "_grass_" + str(chunk_index) + "_lay_" + str(layer_idx))
 			
-			# Setup layer-specific spacing
-			var min_space = 16.0
-			var max_space = 28.0
-			if layer_idx == 0:
-				min_space = 25.0; max_space = 45.0
-			elif layer_idx == 1:
-				min_space = 16.0; max_space = 28.0
-			elif layer_idx == 2:
-				min_space = 25.0; max_space = 45.0
-			elif layer_idx == 3:
-				min_space = 35.0; max_space = 60.0
+			# Setup spacing
+			var min_space = 16.0 / density_multiplier
+			var max_space = 28.0 / density_multiplier
 				
 			for i in range(points.size() - 1):
 				var p1 = points[i]
@@ -245,8 +239,8 @@ func rebuild_grass() -> void:
 					var y_off = layer.y_offset + rng.randf_range(-layer.y_jitter, layer.y_jitter)
 					
 					# Spawn decisions based on categorized frames:
-					# 1. Bushes: Frame 5, 6 (only on surface layer 1, requires flat/straight road section, no sway)
-					if layer_idx == 1 and is_straight and roll < 0.10 and has_bushes:
+					# 1. Bushes: Frame 5, 6 (only on surface layer, requires flat/straight road section, no sway)
+					if layer_idx == 0 and is_straight and roll < 0.10 and has_bushes:
 						var frame_idx = rng.randi_range(5, min(6, size - 1))
 						var texture = active_textures[frame_idx]
 						var scale_val = 0.25 * rng.randf_range(0.9, 1.1)
@@ -311,9 +305,8 @@ func rebuild_grass() -> void:
 						})
 						dist += rng.randf_range(min_space * 0.8, max_space * 0.8)
 	else:
-		# Fallback to optimized procedural line-based grass (renders 2 layers)
+		# Fallback to optimized procedural line-based grass (only surface layer, no parallax)
 		var LAYERS_LINE = [
-			{ "y_offset": 30.0, "y_jitter": 20.0, "parallax": -0.04, "scale_mult": 0.8, "is_fg": false },
 			{ "y_offset": 0.0, "y_jitter": 4.0, "parallax": 0.0, "scale_mult": 1.0, "is_fg": false }
 		]
 		
@@ -322,7 +315,7 @@ func rebuild_grass() -> void:
 			var rng = RandomNumberGenerator.new()
 			rng.seed = hash(str(road_seed) + "_grass_" + str(chunk_index) + "_line_lay_" + str(layer_idx))
 			
-			var grass_spacing := rng.randf_range(14.0, 20.0)
+			var grass_spacing := rng.randf_range(14.0, 20.0) / density_multiplier
 			
 			for i in range(points.size() - 1):
 				var p1 = points[i]
@@ -381,7 +374,7 @@ func rebuild_grass() -> void:
 								"color_idx": rng.randi() % 3
 							})
 					
-					dist += rng.randf_range(12.0, 18.0)
+					dist += rng.randf_range(12.0, 18.0) / density_multiplier
 
 	redraw_all()
 

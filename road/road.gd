@@ -150,11 +150,15 @@ func _ready() -> void:
 		var col_poly = _get_collision_polygon()
 		var fill = _get_road_fill()
 		var line = _get_line_2d()
+		var line2 = get_node_or_null("Line2D2")
 		var grass = get_node_or_null("GrassDecorator")
+		var grass2 = get_node_or_null("GrassDecorator2")
 		if col_poly: col_poly.queue_free()
 		if fill: fill.queue_free()
 		if line: line.queue_free()
+		if line2: line2.queue_free()
 		if grass: grass.queue_free()
+		if grass2: grass2.queue_free()
 		
 		# Initial chunk generation
 		update_chunks(get_target_x())
@@ -245,6 +249,11 @@ func get_road_height(x: float) -> float:
 				
 	return get_base_road_height(x)
 
+# Helper to get the height of the second line below the road
+func get_second_line_height(x: float, y_base: float) -> float:
+	var offset = 140.0 + sin(x * 0.005) * 30.0 + cos(x * 0.012) * 10.0
+	return y_base + max(60.0, offset)
+
 func generate_road() -> void:
 	var col_poly = _get_collision_polygon()
 	var fill = _get_road_fill()
@@ -268,6 +277,10 @@ func generate_road() -> void:
 	# Ensure the last point is exactly at the end
 	surface_points.append(Vector2(end_x, get_road_height(end_x)))
 	
+	var surface_points_2 = PackedVector2Array()
+	for pt in surface_points:
+		surface_points_2.append(Vector2(pt.x, get_second_line_height(pt.x, pt.y)))
+	
 	# Create a closed polygon for the ground fill and collision
 	var polygon_points = PackedVector2Array(surface_points)
 	polygon_points.append(Vector2(end_x, road_bottom))
@@ -282,6 +295,19 @@ func generate_road() -> void:
 		
 	# Apply to visual surface line
 	line.points = surface_points
+	
+	# Apply to second visual surface line
+	var line2 = get_node_or_null("Line2D2")
+	if not line2:
+		line2 = Line2D.new()
+		line2.name = "Line2D2"
+		add_child(line2)
+		if Engine.is_editor_hint() and is_inside_tree():
+			line2.owner = get_tree().edited_scene_root
+	if line2:
+		line2.points = surface_points_2
+		line2.width = line.width
+		line2.default_color = line.default_color
 	
 	# Create or update GrassDecorator in editor
 	var grass = get_node_or_null("GrassDecorator")
@@ -301,6 +327,26 @@ func generate_road() -> void:
 		grass.road = self
 		grass.textures = grass_textures
 		grass.sprite_frames = grass_frames
+		
+	# Create or update GrassDecorator2 in editor
+	var grass2 = get_node_or_null("GrassDecorator2")
+	if not grass2:
+		var grass_script = load("res://road/grass_decorator.gd")
+		if grass_script:
+			grass2 = grass_script.new()
+			grass2.name = "GrassDecorator2"
+			add_child(grass2)
+			if Engine.is_editor_hint() and is_inside_tree():
+				grass2.owner = get_tree().edited_scene_root
+	if grass2:
+		grass2.points = surface_points_2
+		grass2.color = line.default_color
+		grass2.road_seed = road_seed + 1
+		grass2.chunk_index = 9999
+		grass2.road = self
+		grass2.textures = grass_textures
+		grass2.sprite_frames = grass_frames
+		grass2.density_multiplier = 0.4
 	
 	# If running in editor, notify dependent components like elevator systems to snap
 	if Engine.is_editor_hint():
@@ -373,6 +419,10 @@ func create_chunk(i: int) -> void:
 	# Ensure the last point is exactly at the end
 	surface_points.append(Vector2(end_x, get_road_height(end_x)))
 	
+	var surface_points_2 = PackedVector2Array()
+	for pt in surface_points:
+		surface_points_2.append(Vector2(pt.x, get_second_line_height(pt.x, pt.y)))
+	
 	# Create the closed polygon
 	var polygon_points = PackedVector2Array(surface_points)
 	polygon_points.append(Vector2(end_x, road_bottom))
@@ -397,8 +447,16 @@ func create_chunk(i: int) -> void:
 	line.default_color = template_line_color
 	add_child(line)
 	
+	# Create second Line2D
+	var line2 = Line2D.new()
+	line2.points = surface_points_2
+	line2.width = template_line_width
+	line2.default_color = template_line_color
+	add_child(line2)
+	
 	# Create GrassDecorator
 	var grass = null
+	var grass2 = null
 	var grass_script = load("res://road/grass_decorator.gd")
 	if grass_script:
 		grass = grass_script.new()
@@ -411,6 +469,19 @@ func create_chunk(i: int) -> void:
 		grass.textures = grass_textures
 		grass.sprite_frames = grass_frames
 		add_child(grass)
+		
+		# Create GrassDecorator2 for below road
+		grass2 = grass_script.new()
+		grass2.points = surface_points_2
+		grass2.color = template_line_color
+		grass2.road_seed = road_seed + 1
+		grass2.chunk_index = i
+		grass2.chunk_width = chunk_width
+		grass2.road = self
+		grass2.textures = grass_textures
+		grass2.sprite_frames = grass_frames
+		grass2.density_multiplier = 0.4
+		add_child(grass2)
 	
 	# Spawn tunnel if present
 	var tunnel_node = null
@@ -422,7 +493,9 @@ func create_chunk(i: int) -> void:
 		"collision": col_poly,
 		"fill": fill,
 		"line": line,
+		"line2": line2,
 		"grass": grass,
+		"grass2": grass2,
 		"tunnel": tunnel_node
 	}
 
@@ -435,8 +508,12 @@ func destroy_chunk(i: int) -> void:
 			chunk.fill.queue_free()
 		if is_instance_valid(chunk.line):
 			chunk.line.queue_free()
+		if "line2" in chunk and is_instance_valid(chunk.line2):
+			chunk.line2.queue_free()
 		if "grass" in chunk and is_instance_valid(chunk.grass):
 			chunk.grass.queue_free()
+		if "grass2" in chunk and is_instance_valid(chunk.grass2):
+			chunk.grass2.queue_free()
 		if "tunnel" in chunk and is_instance_valid(chunk.tunnel):
 			chunk.tunnel.queue_free()
 		active_chunks.erase(i)
