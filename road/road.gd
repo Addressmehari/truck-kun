@@ -86,6 +86,15 @@ extends StaticBody2D
 		if not Engine.is_editor_hint():
 			regenerate_runtime_chunks()
 
+@export_group("Second Road Settings")
+@export var enable_second_road := true:
+	set(val):
+		enable_second_road = val
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
 # Seed offsets for waves
 var seed_offset_1 := 0.0
 var seed_offset_2 := 0.0
@@ -298,16 +307,20 @@ func generate_road() -> void:
 	
 	# Apply to second visual surface line
 	var line2 = get_node_or_null("Line2D2")
-	if not line2:
-		line2 = Line2D.new()
-		line2.name = "Line2D2"
-		add_child(line2)
-		if Engine.is_editor_hint() and is_inside_tree():
-			line2.owner = get_tree().edited_scene_root
-	if line2:
-		line2.points = surface_points_2
-		line2.width = line.width
-		line2.default_color = line.default_color
+	if not enable_second_road:
+		if line2:
+			line2.queue_free()
+	else:
+		if not line2:
+			line2 = Line2D.new()
+			line2.name = "Line2D2"
+			add_child(line2)
+			if Engine.is_editor_hint() and is_inside_tree():
+				line2.owner = get_tree().edited_scene_root
+		if line2:
+			line2.points = surface_points_2
+			line2.width = line.width
+			line2.default_color = line.default_color
 	
 	# Create or update GrassDecorator in editor
 	var grass = get_node_or_null("GrassDecorator")
@@ -330,23 +343,27 @@ func generate_road() -> void:
 		
 	# Create or update GrassDecorator2 in editor
 	var grass2 = get_node_or_null("GrassDecorator2")
-	if not grass2:
-		var grass_script = load("res://road/grass_decorator.gd")
-		if grass_script:
-			grass2 = grass_script.new()
-			grass2.name = "GrassDecorator2"
-			add_child(grass2)
-			if Engine.is_editor_hint() and is_inside_tree():
-				grass2.owner = get_tree().edited_scene_root
-	if grass2:
-		grass2.points = surface_points_2
-		grass2.color = line.default_color
-		grass2.road_seed = road_seed + 1
-		grass2.chunk_index = 9999
-		grass2.road = self
-		grass2.textures = grass_textures
-		grass2.sprite_frames = grass_frames
-		grass2.density_multiplier = 0.4
+	if not enable_second_road:
+		if grass2:
+			grass2.queue_free()
+	else:
+		if not grass2:
+			var grass_script = load("res://road/grass_decorator.gd")
+			if grass_script:
+				grass2 = grass_script.new()
+				grass2.name = "GrassDecorator2"
+				add_child(grass2)
+				if Engine.is_editor_hint() and is_inside_tree():
+					grass2.owner = get_tree().edited_scene_root
+		if grass2:
+			grass2.points = surface_points_2
+			grass2.color = line.default_color
+			grass2.road_seed = road_seed + 1
+			grass2.chunk_index = 9999
+			grass2.road = self
+			grass2.textures = grass_textures
+			grass2.sprite_frames = grass_frames
+			grass2.density_multiplier = 0.4
 	
 	# If running in editor, notify dependent components like elevator systems to snap
 	if Engine.is_editor_hint():
@@ -448,11 +465,13 @@ func create_chunk(i: int) -> void:
 	add_child(line)
 	
 	# Create second Line2D
-	var line2 = Line2D.new()
-	line2.points = surface_points_2
-	line2.width = template_line_width
-	line2.default_color = template_line_color
-	add_child(line2)
+	var line2 = null
+	if enable_second_road:
+		line2 = Line2D.new()
+		line2.points = surface_points_2
+		line2.width = template_line_width
+		line2.default_color = template_line_color
+		add_child(line2)
 	
 	# Create GrassDecorator
 	var grass = null
@@ -471,17 +490,18 @@ func create_chunk(i: int) -> void:
 		add_child(grass)
 		
 		# Create GrassDecorator2 for below road
-		grass2 = grass_script.new()
-		grass2.points = surface_points_2
-		grass2.color = template_line_color
-		grass2.road_seed = road_seed + 1
-		grass2.chunk_index = i
-		grass2.chunk_width = chunk_width
-		grass2.road = self
-		grass2.textures = grass_textures
-		grass2.sprite_frames = grass_frames
-		grass2.density_multiplier = 0.4
-		add_child(grass2)
+		if enable_second_road:
+			grass2 = grass_script.new()
+			grass2.points = surface_points_2
+			grass2.color = template_line_color
+			grass2.road_seed = road_seed + 1
+			grass2.chunk_index = i
+			grass2.chunk_width = chunk_width
+			grass2.road = self
+			grass2.textures = grass_textures
+			grass2.sprite_frames = grass_frames
+			grass2.density_multiplier = 0.4
+			add_child(grass2)
 	
 	# Spawn tunnel if present
 	var tunnel_node = null
