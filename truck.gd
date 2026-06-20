@@ -19,9 +19,29 @@ enum Gear { PARK, DRIVE, REVERSE }
 var current_gear: Gear = Gear.DRIVE
 var is_e_toggled: bool = false
 
+# Parking with "O" hold logic
+var o_hold_time: float = 0.0
+const O_HOLD_THRESHOLD: float = 1.0
+var o_trigger_locked: bool = false
+var o_hold_start_ticks: int = 0
+var is_o_currently_holding: bool = false
+
 func _ready() -> void:
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	setup_shifter_ui()
+	if shifter_panel:
+		shifter_panel.visible = false
+		
+	# Instantiate visual parking indicator
+	var indicator_script = load("res://parking_indicator.gd")
+	if indicator_script:
+		var indicator = Node2D.new()
+		indicator.set_script(indicator_script)
+		indicator.name = "ParkingIndicator"
+		indicator.truck = self
+		indicator.chassis = chassis
+		indicator.container_body = container_body
+		add_child(indicator)
 
 func setup_shifter_ui() -> void:
 	# Style Shifter Panel (wooden panel backboard)
@@ -99,26 +119,80 @@ func update_shifter_visuals() -> void:
 	drv_btn.add_theme_font_size_override("font_size", 22)
 
 func _physics_process(_delta: float) -> void:
-	# Read user input for gas pedal (W, D, Up, Right, Space)
-	var gas_pressed = Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT)
-	
-	# Read user input for brake pedal (S, A, Down, Left)
-	var brake_pressed = Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT)
+	# Simplified driving mechanics:
+	# "D" key (and W, UP, RIGHT) drives forward
+	# "A" key (and S, DOWN, LEFT) drives backward
+	var forward_pressed = Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_RIGHT)
+	var backward_pressed = Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT)
 	
 	var move_input = 0.0
-	if gas_pressed:
-		if current_gear == Gear.DRIVE:
+	var is_braking = false
+	
+	if forward_pressed and not backward_pressed:
+		if current_gear != Gear.PARK:
 			move_input = 1.0
-		elif current_gear == Gear.REVERSE:
+	elif backward_pressed and not forward_pressed:
+		if current_gear != Gear.PARK:
 			move_input = -1.0
-			
+	elif forward_pressed and backward_pressed:
+		is_braking = true
+
+	# Long press "O" to park when speed is less than 20 (on speedometer)
+	var speed_kmh = chassis.linear_velocity.length() * 0.08 if is_instance_valid(chassis) else 0.0
+	var can_park = speed_kmh < 20.0
+	
+	if can_park:
+		if Input.is_key_pressed(KEY_O):
+			if not o_trigger_locked:
+				if not is_o_currently_holding:
+					is_o_currently_holding = true
+					o_hold_start_ticks = Time.get_ticks_msec()
+				
+				var held_duration = (Time.get_ticks_msec() - o_hold_start_ticks) / 1000.0
+				o_hold_time = held_duration
+				
+				if held_duration >= O_HOLD_THRESHOLD:
+					if current_gear == Gear.PARK:
+						set_gear(Gear.DRIVE)
+					else:
+						set_gear(Gear.PARK)
+					o_trigger_locked = true
+					o_hold_time = 0.0
+					is_o_currently_holding = false
+		else:
+			o_hold_time = 0.0
+			is_o_currently_holding = false
+			o_trigger_locked = false
+	else:
+		o_hold_time = 0.0
+		is_o_currently_holding = false
+		o_trigger_locked = false
+		
 	# Read user input for air tilting (A/D or Left/Right)
 	var tilt_input = 0.0
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
 		tilt_input -= 1.0
 	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
 		tilt_input += 1.0
+
+	# Active braking logic to make controls feel premium and snappy
+	var avg_vel = 0.0
+	if is_instance_valid(tyre_1) and is_instance_valid(tyre_2) and is_instance_valid(tyre_3):
+		avg_vel = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
 		
+	# Quick braking: if moving opposite to input
+	if forward_pressed and avg_vel < -5.0:
+		is_braking = true
+	elif backward_pressed and avg_vel > 5.0:
+		is_braking = true
+		
+	# Mild coasting brake when no movement inputs are pressed
+	if not forward_pressed and not backward_pressed:
+		if is_instance_valid(tyre_1) and is_instance_valid(tyre_2) and is_instance_valid(tyre_3):
+			tyre_1.angular_velocity = lerp(tyre_1.angular_velocity, 0.0, 1.5 * _delta)
+			tyre_2.angular_velocity = lerp(tyre_2.angular_velocity, 0.0, 1.5 * _delta)
+			tyre_3.angular_velocity = lerp(tyre_3.angular_velocity, 0.0, 1.5 * _delta)
+			
 	# Apply driving state or parking handbrake
 	if current_gear == Gear.PARK:
 		tyre_1.lock_rotation = true
@@ -133,41 +207,36 @@ func _physics_process(_delta: float) -> void:
 		tyre_3.lock_rotation = false
 		
 		# Apply driving torque (only if not actively braking)
-		if move_input != 0.0 and not brake_pressed:
+		if move_input != 0.0 and not is_braking:
 			tyre_1.apply_torque(move_input * torque_power)
 			tyre_2.apply_torque(move_input * torque_power)
 			tyre_3.apply_torque(move_input * torque_power)
 			
 		# Apply active braking/friction to quickly halt wheels
-		if brake_pressed:
+		if is_braking:
 			tyre_1.angular_velocity = lerp(tyre_1.angular_velocity, 0.0, 12.0 * _delta)
 			tyre_2.angular_velocity = lerp(tyre_2.angular_velocity, 0.0, 12.0 * _delta)
 			tyre_3.angular_velocity = lerp(tyre_3.angular_velocity, 0.0, 12.0 * _delta)
 			
 		# Synchronize wheel speeds (locked differential)
-		var avg_vel = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
-		tyre_1.angular_velocity = avg_vel
-		tyre_2.angular_velocity = avg_vel
-		tyre_3.angular_velocity = avg_vel
-			
-		# Cap wheel spin velocity
-		tyre_1.angular_velocity = clamp(tyre_1.angular_velocity, -max_angular_velocity, max_angular_velocity)
-		tyre_2.angular_velocity = clamp(tyre_2.angular_velocity, -max_angular_velocity, max_angular_velocity)
-		tyre_3.angular_velocity = clamp(tyre_3.angular_velocity, -max_angular_velocity, max_angular_velocity)
+		if is_instance_valid(tyre_1) and is_instance_valid(tyre_2) and is_instance_valid(tyre_3):
+			var new_avg_vel = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
+			tyre_1.angular_velocity = new_avg_vel
+			tyre_2.angular_velocity = new_avg_vel
+			tyre_3.angular_velocity = new_avg_vel
+				
+			# Cap wheel spin velocity
+			tyre_1.angular_velocity = clamp(tyre_1.angular_velocity, -max_angular_velocity, max_angular_velocity)
+			tyre_2.angular_velocity = clamp(tyre_2.angular_velocity, -max_angular_velocity, max_angular_velocity)
+			tyre_3.angular_velocity = clamp(tyre_3.angular_velocity, -max_angular_velocity, max_angular_velocity)
 
 	# Apply air tilting torque (active in mid-air or balance controls)
 	if tilt_input != 0.0:
 		chassis.apply_torque(-tilt_input * air_tilt_power)
 		container_body.apply_torque(-tilt_input * air_tilt_power * 1.5)
 
-func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed:
-		match event.keycode:
-			KEY_E:
-				if current_gear != Gear.PARK:
-					set_gear(Gear.PARK)
-				else:
-					set_gear(Gear.DRIVE)
+func _input(_event: InputEvent) -> void:
+	pass
 
 func _on_gear_button_pressed(gear_type: Gear) -> void:
 	set_gear(gear_type)
