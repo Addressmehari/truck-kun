@@ -23,6 +23,23 @@ extends StaticBody2D
 		else:
 			regenerate_runtime_chunks()
 
+@export_group("Grass Settings")
+@export var grass_textures: Array[Texture2D] = []:
+	set(val):
+		grass_textures = val
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
+@export var grass_frames: SpriteFrames:
+	set(val):
+		grass_frames = val
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
 @export_group("Road Shape Settings")
 @export var is_flat := true:
 	set(val):
@@ -111,6 +128,17 @@ func capture_templates() -> void:
 		template_line_width = line.width
 		template_line_color = line.default_color
 
+func get_ground_vertex_colors(surface_size: int, fill_color: Color, line_color: Color) -> PackedColorArray:
+	var colors = PackedColorArray()
+	var top_color = fill_color.lightened(0.12).lerp(line_color, 0.12)
+	var bottom_color = fill_color.darkened(0.65)
+	colors.resize(surface_size + 2)
+	for i in range(surface_size):
+		colors[i] = top_color
+	colors[surface_size] = bottom_color
+	colors[surface_size + 1] = bottom_color
+	return colors
+
 func _ready() -> void:
 	update_seed_offsets()
 	if Engine.is_editor_hint():
@@ -122,9 +150,11 @@ func _ready() -> void:
 		var col_poly = _get_collision_polygon()
 		var fill = _get_road_fill()
 		var line = _get_line_2d()
+		var grass = get_node_or_null("GrassDecorator")
 		if col_poly: col_poly.queue_free()
 		if fill: fill.queue_free()
 		if line: line.queue_free()
+		if grass: grass.queue_free()
 		
 		# Initial chunk generation
 		update_chunks(get_target_x())
@@ -248,9 +278,29 @@ func generate_road() -> void:
 		
 	# Apply to visual ground fill
 	fill.polygon = polygon_points
+	fill.vertex_colors = get_ground_vertex_colors(surface_points.size(), fill.color, line.default_color)
 		
 	# Apply to visual surface line
 	line.points = surface_points
+	
+	# Create or update GrassDecorator in editor
+	var grass = get_node_or_null("GrassDecorator")
+	if not grass:
+		var grass_script = load("res://road/grass_decorator.gd")
+		if grass_script:
+			grass = grass_script.new()
+			grass.name = "GrassDecorator"
+			add_child(grass)
+			if Engine.is_editor_hint() and is_inside_tree():
+				grass.owner = get_tree().edited_scene_root
+	if grass:
+		grass.points = surface_points
+		grass.color = line.default_color
+		grass.road_seed = road_seed
+		grass.chunk_index = 9999
+		grass.road = self
+		grass.textures = grass_textures
+		grass.sprite_frames = grass_frames
 	
 	# If running in editor, notify dependent components like elevator systems to snap
 	if Engine.is_editor_hint():
@@ -337,6 +387,7 @@ func create_chunk(i: int) -> void:
 	var fill = Polygon2D.new()
 	fill.polygon = polygon_points
 	fill.color = template_fill_color
+	fill.vertex_colors = get_ground_vertex_colors(surface_points.size(), template_fill_color, template_line_color)
 	add_child(fill)
 	
 	# Create Line2D
@@ -345,6 +396,21 @@ func create_chunk(i: int) -> void:
 	line.width = template_line_width
 	line.default_color = template_line_color
 	add_child(line)
+	
+	# Create GrassDecorator
+	var grass = null
+	var grass_script = load("res://road/grass_decorator.gd")
+	if grass_script:
+		grass = grass_script.new()
+		grass.points = surface_points
+		grass.color = template_line_color
+		grass.road_seed = road_seed
+		grass.chunk_index = i
+		grass.chunk_width = chunk_width
+		grass.road = self
+		grass.textures = grass_textures
+		grass.sprite_frames = grass_frames
+		add_child(grass)
 	
 	# Spawn tunnel if present
 	var tunnel_node = null
@@ -356,6 +422,7 @@ func create_chunk(i: int) -> void:
 		"collision": col_poly,
 		"fill": fill,
 		"line": line,
+		"grass": grass,
 		"tunnel": tunnel_node
 	}
 
@@ -368,6 +435,8 @@ func destroy_chunk(i: int) -> void:
 			chunk.fill.queue_free()
 		if is_instance_valid(chunk.line):
 			chunk.line.queue_free()
+		if "grass" in chunk and is_instance_valid(chunk.grass):
+			chunk.grass.queue_free()
 		if "tunnel" in chunk and is_instance_valid(chunk.tunnel):
 			chunk.tunnel.queue_free()
 		active_chunks.erase(i)
