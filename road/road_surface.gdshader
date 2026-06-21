@@ -3,57 +3,114 @@ shader_type canvas_item;
 varying vec2 world_pos;
 
 // Road colors
-uniform vec4 grass_color : source_color = vec4(0.0, 0.9, 0.46, 1.0);     // Green grass border
-uniform vec4 asphalt_color : source_color = vec4(0.18, 0.18, 0.20, 1.0);   // Dark asphalt body
-uniform vec4 stripe_color : source_color = vec4(0.95, 0.85, 0.20, 1.0);    // Yellow dash stripes
-uniform vec4 shadow_color : source_color = vec4(0.12, 0.12, 0.14, 1.0);    // Bottom shadow
+uniform vec4 grass_color : source_color = vec4(0.0, 0.9, 0.46, 1.0);         // Green grass
+uniform vec4 grass_shadow_color : source_color = vec4(0.0, 0.65, 0.33, 1.0);  // Darker green shadow
+uniform vec4 border_color : source_color = vec4(0.22, 0.15, 0.10, 1.0);      // Brown border (matches ground)
 
-// Pixel art settings
-uniform float pixel_size = 4.0;            // Screen pixel block size
-uniform float dash_length = 60.0;          // Length of yellow center dashes in pixels
-uniform float dash_gap = 60.0;             // Gap between yellow dashes in pixels
+// Voronoi cell settings (should match ground_voronoi.gdshader)
+uniform float cell_scale = 0.02;
+uniform float border_width = 0.08;
+uniform float randomness = 0.85;
+uniform float pixel_size = 4.0;
+uniform float line_width = 32.0;
+
+// Hash function for cellular random centers
+vec2 hash2(vec2 p) {
+	p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+	return fract(sin(p) * 43758.5453);
+}
+
+// 2D Voronoi returning:
+// xy: vector from cell center to current pixel
+// z: minimum distance to closest edge
+// w: random cell hash/ID
+vec4 voronoi(vec2 x, float rand) {
+	vec2 n = floor(x);
+	vec2 f = fract(x);
+
+	vec2 mg, mr;
+	float md = 8.0;
+	
+	// First pass: find closest cell center
+	for (int j = -1; j <= 1; j++) {
+		for (int i = -1; i <= 1; i++) {
+			vec2 g = vec2(float(i), float(j));
+			vec2 o = hash2(n + g) * rand;
+			vec2 r = g + o - f;
+			float d = dot(r, r);
+
+			if (d < md) {
+				md = d;
+				mr = r;
+				mg = g;
+			}
+		}
+	}
+
+	// Second pass: find distance to borders/edges
+	md = 8.0;
+	for (int j = -2; j <= 2; j++) {
+		for (int i = -2; i <= 2; i++) {
+			vec2 g = mg + vec2(float(i), float(j));
+			vec2 o = hash2(n + g) * rand;
+			vec2 r = g + o - f;
+
+			if (dot(mr - r, mr - r) > 0.00001) {
+				float d = dot(0.5 * (mr + r), normalize(r - mr));
+				md = min(md, d);
+			}
+		}
+	}
+
+	// Cell ID based on hash of cell coordinate
+	float cell_hash = fract(sin(dot(n + mg, vec2(12.9898, 78.233))) * 43758.5453);
+	return vec4(mr, md, cell_hash);
+}
 
 void vertex() {
-	// Pass world coordinates for repeating dash calculations
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy;
 }
 
 void fragment() {
-	// Divide road width (UV.y) into pixelated horizontal bands
-	float pixelated_y = floor(UV.y * 12.0) / 12.0;
-	float px = floor(world_pos.x / pixel_size) * pixel_size;
+	// Pixelate positions in world coordinate space
+	vec2 pixelated_pos = world_pos;
+	if (pixel_size > 1.001) {
+		pixelated_pos = floor(world_pos / pixel_size) * pixel_size;
+	}
 	
-	vec3 col;
+	// Sample Voronoi using pixelated world positions
+	vec2 v_coords = pixelated_pos * cell_scale;
+	vec4 v = voronoi(v_coords, randomness);
+	float dist_to_border = v.z;
+	float cell_hash = v.w;
 	
-	if (pixelated_y < 0.08) {
-		// 1. Top bright grass line (thin top edge)
-		col = grass_color.rgb;
-	} else if (pixelated_y < 0.15) {
-		// 2. Highlight/transition band
-		col = mix(grass_color.rgb, asphalt_color.rgb, 0.5);
-	} else if (pixelated_y < 0.90) {
-		// 3. Asphalt road body (thick pavement extending downwards)
-		col = asphalt_color.rgb;
-		
-		// Render yellow dash lines down the middle of the road
-		if (pixelated_y > 0.45 && pixelated_y < 0.55) {
-			float period = dash_length + dash_gap;
-			float dash_x = mod(px, period);
-			if (dash_x < dash_length) {
-				col = stripe_color.rgb;
-			}
-		}
-		
-		// Add pixelated asphalt texture noise
-		float noise = fract(sin(dot(floor(world_pos / pixel_size), vec2(12.9898, 78.233))) * 43758.5453);
-		if (noise < 0.07) {
-			col -= vec3(0.04);
-		} else if (noise > 0.93) {
-			col += vec3(0.03);
-		}
-	} else {
-		// 4. Bottom shadow/dirt transition
-		col = shadow_color.rgb;
+	// Calculate cell center in world coordinates
+	vec2 cell_center = (v_coords + v.xy) / cell_scale;
+	
+	// Estimate top of the road Y at this pixel
+	float road_top_y = world_pos.y - UV.y * line_width;
+	
+	// Vertical distance of cell center from the road top
+	float cell_top_dist = cell_center.y - road_top_y;
+	
+	// Decide if this cell belongs to the grass (first row of cells)
+	float grass_limit = 35.0 + (cell_hash - 0.5) * 15.0;
+	
+	if (cell_top_dist > grass_limit) {
+		discard; // Cut the bottom of the line to follow the cells
+	}
+	
+	// Draw grass color
+	vec3 col = grass_color.rgb;
+	
+	// Add depth shading
+	float depth_factor = clamp(UV.y, 0.0, 1.0);
+	col = mix(col, grass_shadow_color.rgb, depth_factor * 0.35);
+	
+	// Draw cell borders
+	float border_mask = step(border_width, dist_to_border);
+	if (border_mask < 0.5) {
+		col = border_color.rgb;
 	}
 	
 	COLOR = vec4(col, 1.0);

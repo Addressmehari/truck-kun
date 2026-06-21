@@ -95,6 +95,23 @@ extends StaticBody2D
 		else:
 			regenerate_runtime_chunks()
 
+@export_group("Road Visual Settings")
+@export var road_color := Color(0, 0.9, 0.46, 1):
+	set(val):
+		road_color = val
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
+@export var road_thickness := 8.0:
+	set(val):
+		road_thickness = val
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
 # Seed offsets for waves
 var seed_offset_1 := 0.0
 var seed_offset_2 := 0.0
@@ -106,12 +123,9 @@ var active_chunks := {}
 const TUNNEL_MIN_SPACING := 6000.0
 
 var ground_material: ShaderMaterial = null
-var road_material: ShaderMaterial = null
 
 # Captured styles for runtime chunk styling
 var template_fill_color := Color(0.12, 0.12, 0.14, 1)
-var template_line_width := 32.0
-var template_line_color := Color(0, 0.9, 0.46, 1)
 
 # Fetch children nodes dynamically in editor (setters can run before _ready)
 func _get_collision_polygon() -> CollisionPolygon2D:
@@ -134,10 +148,6 @@ func capture_templates() -> void:
 	var fill = _get_road_fill()
 	if fill:
 		template_fill_color = fill.color
-	var line = _get_line_2d()
-	if line:
-		template_line_width = line.width
-		template_line_color = line.default_color
 
 func get_ground_vertex_colors(surface_size: int, fill_color: Color, line_color: Color) -> PackedColorArray:
 	var colors = PackedColorArray()
@@ -160,16 +170,6 @@ func get_ground_material(fill_col: Color, line_col: Color) -> ShaderMaterial:
 		ground_material.set_shader_parameter("fill_color", fill_col)
 		ground_material.set_shader_parameter("line_color", line_col)
 	return ground_material
-
-func get_road_material(line_col: Color) -> ShaderMaterial:
-	if not road_material:
-		road_material = ShaderMaterial.new()
-		var shader_res = load("res://road/road_surface.gdshader")
-		if shader_res:
-			road_material.shader = shader_res
-	if road_material:
-		road_material.set_shader_parameter("grass_color", line_col)
-	return road_material
 
 func _ready() -> void:
 	update_seed_offsets()
@@ -323,13 +323,13 @@ func generate_road() -> void:
 		
 	# Apply to visual ground fill
 	fill.polygon = polygon_points
-	fill.vertex_colors = get_ground_vertex_colors(surface_points.size(), fill.color, line.default_color)
-	fill.material = get_ground_material(fill.color, line.default_color)
+	fill.vertex_colors = get_ground_vertex_colors(surface_points.size(), fill.color, road_color)
+	fill.material = get_ground_material(fill.color, road_color)
 		
 	# Apply to visual surface line
 	line.points = surface_points
-	line.width = 32.0
-	line.material = get_road_material(line.default_color)
+	line.width = road_thickness
+	line.default_color = road_color
 	
 	# Apply to second visual surface line
 	var line2 = get_node_or_null("Line2D2")
@@ -345,9 +345,8 @@ func generate_road() -> void:
 				line2.owner = get_tree().edited_scene_root
 		if line2:
 			line2.points = surface_points_2
-			line2.width = line.width
-			line2.default_color = line.default_color
-			line2.material = get_road_material(line.default_color)
+			line2.width = road_thickness
+			line2.default_color = road_color
 	
 	# Create or update GrassDecorator in editor
 	var grass = get_node_or_null("GrassDecorator")
@@ -361,7 +360,7 @@ func generate_road() -> void:
 				grass.owner = get_tree().edited_scene_root
 	if grass:
 		grass.points = surface_points
-		grass.color = line.default_color
+		grass.color = road_color
 		grass.road_seed = road_seed
 		grass.chunk_index = 9999
 		grass.road = self
@@ -384,7 +383,7 @@ func generate_road() -> void:
 					grass2.owner = get_tree().edited_scene_root
 		if grass2:
 			grass2.points = surface_points_2
-			grass2.color = line.default_color
+			grass2.color = road_color
 			grass2.road_seed = road_seed + 1
 			grass2.chunk_index = 9999
 			grass2.road = self
@@ -481,16 +480,15 @@ func create_chunk(i: int) -> void:
 	var fill = Polygon2D.new()
 	fill.polygon = polygon_points
 	fill.color = template_fill_color
-	fill.vertex_colors = get_ground_vertex_colors(surface_points.size(), template_fill_color, template_line_color)
-	fill.material = get_ground_material(template_fill_color, template_line_color)
+	fill.vertex_colors = get_ground_vertex_colors(surface_points.size(), template_fill_color, road_color)
+	fill.material = get_ground_material(template_fill_color, road_color)
 	add_child(fill)
 	
 	# Create Line2D
 	var line = Line2D.new()
 	line.points = surface_points
-	line.width = max(32.0, template_line_width)
-	line.default_color = template_line_color
-	line.material = get_road_material(template_line_color)
+	line.width = road_thickness
+	line.default_color = road_color
 	add_child(line)
 	
 	# Create second Line2D
@@ -498,9 +496,8 @@ func create_chunk(i: int) -> void:
 	if enable_second_road:
 		line2 = Line2D.new()
 		line2.points = surface_points_2
-		line2.width = max(32.0, template_line_width)
-		line2.default_color = template_line_color
-		line2.material = get_road_material(template_line_color)
+		line2.width = road_thickness
+		line2.default_color = road_color
 		add_child(line2)
 	
 	# Create GrassDecorator
@@ -510,7 +507,7 @@ func create_chunk(i: int) -> void:
 	if grass_script:
 		grass = grass_script.new()
 		grass.points = surface_points
-		grass.color = template_line_color
+		grass.color = road_color
 		grass.road_seed = road_seed
 		grass.chunk_index = i
 		grass.chunk_width = chunk_width
@@ -523,7 +520,7 @@ func create_chunk(i: int) -> void:
 		if enable_second_road:
 			grass2 = grass_script.new()
 			grass2.points = surface_points_2
-			grass2.color = template_line_color
+			grass2.color = road_color
 			grass2.road_seed = road_seed + 1
 			grass2.chunk_index = i
 			grass2.chunk_width = chunk_width

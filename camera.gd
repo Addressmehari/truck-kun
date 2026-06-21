@@ -6,6 +6,7 @@ var target: Node2D
 @export var default_zoom := Vector2(1.8, 1.8)
 @export var zoomed_zoom := Vector2(2.6, 2.6)
 @export var tunnel_zoom := Vector2(3.2, 3.2) # Zoomed in closer for the tunnel
+@export var vertical_offset := -50.0 # Vertical offset from target (negative moves camera up)
 
 var inside_tunnel := false
 
@@ -19,8 +20,9 @@ func _ready():
 
 func _physics_process(delta):
 	if is_instance_valid(target):
-		# Interpolate position smoothly to center the truck in the camera view
-		global_position = global_position.lerp(target.global_position, 10.0 * delta)
+		# Interpolate position smoothly to center the truck in the camera view with the vertical offset
+		var target_pos = target.global_position + Vector2(0, vertical_offset)
+		global_position = global_position.lerp(target_pos, 10.0 * delta)
 		
 		# Smoothly interpolate zoom based on tunnel state or truck zoom request
 		var target_zoom = default_zoom
@@ -32,4 +34,3 @@ func _physics_process(delta):
 				target_zoom = zoomed_zoom
 			
 		zoom = zoom.lerp(target_zoom, 5.0 * delta)
-
