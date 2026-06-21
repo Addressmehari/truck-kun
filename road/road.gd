@@ -106,10 +106,11 @@ var active_chunks := {}
 const TUNNEL_MIN_SPACING := 6000.0
 
 var ground_material: ShaderMaterial = null
+var road_material: ShaderMaterial = null
 
 # Captured styles for runtime chunk styling
 var template_fill_color := Color(0.12, 0.12, 0.14, 1)
-var template_line_width := 8.0
+var template_line_width := 32.0
 var template_line_color := Color(0, 0.9, 0.46, 1)
 
 # Fetch children nodes dynamically in editor (setters can run before _ready)
@@ -159,6 +160,16 @@ func get_ground_material(fill_col: Color, line_col: Color) -> ShaderMaterial:
 		ground_material.set_shader_parameter("fill_color", fill_col)
 		ground_material.set_shader_parameter("line_color", line_col)
 	return ground_material
+
+func get_road_material(line_col: Color) -> ShaderMaterial:
+	if not road_material:
+		road_material = ShaderMaterial.new()
+		var shader_res = load("res://road/road_surface.gdshader")
+		if shader_res:
+			road_material.shader = shader_res
+	if road_material:
+		road_material.set_shader_parameter("grass_color", line_col)
+	return road_material
 
 func _ready() -> void:
 	update_seed_offsets()
@@ -317,6 +328,8 @@ func generate_road() -> void:
 		
 	# Apply to visual surface line
 	line.points = surface_points
+	line.width = 32.0
+	line.material = get_road_material(line.default_color)
 	
 	# Apply to second visual surface line
 	var line2 = get_node_or_null("Line2D2")
@@ -334,6 +347,7 @@ func generate_road() -> void:
 			line2.points = surface_points_2
 			line2.width = line.width
 			line2.default_color = line.default_color
+			line2.material = get_road_material(line.default_color)
 	
 	# Create or update GrassDecorator in editor
 	var grass = get_node_or_null("GrassDecorator")
@@ -474,8 +488,9 @@ func create_chunk(i: int) -> void:
 	# Create Line2D
 	var line = Line2D.new()
 	line.points = surface_points
-	line.width = template_line_width
+	line.width = max(32.0, template_line_width)
 	line.default_color = template_line_color
+	line.material = get_road_material(template_line_color)
 	add_child(line)
 	
 	# Create second Line2D
@@ -483,8 +498,9 @@ func create_chunk(i: int) -> void:
 	if enable_second_road:
 		line2 = Line2D.new()
 		line2.points = surface_points_2
-		line2.width = template_line_width
+		line2.width = max(32.0, template_line_width)
 		line2.default_color = template_line_color
+		line2.material = get_road_material(template_line_color)
 		add_child(line2)
 	
 	# Create GrassDecorator
