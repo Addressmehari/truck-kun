@@ -9,6 +9,14 @@ class ForegroundNode extends Node2D:
 		if parent_decorator:
 			parent_decorator._draw_foreground(self)
 
+# Inner class helper for background drawing (renders behind the road)
+class BackgroundNode extends Node2D:
+	var parent_decorator: Node2D
+	
+	func _draw() -> void:
+		if parent_decorator:
+			parent_decorator._draw_background(self)
+
 # The surface points of this chunk
 var points := PackedVector2Array() :
 	set(val):
@@ -63,6 +71,7 @@ var wind_amplitude := 6.0
 
 # Foreground overlay node instance
 var foreground: ForegroundNode = null
+var background: BackgroundNode = null
 
 # Cached grass blades, flowers, and sprites data to avoid allocations in draw loop
 var blades := []
@@ -79,7 +88,13 @@ func _ready() -> void:
 	# Enable processing only at runtime for dynamic wind sway animation
 	set_process(not Engine.is_editor_hint())
 	
-	# Create foreground overlay node
+	# Create background overlay node (drawn behind the road)
+	background = BackgroundNode.new()
+	background.parent_decorator = self
+	background.z_index = -1 # Behind the road (default 0)
+	add_child(background)
+	
+	# Create foreground overlay node (drawn in front of the truck)
 	foreground = ForegroundNode.new()
 	foreground.parent_decorator = self
 	foreground.z_index = 5 # Higher than truck (default 0)
@@ -113,6 +128,8 @@ func redraw_all() -> void:
 	queue_redraw()
 	if is_instance_valid(foreground):
 		foreground.queue_redraw()
+	if is_instance_valid(background):
+		background.queue_redraw()
 
 # Checks if a given absolute X coordinate is inside a tunnel
 func _is_in_tunnel(x: float) -> bool:
@@ -222,7 +239,7 @@ func rebuild_grass() -> void:
 				var next_angle = (next_pt2 - next_pt1).angle() if i < points.size() - 2 else segment_dir.angle()
 				
 				var curvature = max(abs(segment_dir.angle() - prev_angle), abs(next_angle - segment_dir.angle()))
-				var is_straight = curvature < 0.03
+				var is_straight = curvature < 0.01
 				
 				var dist = rng.randf_range(0.0, min_space) # Randomize start phase per chunk segment
 				while dist < segment_length:
@@ -239,8 +256,69 @@ func rebuild_grass() -> void:
 					var y_off = layer.y_offset + rng.randf_range(-layer.y_jitter, layer.y_jitter)
 					
 					# Spawn decisions based on categorized frames:
-					# 1. Bushes: Frame 5, 6 (only on surface layer, requires flat/straight road section, no sway)
-					if layer_idx == 0 and is_straight and roll < 0.10 and has_bushes:
+					# A. Fences: Frame 8 (only on surface layer, strictly not on curves, is_foreground = true, single spawn)
+					if layer_idx == 0 and is_straight and size > 8 and roll < 0.03:
+						var scale_val = 0.75 # 3x larger than previous 0.25
+						var texture = active_textures[8]
+						sprites.append({
+							"pos": pos,
+							"texture": texture,
+							"sway_phase": 0.0,
+							"scale": Vector2(scale_val, scale_val),
+							"slope_angle": segment_dir.angle(),
+							"can_sway": false,
+							"category": "fence",
+							"layer_idx": layer_idx,
+							"y_offset": 8.0, # sit 10px lower
+							"parallax": 0.0,
+							"scale_mult": layer.scale_mult,
+							"is_foreground": true # RENDER IN FOREGROUND (top layer of truck)
+						})
+						dist += rng.randf_range(min_space * 1.5, max_space * 1.5)
+						continue
+							
+					# B. Scarecrow: Frame 9 (extremely rare, very back layer, no parallax, 1.4x of 3x size)
+					elif size > 9 and roll < 0.002:
+						var texture = active_textures[9]
+						var scale_val = 0.92 * rng.randf_range(0.95, 1.05) # 1.4x of 3x size
+						sprites.append({
+							"pos": pos,
+							"texture": texture,
+							"sway_phase": 0.0,
+							"scale": Vector2(scale_val, scale_val),
+							"slope_angle": segment_dir.angle(),
+							"can_sway": false,
+							"category": "scarecrow",
+							"layer_idx": layer_idx,
+							"y_offset": y_off - 5.0, # moved slightly up (relative to road surface)
+							"parallax": 0.0, # no parallax
+							"scale_mult": layer.scale_mult,
+							"is_foreground": false
+						})
+						dist += rng.randf_range(min_space * 3.0, max_space * 3.0)
+						
+					# C. Wooden Arrow Board: Frame 7 (appears randomly, very rare, 3x size)
+					elif size > 7 and roll < 0.007: # range of 0.005 (0.5% chance)
+						var texture = active_textures[7]
+						var scale_val = 0.75 * rng.randf_range(0.9, 1.1) # 3x larger than 0.25
+						sprites.append({
+							"pos": pos,
+							"texture": texture,
+							"sway_phase": 0.0,
+							"scale": Vector2(scale_val, scale_val),
+							"slope_angle": segment_dir.angle(),
+							"can_sway": false,
+							"category": "board",
+							"layer_idx": layer_idx,
+							"y_offset": y_off + 8.0, # sit lower to ground
+							"parallax": 0.0,
+							"scale_mult": layer.scale_mult,
+							"is_foreground": false
+						})
+						dist += rng.randf_range(min_space * 2.0, max_space * 2.0)
+						
+					# D. Bushes: Frame 5, 6 (only on straight sections, flat road, no sway)
+					elif layer_idx == 0 and is_straight and roll < 0.12 and has_bushes:
 						var frame_idx = rng.randi_range(5, min(6, size - 1))
 						var texture = active_textures[frame_idx]
 						var scale_val = 0.25 * rng.randf_range(0.9, 1.1)
@@ -261,8 +339,8 @@ func rebuild_grass() -> void:
 						})
 						dist += rng.randf_range(min_space * 1.5, max_space * 1.5)
 						
-					# 2. Flowers: Frame 2, 3, 4 (can sway, size varies a little)
-					elif roll < 0.30 and has_flowers:
+					# E. Flowers: Frame 2, 3, 4 (can sway)
+					elif roll < 0.40 and has_flowers:
 						var frame_idx = rng.randi_range(2, min(4, size - 1))
 						var texture = active_textures[frame_idx]
 						var scale_val = 0.25 * rng.randf_range(0.7, 1.3)
@@ -283,7 +361,7 @@ func rebuild_grass() -> void:
 						})
 						dist += rng.randf_range(min_space, max_space)
 						
-					# 3. Grass: Frame 0, 1 (can sway, small and frequent)
+					# F. Grass: Frame 0, 1 (can sway, small and frequent)
 					else:
 						var frame_idx = rng.randi_range(0, min(1, size - 1)) if has_grass else 0
 						var texture = active_textures[frame_idx]
@@ -378,79 +456,41 @@ func rebuild_grass() -> void:
 
 	redraw_all()
 
-# Draws background elements
+# Draws background elements (behind road)
+func _draw_background(canvas: Node2D) -> void:
+	_draw_layer(canvas, 0)
+
+# Draws surface elements (on top of road)
 func _draw() -> void:
-	_draw_elements(self, false)
+	_draw_layer(self, 1)
 
-# Draws foreground elements (called from child ForegroundNode)
+# Draws foreground elements (on top of truck)
 func _draw_foreground(canvas: Node2D) -> void:
-	_draw_elements(canvas, true)
+	_draw_layer(canvas, 2)
 
-# Unified drawing logic for both layers
-func _draw_elements(canvas: Node2D, render_foreground: bool) -> void:
+# Unified drawing logic for specific layer types: 0 = Background, 1 = Surface, 2 = Foreground
+func _draw_layer(canvas: Node2D, layer_type: int) -> void:
+	var render_foreground = (layer_type == 2)
 	# 1. Texture-based sprite rendering
 	if not sprites.is_empty():
 		for sprite in sprites:
-			# Filter by drawing layer
-			if sprite.is_foreground != render_foreground:
+			# Determine which layer this sprite belongs to:
+			var sprite_layer = 1 # default surface
+			if sprite.is_foreground:
+				sprite_layer = 2 # foreground
+			elif sprite.category == "scarecrow":
+				sprite_layer = 0 # background
+				
+			if sprite_layer != layer_type:
 				continue
 				
-			# Calculate parallax horizontal shift (using cached camera)
-			var offset_x = (sprite.pos.x - cached_cam_x) * sprite.parallax
-				
-			# Recalculate Y position locally via cached chunk points (Extreme Performance Optimization)
-			var actual_x = sprite.pos.x + offset_x
-			var actual_y = sprite.pos.y
-			if offset_x != 0.0:
-				actual_y = get_local_road_height(actual_x)
-				
-			# Position offset vertically down into the dirt layer
-			var draw_pos = Vector2(actual_x, actual_y + sprite.y_offset)
+			_draw_single_sprite(canvas, sprite)
 			
-			# Calculate wind sway
-			var sway = 0.0
-			if sprite.can_sway:
-				sway = sin(time * wind_speed + draw_pos.x * 0.03 + sprite.sway_phase) * (wind_amplitude * 0.015)
-				
-			# Calculate truck draft effect (only affects grass category!)
-			var draft_rotation := 0.0
-			var scale_multiplier := Vector2(sprite.scale_mult, sprite.scale_mult)
-			
-			if cached_has_chassis and sprite.category == "grass":
-				var dx = draw_pos.x - cached_chassis_pos_x
-				var dist_x = abs(dx)
-				var radius = 250.0
-				if dist_x < radius:
-					var factor = (radius - dist_x) / radius
-					var smooth_factor = factor * factor
-					
-					var target_draft = clamp(cached_chassis_vel_x * 0.0012 * smooth_factor, -1.1, 1.1)
-					draft_rotation = target_draft
-					
-					scale_multiplier.y *= 1.0 - abs(target_draft) * 0.45
-					scale_multiplier.x *= 1.0 + abs(target_draft) * 0.15
-					
-			var angle = sprite.slope_angle + sway + draft_rotation
-			var final_scale = sprite.scale * scale_multiplier
-			
-			if sprite.texture:
-				var tex: Texture2D = sprite.texture
-				var size = tex.get_size()
-				canvas.draw_set_transform(draw_pos, angle, final_scale)
-				canvas.draw_texture_rect(tex, Rect2(-size * Vector2(0.5, 1.0), size), false)
-			else:
-				canvas.draw_set_transform(draw_pos, angle, final_scale)
-				var ph_rect = Rect2(-10, -24, 20, 24)
-				canvas.draw_rect(ph_rect, Color(0.0, 0.4, 0.2, 0.6))
-				canvas.draw_rect(ph_rect, Color(0.0, 0.9, 0.46, 1.0), false, 1.5)
-				canvas.draw_line(Vector2(-5, -17), Vector2(5, -7), Color(0.0, 0.9, 0.46, 1.0), 1.0)
-				canvas.draw_line(Vector2(5, -17), Vector2(-5, -7), Color(0.0, 0.9, 0.46, 1.0), 1.0)
-				
 		canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		return
 
-	# 2. Vector line-based fallback rendering
-	if blades.is_empty():
+	# Only draw line-based fallback on the surface layer (layer 1)
+	if layer_type != 1 or blades.is_empty():
 		return
 
 	var main_color := color
@@ -532,3 +572,55 @@ func _draw_elements(canvas: Node2D, render_foreground: bool) -> void:
 				canvas.draw_circle(flower_pos, 1.8, flower_color)
 				if flower.color_idx != 0:
 					canvas.draw_circle(flower_pos, 0.7, flower_colors[0])
+
+func _draw_single_sprite(canvas: Node2D, sprite: Dictionary) -> void:
+	# Calculate parallax horizontal shift (using cached camera)
+	var offset_x = (sprite.pos.x - cached_cam_x) * sprite.parallax
+		
+	# Recalculate Y position locally via cached chunk points (Extreme Performance Optimization)
+	var actual_x = sprite.pos.x + offset_x
+	var actual_y = sprite.pos.y
+	if offset_x != 0.0:
+		actual_y = get_local_road_height(actual_x)
+		
+	# Position offset vertically down into the dirt layer
+	var draw_pos = Vector2(actual_x, actual_y + sprite.y_offset)
+	
+	# Calculate wind sway
+	var sway = 0.0
+	if sprite.can_sway:
+		sway = sin(time * wind_speed + draw_pos.x * 0.03 + sprite.sway_phase) * (wind_amplitude * 0.015)
+		
+	# Calculate truck draft effect (only affects grass category!)
+	var draft_rotation := 0.0
+	var scale_multiplier := Vector2(sprite.scale_mult, sprite.scale_mult)
+	
+	if cached_has_chassis and sprite.category == "grass":
+		var dx = draw_pos.x - cached_chassis_pos_x
+		var dist_x = abs(dx)
+		var radius = 250.0
+		if dist_x < radius:
+			var factor = (radius - dist_x) / radius
+			var smooth_factor = factor * factor
+			
+			var target_draft = clamp(cached_chassis_vel_x * 0.0012 * smooth_factor, -1.1, 1.1)
+			draft_rotation = target_draft
+			
+			scale_multiplier.y *= 1.0 - abs(target_draft) * 0.45
+			scale_multiplier.x *= 1.0 + abs(target_draft) * 0.15
+			
+	var angle = sprite.slope_angle + sway + draft_rotation
+	var final_scale = sprite.scale * scale_multiplier
+	
+	if sprite.texture:
+		var tex: Texture2D = sprite.texture
+		var size = tex.get_size()
+		canvas.draw_set_transform(draw_pos, angle, final_scale)
+		canvas.draw_texture_rect(tex, Rect2(-size * Vector2(0.5, 1.0), size), false)
+	else:
+		canvas.draw_set_transform(draw_pos, angle, final_scale)
+		var ph_rect = Rect2(-10, -24, 20, 24)
+		canvas.draw_rect(ph_rect, Color(0.0, 0.4, 0.2, 0.6))
+		canvas.draw_rect(ph_rect, Color(0.0, 0.9, 0.46, 1.0), false, 1.5)
+		canvas.draw_line(Vector2(-5, -17), Vector2(5, -7), Color(0.0, 0.9, 0.46, 1.0), 1.0)
+		canvas.draw_line(Vector2(5, -17), Vector2(-5, -7), Color(0.0, 0.9, 0.46, 1.0), 1.0)

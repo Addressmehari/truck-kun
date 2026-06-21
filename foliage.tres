@@ -1,6 +1,7 @@
-[gd_resource type="SpriteFrames" load_steps=9 format=3 uid="uid://4iscbomi02xo"]
+[gd_resource type="SpriteFrames" load_steps=13 format=3 uid="uid://4iscbomi02xo"]
 
 [ext_resource type="Texture2D" uid="uid://dtnvrq7dpq7f6" path="res://grasss.png" id="1_ouf4f"]
+[ext_resource type="Texture2D" uid="uid://c7vj0tru076g2" path="res://scarecrows.png" id="2_2y3de"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_lquwl"]
 atlas = ExtResource("1_ouf4f")
@@ -30,6 +31,18 @@ region = Rect2(888, 220, 406, 220)
 atlas = ExtResource("1_ouf4f")
 region = Rect2(1294, 220, 406, 220)
 
+[sub_resource type="AtlasTexture" id="AtlasTexture_5ppbg"]
+atlas = ExtResource("2_2y3de")
+region = Rect2(192, 116, 96, 116)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_jd6n8"]
+atlas = ExtResource("2_2y3de")
+region = Rect2(235, 0, 139, 99)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_2y3de"]
+atlas = ExtResource("2_2y3de")
+region = Rect2(103, 0, 114, 139)
+
 [resource]
 animations = [{
 "frames": [{
@@ -53,6 +66,15 @@ animations = [{
 }, {
 "duration": 1.0,
 "texture": SubResource("AtlasTexture_5vw27")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_5ppbg")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_jd6n8")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_2y3de")
 }],
 "loop": true,
 "name": &"default",
