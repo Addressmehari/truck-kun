@@ -572,7 +572,7 @@ func _unload_slot(slot_index: int) -> void:
 			inventory[idx] = null
 			
 	var is_glass = (item_data.get("type") == "glass")
-	var scene_path = "res://glass.tscn" if is_glass else "res://crate.tscn"
+	var scene_path = "res://obstacles/glass.tscn" if is_glass else "res://obstacles/crate.tscn"
 	var scene = load(scene_path)
 	if scene:
 		var new_crate = scene.instantiate()

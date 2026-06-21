@@ -33,7 +33,7 @@ func _ready() -> void:
 		shifter_panel.visible = false
 		
 	# Instantiate visual parking indicator
-	var indicator_script = load("res://parking_indicator.gd")
+	var indicator_script = load("res://truck/parking_indicator.gd")
 	if indicator_script:
 		var indicator = Node2D.new()
 		indicator.set_script(indicator_script)

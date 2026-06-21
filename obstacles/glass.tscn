@@ -1,6 +1,6 @@
 [gd_scene load_steps=4 format=3]
 
-[ext_resource type="Script" path="res://glass.gd" id="1_glass_gd"]
+[ext_resource type="Script" path="res://obstacles/glass.gd" id="1_glass_gd"]
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_glass"]
 friction = 0.4
