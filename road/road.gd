@@ -105,6 +105,7 @@ var active_chunks := {}
 
 const TUNNEL_MIN_SPACING := 6000.0
 
+var ground_material: ShaderMaterial = null
 
 # Captured styles for runtime chunk styling
 var template_fill_color := Color(0.12, 0.12, 0.14, 1)
@@ -147,6 +148,17 @@ func get_ground_vertex_colors(surface_size: int, fill_color: Color, line_color: 
 	colors[surface_size] = bottom_color
 	colors[surface_size + 1] = bottom_color
 	return colors
+
+func get_ground_material(fill_col: Color, line_col: Color) -> ShaderMaterial:
+	if not ground_material:
+		ground_material = ShaderMaterial.new()
+		var shader_res = load("res://road/ground_voronoi.gdshader")
+		if shader_res:
+			ground_material.shader = shader_res
+	if ground_material:
+		ground_material.set_shader_parameter("fill_color", fill_col)
+		ground_material.set_shader_parameter("line_color", line_col)
+	return ground_material
 
 func _ready() -> void:
 	update_seed_offsets()
@@ -301,6 +313,7 @@ func generate_road() -> void:
 	# Apply to visual ground fill
 	fill.polygon = polygon_points
 	fill.vertex_colors = get_ground_vertex_colors(surface_points.size(), fill.color, line.default_color)
+	fill.material = get_ground_material(fill.color, line.default_color)
 		
 	# Apply to visual surface line
 	line.points = surface_points
@@ -455,6 +468,7 @@ func create_chunk(i: int) -> void:
 	fill.polygon = polygon_points
 	fill.color = template_fill_color
 	fill.vertex_colors = get_ground_vertex_colors(surface_points.size(), template_fill_color, template_line_color)
+	fill.material = get_ground_material(template_fill_color, template_line_color)
 	add_child(fill)
 	
 	# Create Line2D
