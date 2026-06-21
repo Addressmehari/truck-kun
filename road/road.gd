@@ -232,8 +232,8 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 	# Deterministic seed per chunk
 	rng.seed = hash(str(road_seed) + "_tunnel_" + str(chunk_index))
 	
-	# 40% chance to spawn a tunnel in this valid chunk
-	if rng.randf() < 0.4:
+	# Always spawn a tunnel in this valid chunk for guaranteed spawning
+	if true:
 		# Tunnel is centered in the middle of the chunk
 		var tunnel_x = (chunk_index + 0.5) * chunk_width
 		var base_y = get_base_road_height(tunnel_x)
