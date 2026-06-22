@@ -296,5 +296,11 @@ func set_silhouette_mode(enabled: bool, color: Color = Color.BLACK) -> void:
 	if is_instance_valid(tyre_3):
 		tyre_3.material = mat
 
+func set_headlight_enabled(enabled: bool) -> void:
+	if is_instance_valid(chassis):
+		var beam = chassis.get_node_or_null("HeadlightBeam")
+		if beam:
+			beam.set("enabled", enabled)
+
 
 

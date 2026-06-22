@@ -180,6 +180,7 @@ func initialize_default_biomes() -> void:
 	b2.foliage_density_multiplier = 0.0
 	b2.use_silhouette_truck = true
 	b2.truck_silhouette_color = Color.BLACK
+	b2.enable_headlight = true
 	biomes.append(b2)
 
 func apply_active_biome() -> void:
@@ -196,10 +197,13 @@ func apply_active_biome() -> void:
 	if sky and sky.has_method("apply_biome_settings"):
 		sky.call("apply_biome_settings", biome.sky_texture, biome.sky_modulate, biome.sky_shader, biome.sky_shader_params)
 		
-	# Update truck silhouette settings
+	# Update truck silhouette and headlight settings
 	var truck = get_node_or_null("../truck")
-	if truck and truck.has_method("set_silhouette_mode"):
-		truck.call("set_silhouette_mode", biome.use_silhouette_truck, biome.truck_silhouette_color)
+	if truck:
+		if truck.has_method("set_silhouette_mode"):
+			truck.call("set_silhouette_mode", biome.use_silhouette_truck, biome.truck_silhouette_color)
+		if truck.has_method("set_headlight_enabled"):
+			truck.call("set_headlight_enabled", biome.enable_headlight if "enable_headlight" in biome else false)
 		
 	# Regenerate visuals
 	if Engine.is_editor_hint():

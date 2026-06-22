@@ -24,3 +24,4 @@ class_name BiomeConfig
 @export_group("Truck Styling (Silhouette Filter)")
 @export var use_silhouette_truck: bool = false
 @export var truck_silhouette_color: Color = Color.BLACK
+@export var enable_headlight: bool = false

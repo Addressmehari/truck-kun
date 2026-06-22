@@ -66,6 +66,14 @@ func _ready() -> void:
 	dust_particles.local_coords = false
 	add_child(dust_particles)
 	
+	# Setup headlight beam child
+	var beam = Node2D.new()
+	beam.name = "HeadlightBeam"
+	beam.position = Vector2(54, -16)
+	beam.z_index = -1
+	beam.set_script(load("res://truck/headlight_beam.gd"))
+	add_child(beam)
+	
 	# Enable contact monitoring for tyre-1 to track road contact
 	if not Engine.is_editor_hint() and tyre_1:
 		tyre_1.contact_monitor = true
