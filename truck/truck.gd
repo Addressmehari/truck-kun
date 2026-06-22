@@ -272,4 +272,35 @@ func is_zoom_requested() -> bool:
 		return false
 	return (current_gear == Gear.PARK) or is_any_crate_dragged_near()
 
+func set_silhouette_mode(enabled: bool, color: Color = Color.BLACK) -> void:
+	var mat: ShaderMaterial = null
+	if enabled:
+		var shader = load("res://road/silhouette.gdshader")
+		if shader:
+			mat = ShaderMaterial.new()
+			mat.shader = shader
+			mat.set_shader_parameter("active", true)
+			mat.set_shader_parameter("silhouette_color", color)
+			
+	if is_instance_valid(chassis):
+		chassis.material = mat
+	if is_instance_valid(container_body):
+		container_body.material = mat
+		var backdoor_rect = container_body.get_node_or_null("backdoor")
+		if backdoor_rect:
+			backdoor_rect.material = mat
+	if is_instance_valid(tyre_1):
+		tyre_1.material = mat
+	if is_instance_valid(tyre_2):
+		tyre_2.material = mat
+	if is_instance_valid(tyre_3):
+		tyre_3.material = mat
+
+func set_headlight_enabled(enabled: bool) -> void:
+	if is_instance_valid(chassis):
+		var beam = chassis.get_node_or_null("HeadlightBeam")
+		if beam:
+			beam.set("enabled", enabled)
+
+
 

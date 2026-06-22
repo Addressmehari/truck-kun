@@ -20,8 +20,12 @@ func _ready():
 	get_viewport().size_changed.connect(_update_bg_layout)
 
 func _update_bg_layout():
-	if not is_instance_valid(sprite) or not sprite.texture:
+	if not is_instance_valid(sprite):
 		return
+		
+	# If texture is missing, load the default sky texture as a dimension fallback
+	if not sprite.texture:
+		sprite.texture = load("res://skyy.png")
 		
 	# Align top-left of sprite to (0,0) for simple canvas layout positioning
 	sprite.centered = false
@@ -39,6 +43,29 @@ func _update_bg_layout():
 		# Set mirroring to the scaled width so it repeats infinitely
 		var texture_width = tex_size.x * sprite.scale.x
 		motion_mirroring = Vector2(texture_width, 0)
+
+func apply_biome_settings(sky_tex: Texture2D, sky_modulate: Color, sky_shader: Shader, sky_shader_params: Dictionary) -> void:
+	if not is_inside_tree():
+		await ready
+		
+	if not is_instance_valid(sprite):
+		return
+		
+	# Set texture with fallback
+	sprite.texture = sky_tex if sky_tex else load("res://skyy.png")
+	sprite.modulate = sky_modulate
+	
+	# Apply shader if provided
+	if sky_shader:
+		var mat = ShaderMaterial.new()
+		mat.shader = sky_shader
+		for param in sky_shader_params:
+			mat.set_shader_parameter(param, sky_shader_params[param])
+		sprite.material = mat
+	else:
+		sprite.material = null
+		
+	_update_bg_layout()
 
 func _process(delta):
 	# Apply a continuous slow drift over time (wind effect)

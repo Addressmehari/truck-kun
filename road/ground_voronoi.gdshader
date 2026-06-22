@@ -25,6 +25,9 @@ uniform float shading_steps = 12.0;    // Number of steps in depth shading (0.0 
 uniform vec4 fill_color : source_color = vec4(0.12, 0.12, 0.14, 1.0);
 uniform vec4 line_color : source_color = vec4(0.0, 0.9, 0.46, 1.0);
 
+uniform bool is_silhouette = false;
+uniform vec4 silhouette_color : source_color = vec4(0.0, 0.0, 0.0, 1.0);
+
 // Hash function for cellular random centers
 vec2 hash2(vec2 p) {
 	p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
@@ -151,5 +154,9 @@ void fragment() {
 		final_color = mix(final_color, top_color.rgb, grass_blend * 0.4);
 	}
 	
-	COLOR = vec4(final_color, COLOR.a);
+	if (is_silhouette) {
+		COLOR = vec4(silhouette_color.rgb, COLOR.a * silhouette_color.a);
+	} else {
+		COLOR = vec4(final_color, COLOR.a);
+	}
 }
