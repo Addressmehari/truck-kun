@@ -165,10 +165,12 @@ func initialize_default_biomes() -> void:
 	b2.biome_name = "Sunset Silhouette"
 	b2.sky_shader = load("res://road/sky_gradient.gdshader")
 	b2.sky_shader_params = {
-		"top_color": Color(0.12, 0.05, 0.22, 1.0),
-		"bottom_color": Color(0.95, 0.25, 0.12, 1.0),
-		"gradient_offset": 0.1,
-		"gradient_power": 1.2
+		"top_color": Color(0.015, 0.01, 0.06, 1.0),
+		"bottom_color": Color(0.16, 0.06, 0.18, 1.0),
+		"gradient_offset": 0.15,
+		"gradient_power": 1.4,
+		"show_moon": true,
+		"show_stars": true
 	}
 	b2.road_color = Color.BLACK
 	b2.road_fill_color = Color.BLACK
