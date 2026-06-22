@@ -127,6 +127,151 @@ var ground_material: ShaderMaterial = null
 # Captured styles for runtime chunk styling
 var template_fill_color := Color(0.12, 0.12, 0.14, 1)
 
+@export_group("Biomes System")
+@export var biomes: Array[BiomeConfig] = []
+@export var active_biome_index := 0:
+	set(val):
+		active_biome_index = val
+		if Engine.is_editor_hint():
+			if is_inside_tree():
+				apply_active_biome()
+		else:
+			apply_active_biome()
+
+func get_current_biome() -> BiomeConfig:
+	if biomes.is_empty():
+		initialize_default_biomes()
+	var idx = clamp(active_biome_index, 0, biomes.size() - 1)
+	if idx < biomes.size():
+		return biomes[idx]
+	return null
+
+func initialize_default_biomes() -> void:
+	biomes.clear()
+	
+	# 1. Bright Hills
+	var b1 = BiomeConfig.new()
+	b1.biome_name = "Bright Hills"
+	b1.road_color = Color(0.196, 0.98, 0.34, 1)
+	b1.road_fill_color = Color(0.12, 0.12, 0.14, 1)
+	b1.spawn_foliage = true
+	b1.foliage_density_multiplier = 1.0
+	b1.foliage_color = Color(0, 0, 0, 0)
+	b1.use_silhouette_truck = false
+	biomes.append(b1)
+	
+	# 2. Sunset Silhouette
+	var b2 = BiomeConfig.new()
+	b2.biome_name = "Sunset Silhouette"
+	b2.sky_shader = load("res://road/sky_gradient.gdshader")
+	b2.sky_shader_params = {
+		"top_color": Color(0.12, 0.05, 0.22, 1.0),
+		"bottom_color": Color(0.95, 0.25, 0.12, 1.0),
+		"gradient_offset": 0.1,
+		"gradient_power": 1.2
+	}
+	b2.road_color = Color.BLACK
+	b2.road_fill_color = Color.BLACK
+	b2.use_silhouette_road = true
+	b2.road_silhouette_color = Color.BLACK
+	b2.spawn_foliage = false
+	b2.foliage_density_multiplier = 0.0
+	b2.use_silhouette_truck = true
+	b2.truck_silhouette_color = Color.BLACK
+	biomes.append(b2)
+
+func apply_active_biome() -> void:
+	var biome = get_current_biome()
+	if not biome:
+		return
+		
+	# Update road colors
+	road_color = biome.road_color
+	template_fill_color = biome.road_fill_color
+	
+	# Update sky background
+	var sky = get_node_or_null("../ParallaxBackground/ParallaxLayer")
+	if sky and sky.has_method("apply_biome_settings"):
+		sky.call("apply_biome_settings", biome.sky_texture, biome.sky_modulate, biome.sky_shader, biome.sky_shader_params)
+		
+	# Update truck silhouette settings
+	var truck = get_node_or_null("../truck")
+	if truck and truck.has_method("set_silhouette_mode"):
+		truck.call("set_silhouette_mode", biome.use_silhouette_truck, biome.truck_silhouette_color)
+		
+	# Regenerate visuals
+	if Engine.is_editor_hint():
+		generate_road()
+	else:
+		regenerate_runtime_chunks()
+
+func _input(event: InputEvent) -> void:
+	if Engine.is_editor_hint():
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_B:
+			cycle_biome()
+
+func cycle_biome() -> void:
+	if biomes.is_empty():
+		initialize_default_biomes()
+	var new_idx = (active_biome_index + 1) % biomes.size()
+	active_biome_index = new_idx
+	print("Switched to biome: ", biomes[active_biome_index].biome_name)
+	show_biome_banner(biomes[active_biome_index].biome_name)
+
+func show_biome_banner(biome_name: String) -> void:
+	var hud = get_node_or_null("../truck/HUD")
+	if not hud:
+		return
+		
+	var old_banner = hud.get_node_or_null("BiomeBanner")
+	if old_banner:
+		old_banner.queue_free()
+		
+	var label = Label.new()
+	label.name = "BiomeBanner"
+	label.text = "BIOME: " + biome_name.to_upper()
+	
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	label.anchors_preset = Control.PRESET_CENTER_TOP
+	label.anchor_left = 0.5
+	label.anchor_right = 0.5
+	label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	label.position = Vector2(-200, 40)
+	label.size = Vector2(400, 40)
+	
+	label.add_theme_font_size_override("font_size", 26)
+	label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	label.add_theme_constant_override("outline_size", 6)
+	
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.08, 0.1, 0.75)
+	style.border_color = Color(1, 1, 1, 0.15)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 3
+	style.corner_radius_top_left = 6
+	style.corner_radius_top_right = 6
+	style.corner_radius_bottom_left = 6
+	style.corner_radius_bottom_right = 6
+	style.expand_margin_left = 20
+	style.expand_margin_right = 20
+	style.expand_margin_top = 6
+	style.expand_margin_bottom = 6
+	label.add_theme_stylebox_override("normal", style)
+	
+	hud.add_child(label)
+	
+	var tween = label.create_tween()
+	tween.tween_interval(1.8)
+	tween.tween_property(label, "modulate:a", 0.0, 0.6)
+	tween.tween_callback(label.queue_free)
+
 # Fetch children nodes dynamically in editor (setters can run before _ready)
 func _get_collision_polygon() -> CollisionPolygon2D:
 	return get_node_or_null("CollisionPolygon2D")
@@ -169,12 +314,18 @@ func get_ground_material(fill_col: Color, line_col: Color) -> ShaderMaterial:
 	if ground_material:
 		ground_material.set_shader_parameter("fill_color", fill_col)
 		ground_material.set_shader_parameter("line_color", line_col)
+		
+		# Set silhouette road parameters from current biome
+		var biome = get_current_biome()
+		if biome:
+			ground_material.set_shader_parameter("is_silhouette", biome.use_silhouette_road)
+			ground_material.set_shader_parameter("silhouette_color", biome.road_silhouette_color)
 	return ground_material
 
 func _ready() -> void:
 	update_seed_offsets()
 	if Engine.is_editor_hint():
-		generate_road()
+		apply_active_biome()
 	else:
 		capture_templates()
 		
@@ -191,6 +342,9 @@ func _ready() -> void:
 		if line2: line2.queue_free()
 		if grass: grass.queue_free()
 		if grass2: grass2.queue_free()
+		
+		# Apply biome visuals before generating initial chunks
+		apply_active_biome()
 		
 		# Initial chunk generation
 		update_chunks(get_target_x())
@@ -349,27 +503,33 @@ func generate_road() -> void:
 			line2.default_color = road_color
 	
 	# Create or update GrassDecorator in editor
+	var current_biome = get_current_biome()
+	
 	var grass = get_node_or_null("GrassDecorator")
-	if not grass:
-		var grass_script = load("res://road/grass_decorator.gd")
-		if grass_script:
-			grass = grass_script.new()
-			grass.name = "GrassDecorator"
-			add_child(grass)
-			if Engine.is_editor_hint() and is_inside_tree():
-				grass.owner = get_tree().edited_scene_root
-	if grass:
-		grass.points = surface_points
-		grass.color = road_color
-		grass.road_seed = road_seed
-		grass.chunk_index = 9999
-		grass.road = self
-		grass.textures = grass_textures
-		grass.sprite_frames = grass_frames
-		
+	if not current_biome.spawn_foliage:
+		if grass: grass.queue_free()
+	else:
+		if not grass:
+			var grass_script = load("res://road/grass_decorator.gd")
+			if grass_script:
+				grass = grass_script.new()
+				grass.name = "GrassDecorator"
+				add_child(grass)
+				if Engine.is_editor_hint() and is_inside_tree():
+					grass.owner = get_tree().edited_scene_root
+		if grass:
+			grass.points = surface_points
+			grass.color = current_biome.foliage_color if current_biome.foliage_color != Color(0, 0, 0, 0) else road_color
+			grass.road_seed = road_seed
+			grass.chunk_index = 9999
+			grass.road = self
+			grass.textures = grass_textures
+			grass.sprite_frames = grass_frames
+			grass.density_multiplier = current_biome.foliage_density_multiplier
+			
 	# Create or update GrassDecorator2 in editor
 	var grass2 = get_node_or_null("GrassDecorator2")
-	if not enable_second_road:
+	if not enable_second_road or not current_biome.spawn_foliage:
 		if grass2:
 			grass2.queue_free()
 	else:
@@ -383,13 +543,13 @@ func generate_road() -> void:
 					grass2.owner = get_tree().edited_scene_root
 		if grass2:
 			grass2.points = surface_points_2
-			grass2.color = road_color
+			grass2.color = current_biome.foliage_color if current_biome.foliage_color != Color(0, 0, 0, 0) else road_color
 			grass2.road_seed = road_seed + 1
 			grass2.chunk_index = 9999
 			grass2.road = self
 			grass2.textures = grass_textures
 			grass2.sprite_frames = grass_frames
-			grass2.density_multiplier = 0.4
+			grass2.density_multiplier = 0.4 * current_biome.foliage_density_multiplier
 	
 	# If running in editor, notify dependent components like elevator systems to snap
 	if Engine.is_editor_hint():
@@ -501,33 +661,35 @@ func create_chunk(i: int) -> void:
 		add_child(line2)
 	
 	# Create GrassDecorator
+	var current_biome = get_current_biome()
 	var grass = null
 	var grass2 = null
 	var grass_script = load("res://road/grass_decorator.gd")
-	if grass_script:
+	if grass_script and current_biome.spawn_foliage:
 		grass = grass_script.new()
 		grass.points = surface_points
-		grass.color = road_color
+		grass.color = current_biome.foliage_color if current_biome.foliage_color != Color(0, 0, 0, 0) else road_color
 		grass.road_seed = road_seed
 		grass.chunk_index = i
 		grass.chunk_width = chunk_width
 		grass.road = self
 		grass.textures = grass_textures
 		grass.sprite_frames = grass_frames
+		grass.density_multiplier = current_biome.foliage_density_multiplier
 		add_child(grass)
 		
 		# Create GrassDecorator2 for below road
 		if enable_second_road:
 			grass2 = grass_script.new()
 			grass2.points = surface_points_2
-			grass2.color = road_color
+			grass2.color = current_biome.foliage_color if current_biome.foliage_color != Color(0, 0, 0, 0) else road_color
 			grass2.road_seed = road_seed + 1
 			grass2.chunk_index = i
 			grass2.chunk_width = chunk_width
 			grass2.road = self
 			grass2.textures = grass_textures
 			grass2.sprite_frames = grass_frames
-			grass2.density_multiplier = 0.4
+			grass2.density_multiplier = 0.4 * current_biome.foliage_density_multiplier
 			add_child(grass2)
 	
 	# Spawn tunnel if present
