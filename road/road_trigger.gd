@@ -91,126 +91,13 @@ func _on_event_selected(event_name: String) -> void:
 	queue_free()
 
 func trigger_convoy_event() -> void:
-	# Spawn a cluster of crates falling from sky ahead of truck
-	var crate_scene = load("res://obstacles/crate.tscn")
-	if not crate_scene:
-		return
-		
-	var truck = get_node_or_null("/root/main/truck")
-	var spawn_base_x = 2200.0
-	if truck:
-		var chassis = truck.get_node_or_null("chassis")
-		if chassis:
-			spawn_base_x = chassis.global_position.x + 450.0
-			
-	var road = get_node_or_null("/root/main/Road")
-	
-	# Spawn 3 crates with horizontal offsets and random heights
-	for i in range(3):
-		var x_offset = spawn_base_x + (i * 120.0)
-		var road_y = 0.0
-		if road and road.has_method("get_road_height"):
-			road_y = road.call("get_road_height", x_offset)
-			
-		var crate = crate_scene.instantiate()
-		crate.global_position = Vector2(x_offset, road_y - 300.0 - (i * 50.0))
-		
-		# Randomize size type to make it visually interesting
-		var types = ["1x1", "2x1", "1x2", "2x2"]
-		crate.size_type = types[randi() % types.size()]
-		
-		var main_node = get_node_or_null("/root/main")
-		if main_node:
-			main_node.add_child(crate)
-		else:
-			get_parent().add_child(crate)
+	print("Convoy event triggered (Action placeholder)")
 
 func trigger_storm_event() -> void:
-	# 1. Darken sky background
-	var sky = get_node_or_null("/root/main/ParallaxBackground/ParallaxLayer")
-	var original_modulate = Color.WHITE
-	var sprite = null
-	if sky:
-		sprite = sky.get_node_or_null("Sprite2D")
-		if sprite:
-			original_modulate = sprite.modulate
-			var tween = create_tween()
-			tween.tween_property(sprite, "modulate", Color(0.2, 0.15, 0.35), 1.5)
-			
-	# 2. Add rain particle effect attached to the camera or truck
-	var main_node = get_node_or_null("/root/main")
-	if not main_node:
-		main_node = get_parent()
-	var truck = get_node_or_null("/root/main/truck")
-	var parent_to_attach = main_node
-	if truck:
-		var chassis = truck.get_node_or_null("chassis")
-		if chassis:
-			parent_to_attach = chassis
-			
-	var rain = CPUParticles2D.new()
-	rain.name = "StormRainParticles"
-	rain.amount = 180
-	rain.lifetime = 1.5
-	rain.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	rain.emission_rect_extents = Vector2(800, 10)
-	rain.direction = Vector2(-0.8, 1.0) # Blown by wind leftwards
-	rain.spread = 5.0
-	rain.gravity = Vector2(0, 150)
-	rain.initial_velocity_min = 350.0
-	rain.initial_velocity_max = 550.0
-	rain.scale_amount_min = 2.0
-	rain.scale_amount_max = 4.0
-	rain.color = Color(0.65, 0.75, 0.9, 0.5)
-	
-	# Place high above
-	rain.position = Vector2(0, -400)
-	parent_to_attach.add_child(rain)
-	
-	# 3. Storm timer to clean up and restore sky
-	var timer = get_tree().create_timer(12.0)
-	await timer.timeout
-	
-	if is_instance_valid(sprite):
-		var tween = create_tween()
-		tween.tween_property(sprite, "modulate", original_modulate, 2.5)
-		
-	if is_instance_valid(rain):
-		# Fade out rain
-		var tween_rain = create_tween()
-		tween_rain.tween_property(rain, "modulate:a", 0.0, 2.0)
-		await tween_rain.finished
-		if is_instance_valid(rain):
-			rain.queue_free()
+	print("Storm event triggered (Action placeholder)")
 
 func trigger_mines_event() -> void:
-	# Spawn a land mine directly on the road surface ahead of the truck
-	var truck = get_node_or_null("/root/main/truck")
-	var spawn_x = 2200.0
-	if truck:
-		var chassis = truck.get_node_or_null("chassis")
-		if chassis:
-			spawn_x = chassis.global_position.x + 500.0
-			
-	var road = get_node_or_null("/root/main/Road")
-	var road_y = 0.0
-	if road and road.has_method("get_road_height"):
-		road_y = road.call("get_road_height", spawn_x)
-		
-	var mine_script = load("res://obstacles/land_mine.gd")
-	if not mine_script:
-		return
-		
-	var mine = Area2D.new()
-	mine.set_script(mine_script)
-	mine.name = "ActiveLandMine"
-	mine.global_position = Vector2(spawn_x, road_y)
-	
-	var main_node = get_node_or_null("/root/main")
-	if main_node:
-		main_node.add_child(mine)
-	else:
-		get_parent().add_child(mine)
+	print("Mines event triggered (Action placeholder)")
 
 func _process(delta: float) -> void:
 	if Engine.is_editor_hint():

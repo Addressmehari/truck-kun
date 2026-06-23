@@ -25,9 +25,9 @@ var result_label: Label
 
 # Event information
 var events = [
-	{"name": "Convoy", "icon": "🚚", "color": Color(0.15, 0.42, 0.85), "desc": "CONVOY ARRIVING"},
-	{"name": "Storm", "icon": "⛈️", "color": Color(0.1, 0.55, 0.5), "desc": "STORM BREWING"},
-	{"name": "Mines", "icon": "💣", "color": Color(0.85, 0.22, 0.18), "desc": "MINES DETECTED"}
+	{"name": "Convoy", "color": Color(0.15, 0.42, 0.85), "desc": "CONVOY ARRIVING"},
+	{"name": "Storm", "color": Color(0.1, 0.55, 0.5), "desc": "STORM BREWING"},
+	{"name": "Mines", "color": Color(0.85, 0.22, 0.18), "desc": "MINES DETECTED"}
 ]
 
 func _ready() -> void:
@@ -133,9 +133,9 @@ func _process(delta: float) -> void:
 			needle_tilt = 0.45 * speed_factor
 			last_sector_index = current_idx
 			
-		# Live update text/icon near the arrow during spin
+		# Live update text near the arrow during spin
 		var ev = events[current_idx]
-		result_label.text = ev["icon"] + " " + ev["desc"] + " " + ev["icon"]
+		result_label.text = ev["desc"]
 			
 	if is_highlighted:
 		flash_timer += delta * ui_speed_scale
@@ -150,7 +150,7 @@ func on_spin_completed() -> void:
 	
 	# Announce event near the arrow
 	var ev = events[selected_index]
-	result_label.text = ev["icon"] + " " + ev["desc"] + " " + ev["icon"]
+	result_label.text = ev["desc"]
 	result_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.1)) # Glowing gold
 	
 	# Pulsing label scale tween
@@ -238,7 +238,7 @@ func _draw() -> void:
 		var mid_angle = angle_from + (angle_to - angle_from) / 2.0
 		# Fade out text slightly if not active
 		var text_alpha = 1.0 if (i == active_idx) else 0.45
-		draw_sector_text(wheel_center, (inner_r + outer_r) / 2.0, mid_angle, events[i]["icon"], events[i]["name"], text_alpha)
+		draw_sector_text(wheel_center, (inner_r + outer_r) / 2.0, mid_angle, events[i]["name"], text_alpha)
 		
 	# Draw concentric HUD rings to enclose the wheel
 	draw_arc(wheel_center, inner_r, 0, 2.0 * PI, 64, Color(1, 1, 1, 0.15), 1.5)
@@ -300,21 +300,20 @@ func draw_ring_sector_borders(center: Vector2, inner_r: float, outer_r: float, a
 	draw_line(inner_pts[0], outer_pts[0], color, 1.5)
 	draw_line(inner_pts[steps], outer_pts[steps], color, 1.5)
 
-func draw_sector_text(center: Vector2, radius: float, mid_angle: float, icon: String, label: String, alpha: float) -> void:
+func draw_sector_text(center: Vector2, radius: float, mid_angle: float, label: String, alpha: float) -> void:
 	var label_pos = center + Vector2(cos(mid_angle), sin(mid_angle)) * radius
 	
-	# Align text angle radially outwards
-	var text_angle = mid_angle
-	# If text is on the left half, rotate by 180 degrees to keep it right-side-up
-	var normalized_angle = fposmod(mid_angle, 2.0 * PI)
+	# Rotate text to align tangentially (perpendicular to the radial spoke axis)
+	var text_angle = mid_angle + PI/2.0
+	var normalized_angle = fposmod(text_angle, 2.0 * PI)
 	if normalized_angle > PI / 2.0 and normalized_angle < 3.0 * PI / 2.0:
 		text_angle += PI
 		
 	draw_set_transform(label_pos, text_angle)
 	
 	var font = get_theme_default_font()
-	var full_text = icon + " " + label.to_upper()
-	var font_size = 24
+	var full_text = label.to_upper()
+	var font_size = 20
 	var text_size = font.get_string_size(full_text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
 	
 	# Draw shadow
@@ -323,26 +322,3 @@ func draw_sector_text(center: Vector2, radius: float, mid_angle: float, icon: St
 	draw_string(font, Vector2(-text_size.x / 2.0, text_size.y / 4.0), full_text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color(1, 1, 1, alpha))
 	
 	draw_set_transform(Vector2.ZERO, 0.0)
-
-func draw_panel_corners(rect: Rect2, color: Color) -> void:
-	var len := 25.0
-	var thick := 3.0
-	
-	# Top-Left Corner
-	draw_line(rect.position, rect.position + Vector2(len, 0), color, thick)
-	draw_line(rect.position, rect.position + Vector2(0, len), color, thick)
-	
-	# Top-Right Corner
-	var tr = rect.position + Vector2(rect.size.x, 0)
-	draw_line(tr, tr + Vector2(-len, 0), color, thick)
-	draw_line(tr, tr + Vector2(0, len), color, thick)
-	
-	# Bottom-Left Corner
-	var bl = rect.position + Vector2(0, rect.size.y)
-	draw_line(bl, bl + Vector2(len, 0), color, thick)
-	draw_line(bl, bl + Vector2(0, -len), color, thick)
-	
-	# Bottom-Right Corner
-	var br = rect.position + rect.size
-	draw_line(br, br + Vector2(-len, 0), color, thick)
-	draw_line(br, br + Vector2(0, -len), color, thick)
