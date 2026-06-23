@@ -96,7 +96,7 @@ extends StaticBody2D
 			regenerate_runtime_chunks()
 
 @export_group("Road Visual Settings")
-@export var road_color := Color(0, 0.9, 0.46, 1):
+@export var road_color := Color(0.40392, 0.56863, 0.26275, 1):
 	set(val):
 		road_color = val
 		if Engine.is_editor_hint():
@@ -152,7 +152,7 @@ func initialize_default_biomes() -> void:
 	# 1. Bright Hills
 	var b1 = BiomeConfig.new()
 	b1.biome_name = "Bright Hills"
-	b1.road_color = Color(0.196, 0.98, 0.34, 1)
+	b1.road_color = Color(0.40392, 0.56863, 0.26275, 1)
 	b1.road_fill_color = Color(0.12, 0.12, 0.14, 1)
 	b1.spawn_foliage = true
 	b1.foliage_density_multiplier = 1.0
@@ -176,8 +176,8 @@ func initialize_default_biomes() -> void:
 	b2.road_fill_color = Color.BLACK
 	b2.use_silhouette_road = true
 	b2.road_silhouette_color = Color.BLACK
-	b2.spawn_foliage = false
-	b2.foliage_density_multiplier = 0.0
+	b2.spawn_foliage = true
+	b2.foliage_density_multiplier = 0.8
 	b2.use_silhouette_truck = true
 	b2.truck_silhouette_color = Color.BLACK
 	b2.enable_headlight = true

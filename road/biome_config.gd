@@ -10,7 +10,7 @@ class_name BiomeConfig
 @export var sky_shader_params: Dictionary = {}
 
 @export_group("Road Colors")
-@export var road_color: Color = Color(0.196, 0.98, 0.34, 1)
+@export var road_color: Color = Color(0.40392, 0.56863, 0.26275, 1)
 @export var road_fill_color: Color = Color(0.12, 0.12, 0.14, 1)
 @export var use_silhouette_road: bool = false
 @export var road_silhouette_color: Color = Color.BLACK

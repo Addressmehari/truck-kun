@@ -184,6 +184,73 @@ func rebuild_grass() -> void:
 	if points.size() < 2 or not road:
 		return
 
+	# Check if silhouette mode is active in the current biome
+	var is_sil = false
+	var sil_tex = null
+	if road and road.has_method("get_current_biome"):
+		var cb = road.get_current_biome()
+		if cb and cb.use_silhouette_road:
+			is_sil = true
+			sil_tex = load("res://silhoutte_grass.png")
+			if not sil_tex:
+				print("[GrassDecorator] WARNING: Failed to load res://silhoutte_grass.png")
+			else:
+				print("[GrassDecorator] rebuild_grass in chunk ", chunk_index, ": silhouette mode active, texture loaded successfully")
+			
+	if is_sil and sil_tex:
+		# Only spawn the small silhouette grass
+		var LAYERS = [
+			{ "y_offset": 0.0, "y_jitter": 4.0, "parallax": 0.0, "scale_mult": 1.0, "is_fg": false }
+		]
+		for layer_idx in range(LAYERS.size()):
+			var layer = LAYERS[layer_idx]
+			var rng = RandomNumberGenerator.new()
+			rng.seed = hash(str(road_seed) + "_silhouette_grass_" + str(chunk_index) + "_lay_" + str(layer_idx))
+			
+			var min_space = 8.0 / density_multiplier
+			var max_space = 16.0 / density_multiplier
+			
+			for i in range(points.size() - 1):
+				var p1 = points[i]
+				var p2 = points[i + 1]
+				var segment_vector = p2 - p1
+				var segment_length = segment_vector.length()
+				if segment_length < 0.1:
+					continue
+				var segment_dir = segment_vector / segment_length
+				
+				var dist = rng.randf_range(0.0, min_space)
+				while dist < segment_length:
+					var t = dist / segment_length
+					var pos = p1.lerp(p2, t) + segment_dir * rng.randf_range(-6.0, 6.0)
+					
+					if _is_in_tunnel(pos.x):
+						dist += min_space
+						continue
+						
+					var y_off = layer.y_offset + rng.randf_range(-layer.y_jitter, layer.y_jitter)
+					var scale_val = 1.2 * rng.randf_range(0.8, 1.2) # scaled 2 times
+					
+					sprites.append({
+						"pos": pos,
+						"texture": sil_tex,
+						"sway_phase": rng.randf_range(0.0, PI * 2),
+						"scale": Vector2(scale_val, scale_val),
+						"slope_angle": segment_dir.angle() * 0.25,
+						"can_sway": true,
+						"category": "grass",
+						"layer_idx": layer_idx,
+						"y_offset": y_off,
+						"parallax": layer.parallax,
+						"scale_mult": layer.scale_mult,
+						"is_foreground": layer.is_fg,
+						"is_silhouette": true
+					})
+					dist += rng.randf_range(min_space * 0.7, max_space * 0.7)
+		print("[GrassDecorator] Spawned ", sprites.size(), " silhouette grass sprites in chunk ", chunk_index)
+		redraw_all()
+		return
+
 	# Extract textures from SpriteFrames if assigned
 	var active_textures := []
 	if sprite_frames and sprite_frames.has_animation("default"):
@@ -340,7 +407,7 @@ func rebuild_grass() -> void:
 						dist += rng.randf_range(min_space * 1.5, max_space * 1.5)
 						
 					# E. Flowers: Frame 2, 3, 4 (can sway)
-					elif roll < 0.40 and has_flowers:
+					elif roll < 0.10 and has_flowers:
 						var frame_idx = rng.randi_range(2, min(4, size - 1))
 						var texture = active_textures[frame_idx]
 						var scale_val = 0.25 * rng.randf_range(0.7, 1.3)
@@ -589,7 +656,10 @@ func _draw_single_sprite(canvas: Node2D, sprite: Dictionary) -> void:
 	# Calculate wind sway
 	var sway = 0.0
 	if sprite.can_sway:
-		sway = sin(time * wind_speed + draw_pos.x * 0.03 + sprite.sway_phase) * (wind_amplitude * 0.015)
+		if sprite.get("is_silhouette", false):
+			sway = sin(time * 3.5 + draw_pos.x * 0.05 + sprite.sway_phase) * 0.06
+		else:
+			sway = sin(time * wind_speed + draw_pos.x * 0.03 + sprite.sway_phase) * (wind_amplitude * 0.015)
 		
 	# Calculate truck draft effect (only affects grass category!)
 	var draft_rotation := 0.0
@@ -616,7 +686,15 @@ func _draw_single_sprite(canvas: Node2D, sprite: Dictionary) -> void:
 		var tex: Texture2D = sprite.texture
 		var size = tex.get_size()
 		canvas.draw_set_transform(draw_pos, angle, final_scale)
-		canvas.draw_texture_rect(tex, Rect2(-size * Vector2(0.5, 1.0), size), false)
+		var modulate_col = Color.WHITE
+		if sprite.get("is_silhouette", false):
+			if road and road.has_method("get_current_biome"):
+				var cb = road.get_current_biome()
+				if cb:
+					modulate_col = cb.road_silhouette_color
+			else:
+				modulate_col = Color.BLACK
+		canvas.draw_texture_rect(tex, Rect2(-size * Vector2(0.5, 1.0), size), false, modulate_col)
 	else:
 		canvas.draw_set_transform(draw_pos, angle, final_scale)
 		var ph_rect = Rect2(-10, -24, 20, 24)
