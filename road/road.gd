@@ -704,6 +704,24 @@ func create_chunk(i: int) -> void:
 	if not tunnel_data.is_empty():
 		tunnel_node = spawn_tunnel_node(i, tunnel_data)
 		
+	# 10% chance to spawn event trigger in this chunk
+	var trigger_node = null
+	# Don't spawn trigger at starting chunk i = 0 (around player spawn)
+	if abs(i) > 0:
+		var rng = RandomNumberGenerator.new()
+		# Deterministic seed per chunk based on i to keep seed replication consistent
+		rng.seed = hash(str(road_seed) + "_trigger_" + str(i))
+		if rng.randf() < 0.10: # 10% chance
+			var trigger_scene = load("res://road/wheel.tscn")
+			if trigger_scene:
+				trigger_node = trigger_scene.instantiate()
+				# Place it randomly in the middle part of the chunk (away from boundaries)
+				var tx = start_x + (end_x - start_x) * rng.randf_range(0.25, 0.75)
+				trigger_node.trigger_x = tx
+				trigger_node.position.x = tx
+				trigger_node.position.y = get_road_height(tx)
+				add_child(trigger_node)
+				
 	active_chunks[i] = {
 		"collision": col_poly,
 		"fill": fill,
@@ -711,7 +729,8 @@ func create_chunk(i: int) -> void:
 		"line2": line2,
 		"grass": grass,
 		"grass2": grass2,
-		"tunnel": tunnel_node
+		"tunnel": tunnel_node,
+		"trigger": trigger_node
 	}
 
 func destroy_chunk(i: int) -> void:
@@ -731,4 +750,6 @@ func destroy_chunk(i: int) -> void:
 			chunk.grass2.queue_free()
 		if "tunnel" in chunk and is_instance_valid(chunk.tunnel):
 			chunk.tunnel.queue_free()
+		if "trigger" in chunk and is_instance_valid(chunk.trigger):
+			chunk.trigger.queue_free()
 		active_chunks.erase(i)

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://cxdbw28jdw7"]
+
+[ext_resource type="Script" path="res://road/road_trigger.gd" id="1_road_trigger"]
+
+[node name="WheelTrigger" type="Area2D"]
+script = ExtResource("1_road_trigger")
