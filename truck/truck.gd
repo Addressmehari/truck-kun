@@ -311,6 +311,8 @@ func is_any_crate_dragged_near() -> bool:
 	return false
 
 func is_zoom_requested() -> bool:
+	if is_autopilot:
+		return false
 	if is_instance_valid(container_body) and container_body.get("backdoor_blocked"):
 		return false
 	return (current_gear == Gear.PARK) or is_any_crate_dragged_near()
@@ -350,6 +352,14 @@ func start_active_event(event_name: String) -> void:
 	if event_name == "Convoy":
 		is_autopilot = true
 		truck_health = truck_max_health
+		
+		# Force gear to DRIVE to close the backdoor and stop cargo dragging
+		set_gear(Gear.DRIVE)
+		
+		# Notify Road node
+		var road = get_node_or_null("/root/main/Road")
+		if road and road.has_method("start_active_event"):
+			road.call("start_active_event", "Convoy")
 		
 		# Move camera
 		var camera = get_node_or_null("/root/main/Camera2D")
@@ -393,7 +403,7 @@ func start_active_event(event_name: String) -> void:
 				enemy.set("target_distance", 480.0 + i * 70.0)
 				
 				var spawn_x = chassis.global_position.x - (480.0 + i * 70.0) - 200.0
-				var road = get_node_or_null("/root/main/Road")
+				road = get_node_or_null("/root/main/Road")
 				var spawn_y = 0.0
 				if road and road.has_method("get_road_height"):
 					spawn_y = road.call("get_road_height", spawn_x)
@@ -433,17 +443,15 @@ func end_active_event(event_name: String) -> void:
 func take_damage(amount: float) -> void:
 	if not is_autopilot:
 		return
-	truck_health = max(0.0, truck_health - amount)
+	# Scale down damage to 30% to make the event fun and surviveable
+	truck_health = max(0.0, truck_health - amount * 0.3)
 	if truck_health <= 0.0:
 		# Dramatic explosion shake
 		var dashboard = get_node_or_null("HUD/Dashboard")
 		if dashboard and "shake_intensity" in dashboard:
 			dashboard.shake_intensity = 35.0
 			
-		# Spill all cargo!
-		spill_all_cargo()
-		
-		# Force end the timer bar UI event early
+		# Force end the timer bar UI event early (failed, but no cargo spill)
 		var timer_bar = get_node_or_null("HUD/EventTimerBar")
 		if timer_bar and timer_bar.has_method("end_event"):
 			timer_bar.call("end_event")
@@ -486,6 +494,3 @@ func spill_all_cargo() -> void:
 				if new_crate is RigidBody2D:
 					new_crate.linear_velocity = container_body.linear_velocity + Vector2(randf_range(-150, 150), randf_range(-200, -50))
 					new_crate.angular_velocity = randf_range(-10, 10)
-
-
-

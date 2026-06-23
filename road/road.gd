@@ -127,6 +127,12 @@ var ground_material: ShaderMaterial = null
 # Captured styles for runtime chunk styling
 var template_fill_color := Color(0.12, 0.12, 0.14, 1)
 
+# Convoy event variables for smooth flat road transition
+var is_convoy_active := false
+var convoy_start_x := 0.0
+var convoy_end_x := 0.0
+var has_convoy_ended := false
+
 @export_group("Biomes System")
 @export var biomes: Array[BiomeConfig] = []
 @export var active_biome_index := 0:
@@ -355,6 +361,31 @@ func _ready() -> void:
 		# Initial chunk generation
 		update_chunks(get_target_x())
 
+# Calculate convoy road flattening factor smoothly based on coordinate distance
+func get_convoy_multiplier(x: float) -> float:
+	if convoy_start_x == 0.0:
+		return 1.0
+		
+	if x < convoy_start_x:
+		return 1.0
+		
+	if is_convoy_active:
+		var t = clamp((x - convoy_start_x) / 800.0, 0.0, 1.0)
+		var smooth_t = t * t * (3.0 - 2.0 * t)
+		return lerp(1.0, 0.15, smooth_t)
+		
+	if has_convoy_ended:
+		if x < convoy_end_x:
+			var t = clamp((x - convoy_start_x) / 800.0, 0.0, 1.0)
+			var smooth_t = t * t * (3.0 - 2.0 * t)
+			return lerp(1.0, 0.15, smooth_t)
+		else:
+			var t = clamp((x - convoy_end_x) / 1200.0, 0.0, 1.0)
+			var smooth_t = t * t * (3.0 - 2.0 * t)
+			return lerp(0.15, 1.0, smooth_t)
+			
+	return 1.0
+
 # Base math function defining the height of the road without flattening
 func get_base_road_height(x: float) -> float:
 	if is_flat:
@@ -369,12 +400,27 @@ func get_base_road_height(x: float) -> float:
 	var factor = raw_factor * raw_factor * (3.0 - 2.0 * raw_factor)
 	
 	# Combine waves to create interesting rolling hills and dips, offset by seed
-	var long_hills = sin((x + seed_offset_1) * 0.0015) * 140.0   # Large elevations
-	var medium_waves = cos((x + seed_offset_2) * 0.004) * 50.0   # Medium slopes
-	var small_bumps = sin((x + seed_offset_3) * 0.012) * 12.0     # Small bumpy texture
+	var mult = hill_amplitude_multiplier * get_convoy_multiplier(x)
+	var long_hills = sin((x + seed_offset_1) * 0.0015) * 140.0 * mult   # Large elevations
+	var medium_waves = cos((x + seed_offset_2) * 0.004) * 50.0 * mult   # Medium slopes
+	var small_bumps = sin((x + seed_offset_3) * 0.012) * 12.0 * mult     # Small bumpy texture
 	
-	var height = 42.0 + (long_hills + medium_waves + small_bumps) * hill_amplitude_multiplier
+	var height = 42.0 + (long_hills + medium_waves + small_bumps)
 	return lerp(42.0, height, factor)
+
+func start_active_event(event_name: String) -> void:
+	if event_name == "Convoy":
+		is_convoy_active = true
+		has_convoy_ended = false
+		convoy_start_x = get_target_x()
+		regenerate_runtime_chunks()
+
+func end_active_event(event_name: String) -> void:
+	if event_name == "Convoy":
+		is_convoy_active = false
+		has_convoy_ended = true
+		convoy_end_x = get_target_x()
+		regenerate_runtime_chunks()
 
 # Deterministically get tunnel details for a given chunk
 func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
