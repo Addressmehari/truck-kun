@@ -368,16 +368,16 @@ func start_active_event(event_name: String) -> void:
 			gunner.position = Vector2(-95.0, -85.0)
 			container_body.add_child(gunner)
 			
-		# Spawn Health Bar on top of truck
+		# Spawn Health Bar on top of truck chassis so it moves physically with the vehicle
 		var health_bar_script = load("res://truck/truck_health_bar.gd")
-		if health_bar_script:
-			var old_hb = get_node_or_null("TruckHealthBar")
+		if health_bar_script and chassis:
+			var old_hb = chassis.get_node_or_null("TruckHealthBar")
 			if old_hb:
 				old_hb.queue_free()
 			var hb = Node2D.new()
 			hb.set_script(health_bar_script)
 			hb.name = "TruckHealthBar"
-			add_child(hb)
+			chassis.add_child(hb)
 			
 		# Spawn 3-4 chasing enemy cars from the TSCN file
 		var enemy_scene = load("res://obstacles/enemy_car.tscn")
@@ -390,9 +390,9 @@ func start_active_event(event_name: String) -> void:
 			for i in range(3):
 				var enemy = enemy_scene.instantiate()
 				enemy.name = "EnemyCar_" + str(i)
-				enemy.set("target_distance", 320.0 + i * 130.0)
+				enemy.set("target_distance", 480.0 + i * 70.0)
 				
-				var spawn_x = chassis.global_position.x - (320.0 + i * 130.0) - 200.0
+				var spawn_x = chassis.global_position.x - (480.0 + i * 70.0) - 200.0
 				var road = get_node_or_null("/root/main/Road")
 				var spawn_y = 0.0
 				if road and road.has_method("get_road_height"):
@@ -418,9 +418,10 @@ func end_active_event(event_name: String) -> void:
 				gunner.queue_free()
 				
 		# Clean up Health Bar
-		var hb = get_node_or_null("TruckHealthBar")
-		if hb:
-			hb.queue_free()
+		if chassis:
+			var hb = chassis.get_node_or_null("TruckHealthBar")
+			if hb:
+				hb.queue_free()
 			
 		# Fade/Clean up remaining enemies
 		for child in get_parent().get_children():
