@@ -5,7 +5,7 @@ signal event_selected(event_name: String)
 var target_index := 0
 var current_rotation := 0.0
 var target_rotation := 0.0
-var spin_duration := 2.5 # Real seconds
+var spin_duration := 4.2 # Real seconds
 
 var is_spinning := false
 var is_highlighted := false
@@ -18,10 +18,9 @@ var last_sector_index := -1
 
 # References
 var panel_center := Vector2.ZERO
-var wheel_radius := 120.0
+var wheel_radius := 200.0
 
 # Labels
-var title_label: Label
 var result_label: Label
 
 # Event information
@@ -68,35 +67,20 @@ func _ready() -> void:
 	tween_in.tween_callback(start_spin)
 
 func setup_ui_labels() -> void:
-	# Title Label
-	title_label = Label.new()
-	title_label.text = "RANDOM EVENT ENCOUNTER"
-	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title_label.add_theme_font_size_override("font_size", 24)
-	title_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2)) # Glowing Gold
-	title_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
-	title_label.add_theme_constant_override("outline_size", 6)
-	add_child(title_label)
-	
-	# Position Title relative to screen center
-	title_label.size = Vector2(400, 40)
-	title_label.position = panel_center + Vector2(-200, -220)
-	
-	# Result Label
+	# Result Label (GTA 5 Style: Placed near the bottom pointer arrow)
 	result_label = Label.new()
 	result_label.text = "SPINNING..."
 	result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	result_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	result_label.add_theme_font_size_override("font_size", 28)
-	result_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.85))
-	result_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	result_label.add_theme_font_size_override("font_size", 24)
+	result_label.add_theme_color_override("font_color", Color(0.85, 0.88, 0.92))
+	result_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
 	result_label.add_theme_constant_override("outline_size", 8)
 	add_child(result_label)
 	
-	# Position Result Label
-	result_label.size = Vector2(400, 50)
-	result_label.position = panel_center + Vector2(-200, 170)
+	# Position Result Label near the bottom pointer arrow (under the wheel)
+	result_label.size = Vector2(500, 50)
+	result_label.position = panel_center + Vector2(-250, 240)
 
 func start_spin() -> void:
 	# 1. Randomly select target event section
@@ -108,10 +92,10 @@ func start_spin() -> void:
 	var offset = randf_range(-0.4, 0.4)
 	var target_local = mid_angle + offset
 	
-	# Calculate final rotation to land at the top pointer (-PI/2)
+	# Calculate final rotation to land at the bottom pointer (PI/2)
 	# Spin 4 to 6 times
 	var spins = 4 + randi() % 3
-	target_rotation = -PI/2.0 - target_local - spins * 2.0 * PI
+	target_rotation = PI/2.0 - target_local - spins * 2.0 * PI
 	
 	is_spinning = true
 	is_highlighted = false
@@ -131,10 +115,8 @@ func _process(delta: float) -> void:
 	size = screen_size
 	panel_center = screen_size / 2.0
 	
-	if title_label:
-		title_label.position = panel_center + Vector2(-200, -220)
 	if result_label:
-		result_label.position = panel_center + Vector2(-200, 170)
+		result_label.position = panel_center + Vector2(-250, 240)
 		
 	# Needle wiggle physics decay
 	# Multiply by speed scale so wiggles animate at real-time speed in slow motion
@@ -151,6 +133,10 @@ func _process(delta: float) -> void:
 			needle_tilt = 0.45 * speed_factor
 			last_sector_index = current_idx
 			
+		# Live update text/icon near the arrow during spin
+		var ev = events[current_idx]
+		result_label.text = ev["icon"] + " " + ev["desc"] + " " + ev["icon"]
+			
 	if is_highlighted:
 		flash_timer += delta * ui_speed_scale
 		
@@ -162,7 +148,7 @@ func on_spin_completed() -> void:
 	selected_index = target_index
 	flash_timer = 0.0
 	
-	# Announce event
+	# Announce event near the arrow
 	var ev = events[selected_index]
 	result_label.text = ev["icon"] + " " + ev["desc"] + " " + ev["icon"]
 	result_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.1)) # Glowing gold
@@ -173,7 +159,7 @@ func on_spin_completed() -> void:
 	var tween_pulse = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_ELASTIC)
 	tween_pulse.set_speed_scale(ui_speed_scale)
 	result_label.scale = Vector2(0.5, 0.5)
-	tween_pulse.tween_property(result_label, "scale", Vector2(1.15, 1.15), 0.5)
+	tween_pulse.tween_property(result_label, "scale", Vector2(1.1, 1.1), 0.5)
 	
 	# Emit selected event signal
 	event_selected.emit(ev["name"])
@@ -193,9 +179,9 @@ func close_popup() -> void:
 	Engine.time_scale = 1.0
 	queue_free()
 
-# Helper math to see which sector lands at the top pointer (-PI/2)
+# Helper math to see which sector lands at the bottom pointer (PI/2)
 func get_selected_section_index(rot: float) -> int:
-	var local_angle = -PI/2.0 - rot
+	var local_angle = PI/2.0 - rot
 	local_angle = fposmod(local_angle, 2.0 * PI)
 	var sector_angle = 2.0 * PI / 3.0
 	var idx = int(local_angle / sector_angle)
@@ -205,105 +191,117 @@ func _draw() -> void:
 	# 1. Full Screen Overlay Dim
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.02, 0.02, 0.04, 0.65), true)
 	
-	# 2. Main Glassmorphic Panel
-	var panel_size = Vector2(440, 520)
-	var panel_rect = Rect2(panel_center - panel_size / 2.0, panel_size)
+	# 2. Draw Spin Wheel (GTA V Weapon Wheel style)
+	var wheel_center = panel_center
+	var inner_r = 110.0
+	var outer_r = wheel_radius # 200.0
 	
-	# Dark backdrop
-	draw_rect(panel_rect, Color(0.08, 0.08, 0.12, 0.88), true)
-	
-	# Sleek glowing border
-	# We'll draw 3 nested outlines for a premium neon glow effect
-	var border_color = Color(0.2, 0.55, 0.95) # Cyberpunk Cyan/Blue
-	if is_highlighted:
-		border_color = events[selected_index]["color"]
+	# Determine active sector index
+	var active_idx := -1
+	if is_spinning:
+		active_idx = get_selected_section_index(current_rotation)
+	elif is_highlighted:
+		active_idx = selected_index
 		
-	draw_rect(panel_rect, border_color * Color(1, 1, 1, 0.15), false, 6.0)
-	draw_rect(panel_rect, border_color * Color(1, 1, 1, 0.4), false, 3.0)
-	draw_rect(panel_rect, border_color * Color(1, 1, 1, 0.95), false, 1.2)
-	
-	# Decorative corner highlights
-	draw_panel_corners(panel_rect, border_color)
-	
-	# 3. Draw Spin Wheel
-	var wheel_center = panel_center + Vector2(0, -10)
-	
-	# Bezel Outer Ring
-	draw_circle(wheel_center, wheel_radius + 16.0, Color(0.04, 0.04, 0.06))
-	draw_circle(wheel_center, wheel_radius + 12.0, Color(0.18, 0.20, 0.24))
-	draw_circle(wheel_center, wheel_radius + 9.0, Color(0.06, 0.06, 0.08))
-	
-	# Draw Sector Slices
+	# Draw Segment Slices (Ring Sectors)
 	var sector_arc = 2.0 * PI / 3.0
+	var gap = 0.04 # Thin gap between sectors in radians for GTA V style
+	
 	for i in range(3):
-		var angle_from = current_rotation + i * sector_arc
-		var angle_to = angle_from + sector_arc
+		var angle_from = current_rotation + i * sector_arc + gap
+		var angle_to = current_rotation + (i + 1) * sector_arc - gap
 		
-		# Colors & highlights
-		var color = events[i]["color"]
-		
-		# If highlighted, fade out non-selected sectors
-		if is_highlighted:
-			if i != selected_index:
-				color.a = 0.22
-			else:
-				# Flashing pulsing effect on the winning sector
+		# Set colors: Active lights up with the event color, inactive is dark charcoal
+		var color: Color
+		var border_color: Color
+		if i == active_idx:
+			color = events[i]["color"]
+			if is_highlighted:
+				# Pulsing effect on the final selected sector
 				var flash = abs(sin(flash_timer * 10.0)) * 0.35
 				color = color.lightened(flash)
-				color.a = 1.0
+				color.a = 0.95
+			else:
+				color.a = 0.85
+			border_color = Color(1.0, 1.0, 1.0, 0.9) # Bright white border for active
 		else:
-			color.a = 0.85
+			color = Color(0.12, 0.14, 0.18, 0.65) # Sleek dark charcoal inactive
+			border_color = Color(0.25, 0.28, 0.32, 0.3) # Dim borders
 			
-		# Draw filled sector slice
-		draw_filled_sector(wheel_center, wheel_radius, angle_from, angle_to, color)
+		# Draw filled ring sector
+		draw_filled_ring_sector(wheel_center, inner_r, outer_r, angle_from, angle_to, color)
 		
-		# Draw sector separating lines
-		draw_line(wheel_center, wheel_center + Vector2(cos(angle_from), sin(angle_from)) * wheel_radius, Color(0,0,0,0.65), 3.0)
+		# Draw crisp borders around the ring segment
+		draw_ring_sector_borders(wheel_center, inner_r, outer_r, angle_from, angle_to, border_color)
 		
-		# Draw sector text and icons
-		var mid_angle = angle_from + sector_arc / 2.0
-		draw_sector_text(wheel_center, wheel_radius, mid_angle, events[i]["icon"], events[i]["name"], color.a)
+		# Draw sector text and icons inside the ring
+		var mid_angle = angle_from + (angle_to - angle_from) / 2.0
+		# Fade out text slightly if not active
+		var text_alpha = 1.0 if (i == active_idx) else 0.45
+		draw_sector_text(wheel_center, (inner_r + outer_r) / 2.0, mid_angle, events[i]["icon"], events[i]["name"], text_alpha)
 		
-	# Draw inner hub cap to complete the wheel look
-	draw_circle(wheel_center, 22.0, Color(0.05, 0.05, 0.06))
-	draw_circle(wheel_center, 18.0, Color(0.25, 0.28, 0.32))
-	draw_circle(wheel_center, 8.0, Color(0.08, 0.08, 0.1))
+	# Draw concentric HUD rings to enclose the wheel
+	draw_arc(wheel_center, inner_r, 0, 2.0 * PI, 64, Color(1, 1, 1, 0.15), 1.5)
+	draw_arc(wheel_center, outer_r, 0, 2.0 * PI, 64, Color(1, 1, 1, 0.15), 1.5)
 	
-	# Outer glowing ring over the wheel edges
-	draw_arc(wheel_center, wheel_radius, 0, 2.0 * PI, 64, Color(1, 1, 1, 0.12), 3.0)
-	draw_arc(wheel_center, wheel_radius + 4.0, 0, 2.0 * PI, 64, border_color * Color(1, 1, 1, 0.6), 1.5)
+	# Draw active HUD accents in the center
+	var accent_color = Color(0.2, 0.55, 0.95, 0.3)
+	if is_highlighted:
+		accent_color = events[selected_index]["color"]
+		accent_color.a = 0.4
+	draw_arc(wheel_center, inner_r - 8.0, 0, 2.0 * PI, 64, accent_color, 1.0)
 	
-	# 4. Draw Top Pointer/Needle (Wiggles on ticks)
-	var pointer_pivot = wheel_center + Vector2(0, -wheel_radius - 8.0)
+	# 3. Draw Bottom Pointer/Needle pointing UP
+	var pointer_pivot = wheel_center + Vector2(0, outer_r + 12.0)
 	draw_set_transform(pointer_pivot, needle_tilt)
 	
-	# Triangular pointer pointing down
 	var needle_pts = PackedVector2Array([
-		Vector2(-12, -18),
-		Vector2(12, -18),
-		Vector2(0, 18),
-		Vector2(-12, -18)
+		Vector2(-16, 24),
+		Vector2(16, 24),
+		Vector2(0, -24),
+		Vector2(-16, 24)
 	])
 	draw_polygon(needle_pts, PackedColorArray([Color(1.0, 0.85, 0.15)]))
 	draw_polyline(needle_pts, Color(0, 0, 0, 0.85), 2.0)
-	# Needle center cap dot
-	draw_circle(Vector2.ZERO, 4.0, Color(0.1, 0.1, 0.12))
+	draw_circle(Vector2.ZERO, 5.0, Color(0.1, 0.1, 0.12))
 	
 	# Reset transform
 	draw_set_transform(Vector2.ZERO, 0.0)
 
-func draw_filled_sector(center: Vector2, radius: float, angle_from: float, angle_to: float, color: Color) -> void:
+func draw_filled_ring_sector(center: Vector2, inner_r: float, outer_r: float, angle_from: float, angle_to: float, color: Color) -> void:
 	var points = PackedVector2Array()
-	points.append(center)
 	var steps := 32
+	# Outer arc
 	for i in range(steps + 1):
 		var a = angle_from + (angle_to - angle_from) * i / steps
-		points.append(center + Vector2(cos(a), sin(a)) * radius)
+		points.append(center + Vector2(cos(a), sin(a)) * outer_r)
+	# Inner arc (reversed)
+	for i in range(steps, -1, -1):
+		var a = angle_from + (angle_to - angle_from) * i / steps
+		points.append(center + Vector2(cos(a), sin(a)) * inner_r)
 		
 	draw_polygon(points, PackedColorArray([color]))
 
+func draw_ring_sector_borders(center: Vector2, inner_r: float, outer_r: float, angle_from: float, angle_to: float, color: Color) -> void:
+	var steps := 16
+	var outer_pts = PackedVector2Array()
+	var inner_pts = PackedVector2Array()
+	
+	for i in range(steps + 1):
+		var a = angle_from + (angle_to - angle_from) * i / steps
+		outer_pts.append(center + Vector2(cos(a), sin(a)) * outer_r)
+		inner_pts.append(center + Vector2(cos(a), sin(a)) * inner_r)
+		
+	# Draw outer arc outline
+	draw_polyline(outer_pts, color, 1.5)
+	# Draw inner arc outline
+	draw_polyline(inner_pts, color, 1.5)
+	# Draw straight side edges
+	draw_line(inner_pts[0], outer_pts[0], color, 1.5)
+	draw_line(inner_pts[steps], outer_pts[steps], color, 1.5)
+
 func draw_sector_text(center: Vector2, radius: float, mid_angle: float, icon: String, label: String, alpha: float) -> void:
-	var label_pos = center + Vector2(cos(mid_angle), sin(mid_angle)) * (radius * 0.58)
+	var label_pos = center + Vector2(cos(mid_angle), sin(mid_angle)) * radius
 	
 	# Align text angle radially outwards
 	var text_angle = mid_angle
@@ -316,7 +314,7 @@ func draw_sector_text(center: Vector2, radius: float, mid_angle: float, icon: St
 	
 	var font = get_theme_default_font()
 	var full_text = icon + " " + label.to_upper()
-	var font_size = 18
+	var font_size = 24
 	var text_size = font.get_string_size(full_text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
 	
 	# Draw shadow
