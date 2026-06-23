@@ -25,9 +25,9 @@ var result_label: Label
 
 # Event information
 var events = [
-	{"name": "Convoy", "color": Color(0.15, 0.42, 0.85), "desc": "CONVOY ARRIVING"},
-	{"name": "Storm", "color": Color(0.1, 0.55, 0.5), "desc": "STORM BREWING"},
-	{"name": "Mines", "color": Color(0.85, 0.22, 0.18), "desc": "MINES DETECTED"}
+	{"name": "Convoy", "icon": "🚚", "color": Color(0.15, 0.42, 0.85), "desc": "CONVOY ARRIVING"},
+	{"name": "Storm", "icon": "⛈️", "color": Color(0.1, 0.55, 0.5), "desc": "STORM BREWING"},
+	{"name": "Mines", "icon": "💣", "color": Color(0.85, 0.22, 0.18), "desc": "MINES DETECTED"}
 ]
 
 func _ready() -> void:
@@ -44,6 +44,12 @@ func _ready() -> void:
 	anchor_bottom = 1.0
 	grow_horizontal = GROW_DIRECTION_BOTH
 	grow_vertical = GROW_DIRECTION_BOTH
+	
+	# Reset offsets to stretch full screen properly
+	offset_left = 0.0
+	offset_right = 0.0
+	offset_top = 0.0
+	offset_bottom = 0.0
 	
 	# Set initial size and center pivot for pop-in scaling
 	var screen_size = get_viewport_rect().size
@@ -114,6 +120,7 @@ func _process(delta: float) -> void:
 	var screen_size = get_viewport_rect().size
 	size = screen_size
 	panel_center = screen_size / 2.0
+	pivot_offset = screen_size / 2.0
 	
 	if result_label:
 		result_label.position = panel_center + Vector2(-250, 240)
@@ -175,6 +182,23 @@ func on_spin_completed() -> void:
 	tween_out.tween_callback(close_popup)
 
 func close_popup() -> void:
+	# Spawn event timer bar on HUD
+	var hud = get_parent()
+	if hud:
+		# Clean up any existing active timer bar
+		var existing = hud.get_node_or_null("EventTimerBar")
+		if existing:
+			existing.queue_free()
+			
+		var timer_script = load("res://ui/event_timer_bar.gd")
+		if timer_script:
+			var timer_bar = Control.new()
+			timer_bar.set_script(timer_script)
+			hud.add_child(timer_bar)
+			
+			var ev = events[selected_index]
+			timer_bar.call("setup", ev["name"], ev["icon"], ev["color"], 15.0)
+			
 	# Restore normal game speed
 	Engine.time_scale = 1.0
 	queue_free()
