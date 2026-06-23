@@ -28,11 +28,31 @@ func _physics_process(delta: float) -> void:
 	queue_redraw()
 
 func _draw() -> void:
-	# Draw bullet trail / glow effect
-	var color = Color(1.0, 0.3, 0.1) if is_enemy else Color(0.1, 0.9, 1.0)
-	draw_line(Vector2.ZERO, -direction * 18.0, Color(color.r, color.g, color.b, 0.4), 4.0)
-	draw_circle(Vector2.ZERO, 5.0, color)
-	draw_circle(Vector2.ZERO, 2.0, Color.WHITE)
+	if is_enemy:
+		# Enemy bullet: glowing red/orange plasma
+		var core_color = Color(1.0, 0.3, 0.1)
+		# Draw fading tail trail
+		draw_line(Vector2.ZERO, -direction * 22.0, Color(core_color.r, core_color.g, core_color.b, 0.15), 5.0)
+		draw_line(Vector2.ZERO, -direction * 14.0, Color(core_color.r, core_color.g, core_color.b, 0.4), 3.0)
+		# Glowing outer aura
+		draw_circle(Vector2.ZERO, 6.0, Color(1.0, 0.1, 0.0, 0.3))
+		# Main body
+		draw_circle(Vector2.ZERO, 4.0, core_color)
+		# White hot core
+		draw_circle(Vector2.ZERO, 1.8, Color.WHITE)
+	else:
+		# Player bullet: glowing neon cyan/plasma blue - ultra juicy
+		var core_color = Color(0.05, 0.95, 1.0) # Electric cyan
+		# Draw fading tail trail
+		draw_line(Vector2.ZERO, -direction * 26.0, Color(core_color.r, core_color.g, core_color.b, 0.15), 6.5)
+		draw_line(Vector2.ZERO, -direction * 18.0, Color(core_color.r, core_color.g, core_color.b, 0.45), 4.5)
+		draw_line(Vector2.ZERO, -direction * 8.0, Color.WHITE, 2.0)
+		# Glowing outer aura
+		draw_circle(Vector2.ZERO, 7.5, Color(0.0, 0.6, 1.0, 0.35))
+		# Main body
+		draw_circle(Vector2.ZERO, 5.0, core_color)
+		# White hot core
+		draw_circle(Vector2.ZERO, 2.2, Color.WHITE)
 
 func _on_area_entered(area: Area2D) -> void:
 	# Handle hitting enemies

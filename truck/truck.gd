@@ -376,6 +376,7 @@ func start_active_event(event_name: String) -> void:
 			gunner.set_script(gunner_script)
 			gunner.name = "Gunner"
 			gunner.position = Vector2(-95.0, -85.0)
+			gunner.z_index = -1
 			container_body.add_child(gunner)
 			
 		# Spawn Health Bar on top of truck chassis so it moves physically with the vehicle
