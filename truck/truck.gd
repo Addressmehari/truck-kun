@@ -26,6 +26,12 @@ var o_trigger_locked: bool = false
 var o_hold_start_ticks: int = 0
 var is_o_currently_holding: bool = false
 
+# Combat / Convoy Event State
+var is_autopilot := false
+var truck_max_health := 100.0
+var truck_health := 100.0
+var cheat_buffer := ""
+
 func _ready() -> void:
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	setup_shifter_ui()
@@ -125,12 +131,18 @@ func _physics_process(_delta: float) -> void:
 	var forward_pressed = Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_RIGHT)
 	var backward_pressed = Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT)
 	
+	if is_autopilot:
+		forward_pressed = true
+		backward_pressed = false
+		if current_gear != Gear.DRIVE:
+			set_gear(Gear.DRIVE)
+			
 	var move_input = 0.0
 	var is_braking = false
 	
 	if forward_pressed and not backward_pressed:
 		if current_gear != Gear.PARK:
-			move_input = 1.0
+			move_input = 0.7 if is_autopilot else 1.0
 	elif backward_pressed and not forward_pressed:
 		if current_gear != Gear.PARK:
 			move_input = -1.0
@@ -170,10 +182,14 @@ func _physics_process(_delta: float) -> void:
 		
 	# Read user input for air tilting (A/D or Left/Right)
 	var tilt_input = 0.0
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-		tilt_input -= 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-		tilt_input += 1.0
+	if is_autopilot:
+		if is_instance_valid(chassis):
+			tilt_input = clamp(chassis.rotation * 4.0, -1.0, 1.0)
+	else:
+		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+			tilt_input -= 1.0
+		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+			tilt_input += 1.0
 
 	# Active braking logic to make controls feel premium and snappy
 	var avg_vel = 0.0
@@ -226,17 +242,44 @@ func _physics_process(_delta: float) -> void:
 			tyre_3.angular_velocity = new_avg_vel
 				
 			# Cap wheel spin velocity
-			tyre_1.angular_velocity = clamp(tyre_1.angular_velocity, -max_angular_velocity, max_angular_velocity)
-			tyre_2.angular_velocity = clamp(tyre_2.angular_velocity, -max_angular_velocity, max_angular_velocity)
-			tyre_3.angular_velocity = clamp(tyre_3.angular_velocity, -max_angular_velocity, max_angular_velocity)
+			var current_max_vel = 30.0 if is_autopilot else max_angular_velocity
+			tyre_1.angular_velocity = clamp(tyre_1.angular_velocity, -current_max_vel, current_max_vel)
+			tyre_2.angular_velocity = clamp(tyre_2.angular_velocity, -current_max_vel, current_max_vel)
+			tyre_3.angular_velocity = clamp(tyre_3.angular_velocity, -current_max_vel, current_max_vel)
 
 	# Apply air tilting torque (active in mid-air or balance controls)
 	if tilt_input != 0.0:
 		chassis.apply_torque(-tilt_input * air_tilt_power)
 		container_body.apply_torque(-tilt_input * air_tilt_power * 1.5)
 
-func _input(_event: InputEvent) -> void:
-	pass
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		var c = char(event.unicode).to_lower()
+		if c >= "a" and c <= "z":
+			cheat_buffer += c
+			if cheat_buffer.length() > 20:
+				cheat_buffer = cheat_buffer.substr(cheat_buffer.length() - 20)
+				
+			if cheat_buffer.ends_with("convoy"):
+				cheat_buffer = "" # clear buffer
+				print("Cheat activated: convoy!")
+				
+				# Restart convoy active event if already running
+				var existing = get_node_or_null("HUD/EventTimerBar")
+				if existing:
+					existing.queue_free()
+					
+				start_active_event("Convoy")
+				
+				# Spawn UI timer bar countdown HUD
+				var timer_script = load("res://ui/event_timer_bar.gd")
+				if timer_script:
+					var timer_bar = Control.new()
+					timer_bar.set_script(timer_script)
+					var hud = get_node_or_null("HUD")
+					if hud:
+						hud.add_child(timer_bar)
+						timer_bar.call("setup", "Convoy", "🚚", Color(0.15, 0.42, 0.85), 15.0)
 
 func _on_gear_button_pressed(gear_type: Gear) -> void:
 	set_gear(gear_type)
@@ -301,6 +344,148 @@ func set_headlight_enabled(enabled: bool) -> void:
 		var beam = chassis.get_node_or_null("HeadlightBeam")
 		if beam:
 			beam.set("enabled", enabled)
+
+func start_active_event(event_name: String) -> void:
+	print("Truck starting active event: ", event_name)
+	if event_name == "Convoy":
+		is_autopilot = true
+		truck_health = truck_max_health
+		
+		# Move camera
+		var camera = get_node_or_null("/root/main/Camera2D")
+		if camera:
+			camera.set("target_horizontal_offset", -250.0)
+			
+		# Spawn Gunner popping from top-left of container
+		var gunner_script = load("res://truck/gunner.gd")
+		if gunner_script and container_body:
+			var old_gunner = container_body.get_node_or_null("Gunner")
+			if old_gunner:
+				old_gunner.queue_free()
+			var gunner = Node2D.new()
+			gunner.set_script(gunner_script)
+			gunner.name = "Gunner"
+			gunner.position = Vector2(-95.0, -85.0)
+			container_body.add_child(gunner)
+			
+		# Spawn Health Bar on top of truck
+		var health_bar_script = load("res://truck/truck_health_bar.gd")
+		if health_bar_script:
+			var old_hb = get_node_or_null("TruckHealthBar")
+			if old_hb:
+				old_hb.queue_free()
+			var hb = Node2D.new()
+			hb.set_script(health_bar_script)
+			hb.name = "TruckHealthBar"
+			add_child(hb)
+			
+		# Spawn 3-4 chasing enemy cars
+		var enemy_script = load("res://obstacles/enemy_car.gd")
+		if enemy_script:
+			# Clean existing enemies
+			for child in get_parent().get_children():
+				if child.is_in_group("enemies"):
+					child.queue_free()
+					
+			for i in range(3):
+				var enemy = Area2D.new()
+				enemy.set_script(enemy_script)
+				enemy.name = "EnemyCar_" + str(i)
+				enemy.set("target_distance", 320.0 + i * 130.0)
+				
+				var spawn_x = chassis.global_position.x - (320.0 + i * 130.0) - 200.0
+				var road = get_node_or_null("/root/main/Road")
+				var spawn_y = 0.0
+				if road and road.has_method("get_road_height"):
+					spawn_y = road.call("get_road_height", spawn_x)
+					
+				get_parent().add_child(enemy)
+				enemy.global_position = Vector2(spawn_x, spawn_y)
+
+func end_active_event(event_name: String) -> void:
+	print("Truck ending active event: ", event_name)
+	if event_name == "Convoy":
+		is_autopilot = false
+		
+		# Restore camera
+		var camera = get_node_or_null("/root/main/Camera2D")
+		if camera:
+			camera.set("target_horizontal_offset", 220.0)
+			
+		# Clean up Gunner
+		if container_body:
+			var gunner = container_body.get_node_or_null("Gunner")
+			if gunner:
+				gunner.queue_free()
+				
+		# Clean up Health Bar
+		var hb = get_node_or_null("TruckHealthBar")
+		if hb:
+			hb.queue_free()
+			
+		# Fade/Clean up remaining enemies
+		for child in get_parent().get_children():
+			if child.is_in_group("enemies"):
+				var tween = child.create_tween()
+				tween.tween_property(child, "modulate:a", 0.0, 1.0)
+				tween.tween_callback(child.queue_free)
+
+func take_damage(amount: float) -> void:
+	if not is_autopilot:
+		return
+	truck_health = max(0.0, truck_health - amount)
+	if truck_health <= 0.0:
+		# Dramatic explosion shake
+		var dashboard = get_node_or_null("HUD/Dashboard")
+		if dashboard and "shake_intensity" in dashboard:
+			dashboard.shake_intensity = 35.0
+			
+		# Spill all cargo!
+		spill_all_cargo()
+		
+		# Force end the timer bar UI event early
+		var timer_bar = get_node_or_null("HUD/EventTimerBar")
+		if timer_bar and timer_bar.has_method("end_event"):
+			timer_bar.call("end_event")
+
+func spill_all_cargo() -> void:
+	if not container_body:
+		return
+	for i in range(6):
+		var item_data = container_body.inventory[i]
+		if item_data != null and item_data.get("type") != "part":
+			# Clear inventory slots
+			container_body.inventory[i] = null
+			var root_col = i % 3
+			var root_row = i / 3
+			var grid_w = item_data.get("grid_w", 1)
+			var grid_h = item_data.get("grid_h", 1)
+			for dx in range(grid_w):
+				for dy in range(grid_h):
+					var idx = (root_col + dx) + (root_row + dy) * 3
+					container_body.inventory[idx] = null
+					
+			# Physically spawn the crate/glass
+			var is_glass = (item_data.get("type") == "glass")
+			var scene_path = "res://obstacles/glass.tscn" if is_glass else "res://obstacles/crate.tscn"
+			var scene = load(scene_path)
+			if scene:
+				var new_crate = scene.instantiate()
+				new_crate.color = item_data.get("color", Color(0.82, 0.53, 0.28))
+				new_crate.width = item_data.get("width", 40.0)
+				new_crate.height = item_data.get("height", 40.0)
+				if is_glass:
+					new_crate.health = item_data.get("health", 100.0)
+				else:
+					new_crate.size_type = item_data.get("size_type", "1x1")
+					
+				get_parent().add_child(new_crate)
+				new_crate.global_position = container_body.global_position + Vector2(randf_range(-30, 30), randf_range(-30, 10))
+				
+				# Apply physical forces
+				if new_crate is RigidBody2D:
+					new_crate.linear_velocity = container_body.linear_velocity + Vector2(randf_range(-150, 150), randf_range(-200, -50))
+					new_crate.angular_velocity = randf_range(-10, 10)
 
 
 

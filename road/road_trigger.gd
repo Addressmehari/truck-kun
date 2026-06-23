@@ -91,7 +91,10 @@ func _on_event_selected(event_name: String) -> void:
 	queue_free()
 
 func trigger_convoy_event() -> void:
-	print("Convoy event triggered (Action placeholder)")
+	print("Convoy event triggered: Starting combat event!")
+	var truck = get_node_or_null("/root/main/truck")
+	if truck and truck.has_method("start_active_event"):
+		truck.call("start_active_event", "Convoy")
 
 func trigger_storm_event() -> void:
 	print("Storm event triggered (Action placeholder)")
