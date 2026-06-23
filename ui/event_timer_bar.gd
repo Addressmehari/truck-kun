@@ -6,6 +6,7 @@ var duration: float = 15.0
 var time_left: float = 15.0
 var event_color: Color = Color(0.2, 0.6, 1.0, 0.9)
 var is_active := false
+var elapsed_time := 0.0
 
 func setup(ev_name: String, ev_icon: String, ev_color: Color, ev_duration: float = 15.0) -> void:
 	event_name = ev_name
@@ -24,10 +25,10 @@ func setup(ev_name: String, ev_icon: String, ev_color: Color, ev_duration: float
 	grow_horizontal = GROW_DIRECTION_BOTH
 	grow_vertical = GROW_DIRECTION_END
 	
-	# Size and positioning relative to anchor center
-	offset_left = -160
-	offset_right = 160
-	offset_top = -70 # Start offscreen
+	# Enlarged height bounds (580px wide, 130px tall) to fit the taller cells
+	offset_left = -290
+	offset_right = 290
+	offset_top = -140 # Start offscreen
 	offset_bottom = -10
 	
 	# Set name for easy lookup
@@ -36,12 +37,14 @@ func setup(ev_name: String, ev_icon: String, ev_color: Color, ev_duration: float
 	# Slide down animation using offsets
 	var tween = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	tween.tween_property(self, "offset_top", 20.0, 0.5)
-	tween.tween_property(self, "offset_bottom", 80.0, 0.5)
+	tween.tween_property(self, "offset_bottom", 150.0, 0.5)
 
 func _process(delta: float) -> void:
 	if not is_active:
 		return
 		
+	elapsed_time += delta
+	
 	# Smoothly decrease time_left
 	time_left -= delta
 	if time_left <= 0.0:
@@ -89,43 +92,109 @@ func end_event() -> void:
 
 	# Slide up offscreen using offsets and queue free
 	var tween = create_tween().set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_BACK)
-	tween.tween_property(self, "offset_top", -70.0, 0.4)
+	tween.tween_property(self, "offset_top", -140.0, 0.4)
 	tween.tween_property(self, "offset_bottom", -10.0, 0.4)
 	tween.tween_callback(queue_free)
 
 func _draw() -> void:
-	# Sleek GTA V HUD backing panel (semi-transparent slate dark color with nice styling)
-	var bg_color = Color(0.12, 0.14, 0.18, 0.8)
-	var border_color = Color(0.24, 0.28, 0.35, 0.9)
-	var rect = Rect2(Vector2.ZERO, size)
-	
-	# Backing and crisp vector border outline
-	draw_rect(rect, bg_color, true)
-	draw_rect(rect, border_color, false, 1.5)
+	# NO backing panel/outline box drawn here - clean floating HUD elements only
 	
 	# Draw text: Event icon + event name
 	var font = get_theme_default_font()
-	var font_size = 18
+	var font_size = 28
 	
 	var text_label = event_name.to_upper()
 	if event_icon != "":
 		text_label = event_icon + "  " + text_label
 		
 	var text_size = font.get_string_size(text_label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
-	var text_pos = Vector2((size.x - text_size.x) / 2.0, 35)
 	
-	# Text shadow
-	draw_string(font, text_pos + Vector2(1, 1), text_label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color(0, 0, 0, 0.6))
+	# Bob the text slightly for extra retro arcade juice
+	var text_bob = cos(elapsed_time * 4.0) * 2.0
+	var text_pos = Vector2((size.x - text_size.x) / 2.0, 38 + text_bob)
+	
+	# Large text shadow
+	draw_string(font, text_pos + Vector2(2, 2), text_label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color(0, 0, 0, 0.85))
 	# Main text color (clean off-white)
 	draw_string(font, text_pos, text_label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color(0.95, 0.96, 0.98))
 	
-	# Shrinking Progress Bar (thin bar on the bottom edge)
-	var bar_y := size.y - 5.0
-	var bar_height := 4.0
-	var progress = time_left / duration
-	var bar_width = size.x * progress
+	# Draw 10 Segmented Retro Arcade Cells (Taller slanted cells with dark outline and bobbing animation)
+	var cell_w := 44.0
+	var cell_h := 55.0 # Taller retro audio level meter height style
+	var cell_gap := 8.0
+	var start_x := (size.x - (10.0 * cell_w + 9.0 * cell_gap)) / 2.0
+	var bar_y := 60.0
 	
-	# Background track of the bar (dim grey)
-	draw_rect(Rect2(0, bar_y, size.x, bar_height), Color(0.22, 0.24, 0.28, 0.5), true)
-	# Glowing/filled track (matching event category color)
-	draw_rect(Rect2(0, bar_y, bar_width, bar_height), event_color, true)
+	# Convert remaining time to a discrete integer cell count (0 to 10)
+	var active_cells_count = int(ceil((time_left / duration) * 10.0))
+	
+	# Slant factor (italic tilt for speed/style)
+	var slant := -6.0
+	# Pure bold dark outline color for cartoon arcade look
+	var outline_color := Color(0.08, 0.08, 0.12)
+	var outline_width := 3.0
+	
+	for i in range(10):
+		# 1. Spring spawn scale animation (EASE_OUT_BACK overshoot)
+		var t = elapsed_time - 0.4 - (i * 0.05)
+		var cell_scale = 0.0
+		if t > 0.0:
+			var dur = 0.35
+			if t < dur:
+				var x = (t / dur) - 1.0
+				cell_scale = x * x * (2.70158 * x + 1.70158) + 1.0
+			else:
+				cell_scale = 1.0
+				
+		if cell_scale <= 0.01:
+			continue
+			
+		# Funky bobbing wave animation (equalizer style)
+		var bob = sin(elapsed_time * 6.0 + i * 0.75) * 4.0
+			
+		# Center coordinates of this specific cell for scaling
+		var cell_center_x = start_x + i * (cell_w + cell_gap) + cell_w / 2.0
+		var cell_center_y = bar_y + cell_h / 2.0
+		
+		# Compute scaled width and height for pop-in scaling bounce
+		var curr_w = cell_w * cell_scale
+		var curr_h = cell_h * cell_scale
+		var cell_rect = Rect2(cell_center_x - curr_w / 2.0, cell_center_y - curr_h / 2.0, curr_w, curr_h)
+		
+		# Compute retro warning colors: Green (0-2), Yellow (3-6), Red (7-9)
+		var cell_color = Color(0.2, 0.85, 0.3) # Green default
+		if i >= 7:
+			cell_color = Color(1.0, 0.25, 0.2) # Red danger zone
+		elif i >= 3:
+			cell_color = Color(0.98, 0.85, 0.1) # Yellow warning zone
+		
+		# 2. Draw cell background container (dark frame slot)
+		var bg_c = Color(0.18, 0.2, 0.25, 0.55)
+		draw_slanted_cell(cell_rect, bg_c, outline_color, outline_width, slant, bob)
+		
+		# 3. Draw active cell highlights (no smooth partial fills)
+		if i < active_cells_count - 1:
+			# Fully charged highlighted cell (bright zone color with bold dark outline)
+			draw_slanted_cell(cell_rect, cell_color, outline_color, outline_width, slant, bob)
+		elif i == active_cells_count - 1:
+			# The active cell currently ticking down (pulses/blinks in full width)
+			var pulse = abs(sin(elapsed_time * 12.0)) * 0.55 + 0.45
+			var pulse_color = cell_color
+			pulse_color.a = pulse
+			
+			draw_slanted_cell(cell_rect, pulse_color, outline_color, outline_width, slant, bob)
+
+# Helper function to draw a slanted (italic) vector cell with a bold dark outline
+func draw_slanted_cell(rect: Rect2, color: Color, outline_color: Color, outline_width: float, slant: float, bob: float) -> void:
+	var tl = Vector2(rect.position.x + slant, rect.position.y + bob)
+	var tr = Vector2(rect.position.x + rect.size.x + slant, rect.position.y + bob)
+	var br = Vector2(rect.position.x + rect.size.x, rect.position.y + rect.size.y + bob)
+	var bl = Vector2(rect.position.x, rect.position.y + rect.size.y + bob)
+	
+	# Filled skewed polygon
+	var points = PackedVector2Array([tl, tr, br, bl])
+	draw_colored_polygon(points, color)
+	
+	# Thick, closed outer border line
+	var outline_points = PackedVector2Array([tl, tr, br, bl, tl])
+	draw_polyline(outline_points, outline_color, outline_width)
