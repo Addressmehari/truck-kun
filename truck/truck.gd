@@ -379,17 +379,16 @@ func start_active_event(event_name: String) -> void:
 			hb.name = "TruckHealthBar"
 			add_child(hb)
 			
-		# Spawn 3-4 chasing enemy cars
-		var enemy_script = load("res://obstacles/enemy_car.gd")
-		if enemy_script:
+		# Spawn 3-4 chasing enemy cars from the TSCN file
+		var enemy_scene = load("res://obstacles/enemy_car.tscn")
+		if enemy_scene:
 			# Clean existing enemies
 			for child in get_parent().get_children():
 				if child.is_in_group("enemies"):
 					child.queue_free()
 					
 			for i in range(3):
-				var enemy = Area2D.new()
-				enemy.set_script(enemy_script)
+				var enemy = enemy_scene.instantiate()
 				enemy.name = "EnemyCar_" + str(i)
 				enemy.set("target_distance", 320.0 + i * 130.0)
 				

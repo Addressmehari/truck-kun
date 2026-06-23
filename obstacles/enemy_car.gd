@@ -23,13 +23,15 @@ func _ready() -> void:
 	# Connect to signals
 	area_entered.connect(_on_area_entered)
 	
-	# Setup Collision Shape
-	var collision = CollisionShape2D.new()
-	var shape = RectangleShape2D.new()
-	shape.size = Vector2(80.0, 32.0)
-	collision.shape = shape
-	collision.position = Vector2(0.0, -16.0) # Rest on road surface
-	add_child(collision)
+	# Setup Collision Shape if not already present
+	var collision = get_node_or_null("CollisionShape2D")
+	if not collision:
+		collision = CollisionShape2D.new()
+		var shape = RectangleShape2D.new()
+		shape.size = Vector2(80.0, 32.0)
+		collision.shape = shape
+		collision.position = Vector2(0.0, -16.0) # Rest on road surface
+		add_child(collision)
 	
 	# Grab references
 	road = get_node_or_null("/root/main/Road")
@@ -77,6 +79,9 @@ func _physics_process(delta: float) -> void:
 		
 	if flash_timer > 0.0:
 		flash_timer -= delta
+		modulate = Color(8.0, 8.0, 8.0) # White hitflash
+	else:
+		modulate = Color(1.0, 1.0, 1.0)
 		
 	queue_redraw()
 
@@ -164,6 +169,20 @@ func explode() -> void:
 	
 	print("Combat: Enemy car destroyed!")
 	
+	# Check if all other enemies are defeated
+	var active_enemies = 0
+	var enemies = get_tree().get_nodes_in_group("enemies")
+	for e in enemies:
+		if is_instance_valid(e) and e != self and not e.get("is_exploding"):
+			active_enemies += 1
+			
+	if active_enemies == 0:
+		print("All enemy trucks defeated! Ending event early.")
+		if is_instance_valid(truck):
+			var timer_bar = truck.get_node_or_null("HUD/EventTimerBar")
+			if timer_bar and timer_bar.has_method("end_event"):
+				timer_bar.call("end_event")
+				
 	await get_tree().create_timer(0.8).timeout
 	queue_free()
 
@@ -172,6 +191,15 @@ func _on_area_entered(_area: Area2D) -> void:
 
 func _draw() -> void:
 	if is_exploding:
+		return
+		
+	# If there are visible visual child nodes, bypass default vector drawing
+	var has_custom_visuals := false
+	for child in get_children():
+		if (child is ColorRect or child is Sprite2D or child is Polygon2D) and child.visible:
+			has_custom_visuals = true
+			break
+	if has_custom_visuals:
 		return
 		
 	# Modulate geometry to red if flashing on hit

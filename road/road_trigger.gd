@@ -49,6 +49,15 @@ func _on_body_entered(body: Node2D) -> void:
 	if triggered:
 		return
 	
+	# Skip triggering a new event wheel if an event is already active
+	var truck = get_node_or_null("/root/main/truck")
+	if truck:
+		var existing_timer = truck.get_node_or_null("HUD/EventTimerBar")
+		if existing_timer:
+			triggered = true
+			queue_free()
+			return
+	
 	# Check if truck body or wheels entered
 	if body.name in ["chassis", "container_body"] or body.name.begins_with("tyre"):
 		triggered = true
