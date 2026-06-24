@@ -1,3 +1,4 @@
+@tool
 extends Area2D
 
 # Config
@@ -18,7 +19,13 @@ var flash_timer := 0.0
 var is_exploding := false
 
 func _ready() -> void:
+	if Engine.is_editor_hint():
+		scale = Vector2(1.4, 1.4)
+		z_index = 6
+		return
+		
 	add_to_group("enemies")
+	z_index = 6
 	
 	# Connect to signals
 	area_entered.connect(_on_area_entered)
@@ -45,9 +52,13 @@ func _ready() -> void:
 	# Draw scaling spawn bounce
 	scale = Vector2.ZERO
 	var tween = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	tween.tween_property(self, "scale", Vector2.ONE, 0.5)
+	tween.tween_property(self, "scale", Vector2(1.4, 1.4), 0.5)
 
 func _physics_process(delta: float) -> void:
+	if Engine.is_editor_hint():
+		queue_redraw()
+		return
+		
 	if is_exploding:
 		return
 		
@@ -88,7 +99,7 @@ func _physics_process(delta: float) -> void:
 func snap_to_road() -> void:
 	if road and road.has_method("get_road_height"):
 		var ry = road.call("get_road_height", position.x)
-		position.y = ry
+		position.y = ry - 9.0
 		
 		# Find angle/slope
 		var ry_front = road.call("get_road_height", position.x + 20.0)
@@ -188,60 +199,147 @@ func _draw() -> void:
 	if has_custom_visuals:
 		return
 		
-	# Modulate geometry to red if flashing on hit
-	var car_color = Color(0.85, 0.2, 0.2) # Red sports combat car
+	# HCR Buggy theme colors
+	var panel_color = Color(1.0, 0.42, 0.0) # Bright HCR Orange
+	var frame_color = Color(0.12, 0.14, 0.16) # Dark roll cage
+	var coil_color = Color(1.0, 0.75, 0.0) # Yellow shock springs
+	var metal_color = Color(0.5, 0.52, 0.56)
+	
 	if flash_timer > 0.0:
-		car_color = Color(1.0, 1.0, 1.0) # White hitflash
+		panel_color = Color(1.0, 1.0, 1.0)
+		frame_color = Color(1.0, 1.0, 1.0)
+		coil_color = Color(1.0, 1.0, 1.0)
+		metal_color = Color(1.0, 1.0, 1.0)
 		
-	var metal_trim = Color(0.12, 0.14, 0.16)
-	var window_col = Color(0.1, 0.1, 0.12)
+	var metal_trim = Color(0.08, 0.09, 0.1)
 	
-	# 1. Wheels (Two wheels at the base of chassis)
-	var w1_pos = Vector2(-22, -4)
-	var w2_pos = Vector2(22, -4)
+	# Wheels config for suspension math
+	var w1_pos = Vector2(-24, -5)
+	var w2_pos = Vector2(24, -5)
+	var wheel_spin_angle = 0.0
+	if Engine.is_editor_hint():
+		wheel_spin_angle = Time.get_ticks_msec() * 0.015
+	else:
+		wheel_spin_angle = position.x / 14.0
+		
+	# 2. Exposed Suspension & Coil Springs (Drawn behind body)
 	for w_pos in [w1_pos, w2_pos]:
-		draw_circle(w_pos, 8.5, metal_trim)
-		draw_circle(w_pos, 5.0, Color(0.5, 0.5, 0.55)) # Silver rims
-		draw_circle(w_pos, 2.0, Color.BLACK)
+		var mount_pt = Vector2(w_pos.x * 0.5, -22.0)
+		# Draw solid suspension arm
+		draw_line(w_pos, mount_pt, Color(0.3, 0.32, 0.35) if flash_timer <= 0.0 else Color(1, 1, 1), 3.0)
+		# Draw detailed helical coil spring
+		var coil_steps = 7
+		for i in range(coil_steps):
+			var t1 = float(i) / coil_steps
+			var t2 = float(i + 1) / coil_steps
+			var p1 = w_pos.lerp(mount_pt, t1)
+			var p2 = w_pos.lerp(mount_pt, t2)
+			# Alternate sides for spring coils
+			var offset_dir = Vector2.UP.rotated((mount_pt - w_pos).angle())
+			var offset = offset_dir * (3.5 if i % 2 == 0 else -3.5)
+			draw_line(p1 + offset, p2 - offset, coil_color, 2.0)
+			
+	# 3. Rear Exposed Engine block & Angled Exhaust
+	var eng_pts = PackedVector2Array([
+		Vector2(-28, -12), Vector2(-16, -12),
+		Vector2(-16, -20), Vector2(-28, -20)
+	])
+	draw_colored_polygon(eng_pts, Color(0.2, 0.22, 0.25) if flash_timer <= 0.0 else Color(1, 1, 1))
+	draw_polyline(eng_pts, metal_trim, 1.2)
+	# Engine fan/pulley detail
+	draw_circle(Vector2(-22, -16), 3.0, Color.DARK_GRAY)
+	
+	# Exhaust sidepipe pointing up/back with backfire sparks
+	var exh_start = Vector2(-24, -20)
+	var exh_end = Vector2(-34, -27)
+	draw_line(exh_start, exh_end, metal_color, 3.0)
+	if flash_timer <= 0.0 and Engine.get_physics_frames() % 6 < 3:
+		draw_line(exh_end, exh_end + Vector2(-8 - randf() * 4.0, -6), Color(1.0, 0.5, 0.1, 0.8), 2.0)
+		draw_line(exh_end, exh_end + Vector2(-5 - randf() * 3.0, -3), Color(1.0, 0.8, 0.2, 0.9), 1.2)
 		
-	# 2. Main Car Body
-	# Skewed polygon for streamlined retro sports car body
-	var body_pts = PackedVector2Array([
-		Vector2(-38, -6),
-		Vector2(38, -6),
-		Vector2(34, -20),
-		Vector2(16, -20),
-		Vector2(6, -30),
-		Vector2(-24, -30),
-		Vector2(-34, -18)
+	# 4. HCR-style Minimalist Body Panels (Orange)
+	# Nose hood panel
+	var nose_pts = PackedVector2Array([
+		Vector2(14, -12), Vector2(30, -12),
+		Vector2(22, -18), Vector2(14, -18)
 	])
-	draw_colored_polygon(body_pts, car_color)
-	draw_polyline(body_pts, metal_trim, 2.0)
+	draw_colored_polygon(nose_pts, panel_color)
+	draw_polyline(nose_pts, metal_trim, 1.5)
 	
-	# Windshield / Cabin Glass
-	var wind_pts = PackedVector2Array([
-		Vector2(14, -20),
-		Vector2(6, -28),
-		Vector2(-4, -28),
-		Vector2(-2, -20)
+	# Cabin side panel
+	var side_pts = PackedVector2Array([
+		Vector2(-16, -12), Vector2(14, -12),
+		Vector2(6, -20), Vector2(-12, -20)
 	])
-	draw_colored_polygon(wind_pts, window_col)
-	draw_polyline(wind_pts, metal_trim, 1.2)
+	draw_colored_polygon(side_pts, panel_color)
+	draw_polyline(side_pts, metal_trim, 1.5)
 	
-	# Spoiler Wing (rear wing)
-	draw_rect(Rect2(-36, -24, 6, 6), car_color, true)
-	draw_line(Vector2(-38, -24), Vector2(-30, -24), metal_trim, 2.5)
+	# 5. Tubular Roll Cage Frame (Thick structural rails overlay)
+	# Bottom rail
+	draw_line(Vector2(-32, -12), Vector2(32, -12), frame_color, 3.5)
+	# Front bumper loop
+	draw_line(Vector2(32, -12), Vector2(34, -17), frame_color, 3.5)
+	draw_line(Vector2(34, -17), Vector2(30, -12), frame_color, 3.5)
+	# A-pillar
+	draw_line(Vector2(16, -12), Vector2(4, -30), frame_color, 3.5)
+	# B-pillar
+	draw_line(Vector2(-14, -12), Vector2(-8, -30), frame_color, 3.5)
+	# Roof bar
+	draw_line(Vector2(-8, -30), Vector2(4, -30), frame_color, 3.5)
+	# Rear roll bar brace
+	draw_line(Vector2(-8, -30), Vector2(-30, -12), frame_color, 3.5)
 	
-	# 3. Turret / Gun Barrel on Top (pointing towards the player/forward)
-	var turret_pivot = Vector2(-5.0, -32.0)
-	draw_circle(turret_pivot, 5.5, metal_trim)
+	# 6. Oversized Heavy-Duty Chunky Wheels
+	for w_pos in [w1_pos, w2_pos]:
+		# Outer black tire core (radius 14.0)
+		draw_circle(w_pos, 11.5, metal_trim)
+		
+		# 8 Aggressive off-road tread blocks (spin dynamically)
+		for t in range(8):
+			var angle = t * (2.0 * PI / 8.0) + wheel_spin_angle
+			var tread_start = w_pos + Vector2(cos(angle), sin(angle)) * 11.0
+			var tread_end = w_pos + Vector2(cos(angle), sin(angle)) * 14.0
+			draw_line(tread_start, tread_end, metal_trim, 3.5)
+			
+		# Inner HCR matching rim hub
+		draw_circle(w_pos, 7.5, panel_color)
+		draw_circle(w_pos, 3.0, frame_color)
+		
+		# 4 Rim spokes (dynamic rotation)
+		for s in range(4):
+			var angle = s * (2.0 * PI / 4.0) + wheel_spin_angle
+			var spoke_end = w_pos + Vector2(cos(angle), sin(angle)) * 7.5
+			draw_line(w_pos, spoke_end, frame_color, 1.8)
+			
+	# 7. Roof-Mounted Combat Rocket Launcher Pod
+	var turret_pivot = Vector2(-2.0, -32.0)
+	draw_circle(turret_pivot, 4.0, frame_color)
 	
-	# Barrel pointing forward (pointing right)
 	var turret_angle = 0.0
 	if is_instance_valid(chassis):
 		turret_angle = (chassis.global_position - global_position).angle() - rotation
 		
-	# Draw rotated barrel line
 	var barrel_dir = Vector2.RIGHT.rotated(turret_angle)
-	draw_line(turret_pivot, turret_pivot + barrel_dir * 18.0, metal_trim, 3.5)
-	draw_circle(turret_pivot + barrel_dir * 18.0, 2.2, Color.RED) # laser designator tip
+	var barrel_perp = Vector2.UP.rotated(turret_angle)
+	
+	# Rocket Pod Launcher Box (angled towards player)
+	var box_center = turret_pivot + barrel_dir * 4.0
+	var box_w = 12.0
+	var box_h = 7.0
+	var box_pts = PackedVector2Array([
+		box_center - barrel_dir * (box_w/2) - barrel_perp * (box_h/2),
+		box_center + barrel_dir * (box_w/2) - barrel_perp * (box_h/2),
+		box_center + barrel_dir * (box_w/2) + barrel_perp * (box_h/2),
+		box_center - barrel_dir * (box_w/2) + barrel_perp * (box_h/2)
+	])
+	draw_colored_polygon(box_pts, frame_color)
+	draw_polyline(box_pts, metal_trim, 1.2)
+	
+	# Yellow/Black hazard warning stripe on rocket pod
+	if flash_timer <= 0.0:
+		draw_line(box_center - barrel_dir * 2.0 - barrel_perp * 3.0, box_center + barrel_dir * 2.0 + barrel_perp * 3.0, coil_color, 1.8)
+		
+	# Glowing rocket tube ports (front face)
+	var front_face = box_center + barrel_dir * (box_w/2)
+	draw_circle(front_face + barrel_perp * 2.0, 1.5, Color(1.0, 0.35, 0.1) if flash_timer <= 0.0 else Color(1, 1, 1))
+	draw_circle(front_face - barrel_perp * 2.0, 1.5, Color(1.0, 0.35, 0.1) if flash_timer <= 0.0 else Color(1, 1, 1))
