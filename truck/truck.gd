@@ -31,6 +31,10 @@ var is_autopilot := false
 var truck_max_health := 100.0
 var truck_health := 100.0
 var cheat_buffer := ""
+var convoy_spawn_timer := 0.0
+const CONVOY_SPAWN_INTERVAL := 4.0 # Spawn an enemy every 4 seconds
+const MAX_CONVOY_ENEMIES := 4
+var boost_timer := 0.0
 
 func _ready() -> void:
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
@@ -131,11 +135,36 @@ func _physics_process(_delta: float) -> void:
 	var forward_pressed = Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_RIGHT)
 	var backward_pressed = Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT)
 	
+	# Apply dynamic reward velocity boost after convoy event completes
+	if boost_timer > 0.0:
+		boost_timer -= _delta
+		forward_pressed = true
+		backward_pressed = false
+		if current_gear != Gear.DRIVE:
+			set_gear(Gear.DRIVE)
+	
 	if is_autopilot:
 		forward_pressed = true
 		backward_pressed = false
 		if current_gear != Gear.DRIVE:
 			set_gear(Gear.DRIVE)
+			
+		# Handle dynamic enemy spawning during active convoy
+		convoy_spawn_timer -= _delta
+		if convoy_spawn_timer <= 0.0:
+			# Roll next spawn delay with a Gaussian distribution (mean=4.0s, deviation=1.2s, clamped between 2.0s and 6.0s)
+			convoy_spawn_timer = clamp(randfn(4.0, 1.2), 2.0, 6.0)
+			var active_enemies = 0
+			for child in get_parent().get_children():
+				if child.is_in_group("enemies") and not child.get("is_exploding"):
+					active_enemies += 1
+			
+			# Roll a wave size (Gaussian mean=3, dev=0.8, clamped 2 to 4) and spawn up to the active limit
+			var spawn_count = int(clamp(round(randfn(3.0, 0.8)), 2.0, 4.0))
+			for i in range(spawn_count):
+				if active_enemies < MAX_CONVOY_ENEMIES:
+					spawn_single_enemy_car()
+					active_enemies += 1
 			
 	var move_input = 0.0
 	var is_braking = false
@@ -243,9 +272,18 @@ func _physics_process(_delta: float) -> void:
 				
 			# Cap wheel spin velocity
 			var current_max_vel = 30.0 if is_autopilot else max_angular_velocity
+			if boost_timer > 0.0:
+				current_max_vel = 60.0
 			tyre_1.angular_velocity = clamp(tyre_1.angular_velocity, -current_max_vel, current_max_vel)
 			tyre_2.angular_velocity = clamp(tyre_2.angular_velocity, -current_max_vel, current_max_vel)
 			tyre_3.angular_velocity = clamp(tyre_3.angular_velocity, -current_max_vel, current_max_vel)
+			
+			# Enforce continuous high velocity during reward boost
+			if boost_timer > 0.0:
+				var target_wheel_spin = 55.0
+				tyre_1.angular_velocity = target_wheel_spin
+				tyre_2.angular_velocity = target_wheel_spin
+				tyre_3.angular_velocity = target_wheel_spin
 
 	# Apply air tilting torque (active in mid-air or balance controls)
 	if tilt_input != 0.0:
@@ -279,7 +317,7 @@ func _input(event: InputEvent) -> void:
 					var hud = get_node_or_null("HUD")
 					if hud:
 						hud.add_child(timer_bar)
-						timer_bar.call("setup", "Convoy", "🚚", Color(0.15, 0.42, 0.85), 15.0)
+						timer_bar.call("setup", "Convoy", "🚚", Color(0.15, 0.42, 0.85), 30.0)
 
 func _on_gear_button_pressed(gear_type: Gear) -> void:
 	set_gear(gear_type)
@@ -390,32 +428,25 @@ func start_active_event(event_name: String) -> void:
 			hb.name = "TruckHealthBar"
 			chassis.add_child(hb)
 			
-		# Spawn 3-4 chasing enemy cars from the TSCN file
-		var enemy_scene = load("res://obstacles/enemy_car.tscn")
-		if enemy_scene:
-			# Clean existing enemies
-			for child in get_parent().get_children():
-				if child.is_in_group("enemies"):
-					child.queue_free()
-					
-			for i in range(3):
-				var enemy = enemy_scene.instantiate()
-				enemy.name = "EnemyCar_" + str(i)
-				enemy.set("target_distance", 480.0 + i * 70.0)
+		# Clean existing enemies
+		for child in get_parent().get_children():
+			if child.is_in_group("enemies"):
+				child.queue_free()
 				
-				var spawn_x = chassis.global_position.x - (480.0 + i * 70.0) - 200.0
-				road = get_node_or_null("/root/main/Road")
-				var spawn_y = 0.0
-				if road and road.has_method("get_road_height"):
-					spawn_y = road.call("get_road_height", spawn_x)
-					
-				get_parent().add_child(enemy)
-				enemy.global_position = Vector2(spawn_x, spawn_y)
+		# Spawn initial enemies using dynamic helper with a Gaussian wave size (2-4)
+		var initial_count = int(clamp(round(randfn(3.0, 0.8)), 2.0, 4.0))
+		for i in range(initial_count):
+			spawn_single_enemy_car(i)
+			
+		convoy_spawn_timer = CONVOY_SPAWN_INTERVAL
 
 func end_active_event(event_name: String) -> void:
 	print("Truck ending active event: ", event_name)
 	if event_name == "Convoy":
 		is_autopilot = false
+		
+		# Trigger 5-second reward velocity boost
+		boost_timer = 5.0
 		
 		# Restore camera
 		var camera = get_node_or_null("/root/main/Camera2D")
@@ -495,3 +526,49 @@ func spill_all_cargo() -> void:
 				if new_crate is RigidBody2D:
 					new_crate.linear_velocity = container_body.linear_velocity + Vector2(randf_range(-150, 150), randf_range(-200, -50))
 					new_crate.angular_velocity = randf_range(-10, 10)
+
+func spawn_single_enemy_car(slot_index: int = -1) -> void:
+	var enemy_scene = load("res://obstacles/enemy_car.tscn")
+	if not enemy_scene:
+		return
+		
+	var target_dist = 550.0
+	if slot_index >= 0 and slot_index <= 2:
+		# Use deterministic spacing for initial spawn layout
+		target_dist = 480.0 + slot_index * 70.0
+	else:
+		# Use Gaussian distribution for dynamic target distances (mean=550.0, deviation=70.0)
+		var attempts = 0
+		while attempts < 10:
+			var candidate = randfn(550.0, 70.0)
+			candidate = clamp(candidate, 450.0, 680.0)
+			
+			# Ensure we are not overlapping too closely with other active enemies
+			var too_close = false
+			for child in get_parent().get_children():
+				if child.is_in_group("enemies") and not child.get("is_exploding"):
+					var active_dist = child.get("target_distance")
+					if active_dist != null and abs(active_dist - candidate) < 55.0:
+						too_close = true
+						break
+			if not too_close:
+				target_dist = candidate
+				break
+			attempts += 1
+			
+		if attempts >= 10:
+			target_dist = clamp(randfn(550.0, 70.0), 450.0, 680.0)
+
+	var enemy = enemy_scene.instantiate()
+	enemy.name = "EnemyCar_Dynamic_" + str(Time.get_ticks_msec()) + "_" + str(randi() % 100)
+	enemy.set("target_distance", target_dist)
+	
+	# Spawn position is behind the screen/player
+	var spawn_x = chassis.global_position.x - target_dist - 250.0
+	var road = get_node_or_null("/root/main/Road")
+	var spawn_y = 0.0
+	if road and road.has_method("get_road_height"):
+		spawn_y = road.call("get_road_height", spawn_x)
+		
+	get_parent().add_child(enemy)
+	enemy.global_position = Vector2(spawn_x, spawn_y)

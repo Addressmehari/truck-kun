@@ -197,7 +197,8 @@ func close_popup() -> void:
 			hud.add_child(timer_bar)
 			
 			var ev = events[selected_index]
-			timer_bar.call("setup", ev["name"], ev["icon"], ev["color"], 15.0)
+			var duration = 30.0 if ev["name"] == "Convoy" else 15.0
+			timer_bar.call("setup", ev["name"], ev["icon"], ev["color"], duration)
 			
 	# Restore normal game speed
 	Engine.time_scale = 1.0

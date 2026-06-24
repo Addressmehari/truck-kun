@@ -23,7 +23,7 @@ func _ready():
 func _physics_process(delta):
 	if is_instance_valid(target):
 		# Interpolate horizontal offset dynamically (combat transition shift)
-		horizontal_offset = lerp(horizontal_offset, target_horizontal_offset, 3.0 * delta)
+		horizontal_offset = lerp(horizontal_offset, target_horizontal_offset, 1.5 * delta)
 		
 		# Interpolate position smoothly to center the truck in the camera view with offsets
 		var target_pos = target.global_position + Vector2(horizontal_offset, vertical_offset)

@@ -169,20 +169,6 @@ func explode() -> void:
 	
 	print("Combat: Enemy car destroyed!")
 	
-	# Check if all other enemies are defeated
-	var active_enemies = 0
-	var enemies = get_tree().get_nodes_in_group("enemies")
-	for e in enemies:
-		if is_instance_valid(e) and e != self and not e.get("is_exploding"):
-			active_enemies += 1
-			
-	if active_enemies == 0:
-		print("All enemy trucks defeated! Ending event early.")
-		if is_instance_valid(truck):
-			var timer_bar = truck.get_node_or_null("HUD/EventTimerBar")
-			if timer_bar and timer_bar.has_method("end_event"):
-				timer_bar.call("end_event")
-				
 	await get_tree().create_timer(0.8).timeout
 	queue_free()
 
