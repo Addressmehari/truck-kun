@@ -422,8 +422,29 @@ func end_active_event(event_name: String) -> void:
 		convoy_end_x = get_target_x()
 		regenerate_runtime_chunks()
 
+func is_event_active() -> bool:
+	if Engine.is_editor_hint():
+		return false
+		
+	var truck = get_node_or_null("../truck")
+	if truck and is_instance_valid(truck):
+		if truck.get("is_autopilot") == true:
+			return true
+		var hud = truck.get_node_or_null("HUD")
+		if hud and is_instance_valid(hud):
+			var timer_bar = hud.get_node_or_null("EventTimerBar")
+			if timer_bar and is_instance_valid(timer_bar):
+				return true
+			var wheel = hud.get_node_or_null("EventWheelPopup")
+			if wheel and is_instance_valid(wheel):
+				return true
+	return false
+
 # Deterministically get tunnel details for a given chunk
 func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
+	if is_event_active():
+		return {}
+		
 	# Avoid tunnels too close to spawn (within 1500 units)
 	var spawn_buffer_chunks = int(ceil(1500.0 / chunk_width))
 	if abs(chunk_index) <= spawn_buffer_chunks:

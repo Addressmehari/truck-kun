@@ -38,6 +38,11 @@ func setup(ev_name: String, ev_icon: String, ev_color: Color, ev_duration: float
 	var tween = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	tween.tween_property(self, "offset_top", 20.0, 0.5)
 	tween.tween_property(self, "offset_bottom", 150.0, 0.5)
+	
+	# Regenerate road chunks immediately so existing tunnels disappear instantly at start of event
+	var road = get_node_or_null("/root/main/Road")
+	if road and road.has_method("regenerate_runtime_chunks"):
+		road.call("regenerate_runtime_chunks")
 
 func _process(delta: float) -> void:
 	if not is_active:
@@ -82,6 +87,9 @@ func end_event() -> void:
 	var road = get_node_or_null("/root/main/Road")
 	if road and road.has_method("end_active_event"):
 		road.call("end_active_event", event_name)
+	# Regenerate road chunks immediately so tunnels can spawn again after event ends
+	if road and road.has_method("regenerate_runtime_chunks"):
+		road.call("regenerate_runtime_chunks")
 		
 	var truck = get_node_or_null("/root/main/truck")
 	if truck and truck.has_method("end_active_event"):
