@@ -86,6 +86,23 @@ func _draw() -> void:
 	var skin_col := Color(0.98, 0.85, 0.7)       # Skin tone
 	var suit_col := Color(0.12, 0.35, 0.6)       # Blue combat outfit
 	var gun_col := Color(0.15, 0.16, 0.18)       # Metallic dark grey
+	var scope_col := Color(0.2, 0.2, 0.22)
+	var clip_col := Color(0.1, 0.1, 0.12)
+	
+	var is_silhouette := false
+	var road = get_node_or_null("/root/main/Road")
+	if road and road.has_method("get_current_biome"):
+		var biome = road.call("get_current_biome")
+		if biome and biome.get("use_silhouette_truck") == true:
+			is_silhouette = true
+			
+	if is_silhouette:
+		helmet_col = Color.BLACK
+		skin_col = Color.BLACK
+		suit_col = Color.BLACK
+		gun_col = Color.BLACK
+		scope_col = Color.BLACK
+		clip_col = Color.BLACK
 	
 	# 1. Draw Body Torso (emerging from container)
 	# Draw skewed rectangle for torso
@@ -134,11 +151,11 @@ func _draw() -> void:
 	draw_rect(Rect2(10, -2.5, 14, 5), Color.BLACK, false, 1.5)
 	
 	# Scope
-	draw_rect(Rect2(-2, -6.5, 10, 3.5), Color(0.2, 0.2, 0.22), true)
+	draw_rect(Rect2(-2, -6.5, 10, 3.5), scope_col, true)
 	draw_rect(Rect2(-2, -6.5, 10, 3.5), Color.BLACK, false, 1.0)
 	
 	# Clip/Magazine
-	draw_rect(Rect2(2, 4, 4, 7), Color(0.1, 0.1, 0.12), true)
+	draw_rect(Rect2(2, 4, 4, 7), clip_col, true)
 	draw_rect(Rect2(2, 4, 4, 7), Color.BLACK, false, 1.0)
 
 # Handles rendering the crosshair reticle on the dedicated absolute top layer

@@ -199,12 +199,24 @@ func _draw() -> void:
 	if has_custom_visuals:
 		return
 		
+	var is_silhouette := false
+	if road and road.has_method("get_current_biome"):
+		var biome = road.call("get_current_biome")
+		if biome and biome.get("use_silhouette_truck") == true:
+			is_silhouette = true
+			
 	# HCR Buggy theme colors
 	var panel_color = Color(1.0, 0.42, 0.0) # Bright HCR Orange
 	var frame_color = Color(0.12, 0.14, 0.16) # Dark roll cage
 	var coil_color = Color(1.0, 0.75, 0.0) # Yellow shock springs
 	var metal_color = Color(0.5, 0.52, 0.56)
 	
+	if is_silhouette:
+		panel_color = Color.BLACK
+		frame_color = Color.BLACK
+		coil_color = Color.BLACK
+		metal_color = Color.BLACK
+		
 	if flash_timer > 0.0:
 		panel_color = Color(1.0, 1.0, 1.0)
 		frame_color = Color(1.0, 1.0, 1.0)
@@ -212,6 +224,10 @@ func _draw() -> void:
 		metal_color = Color(1.0, 1.0, 1.0)
 		
 	var metal_trim = Color(0.08, 0.09, 0.1)
+	if is_silhouette:
+		metal_trim = Color.BLACK
+	if flash_timer > 0.0:
+		metal_trim = Color(1.0, 1.0, 1.0)
 	
 	# Wheels config for suspension math
 	var w1_pos = Vector2(-24, -5)
@@ -244,16 +260,19 @@ func _draw() -> void:
 		Vector2(-28, -12), Vector2(-16, -12),
 		Vector2(-16, -20), Vector2(-28, -20)
 	])
-	draw_colored_polygon(eng_pts, Color(0.2, 0.22, 0.25) if flash_timer <= 0.0 else Color(1, 1, 1))
+	var eng_color = Color(0.2, 0.22, 0.25) if flash_timer <= 0.0 else Color(1, 1, 1)
+	if is_silhouette and flash_timer <= 0.0:
+		eng_color = Color.BLACK
+	draw_colored_polygon(eng_pts, eng_color)
 	draw_polyline(eng_pts, metal_trim, 1.2)
 	# Engine fan/pulley detail
-	draw_circle(Vector2(-22, -16), 3.0, Color.DARK_GRAY)
+	draw_circle(Vector2(-22, -16), 3.0, Color.DARK_GRAY if not is_silhouette else Color.BLACK)
 	
 	# Exhaust sidepipe pointing up/back with backfire sparks
 	var exh_start = Vector2(-24, -20)
 	var exh_end = Vector2(-34, -27)
 	draw_line(exh_start, exh_end, metal_color, 3.0)
-	if flash_timer <= 0.0 and Engine.get_physics_frames() % 6 < 3:
+	if not is_silhouette and flash_timer <= 0.0 and Engine.get_physics_frames() % 6 < 3:
 		draw_line(exh_end, exh_end + Vector2(-8 - randf() * 4.0, -6), Color(1.0, 0.5, 0.1, 0.8), 2.0)
 		draw_line(exh_end, exh_end + Vector2(-5 - randf() * 3.0, -3), Color(1.0, 0.8, 0.2, 0.9), 1.2)
 		
@@ -336,10 +355,13 @@ func _draw() -> void:
 	draw_polyline(box_pts, metal_trim, 1.2)
 	
 	# Yellow/Black hazard warning stripe on rocket pod
-	if flash_timer <= 0.0:
+	if not is_silhouette and flash_timer <= 0.0:
 		draw_line(box_center - barrel_dir * 2.0 - barrel_perp * 3.0, box_center + barrel_dir * 2.0 + barrel_perp * 3.0, coil_color, 1.8)
 		
 	# Glowing rocket tube ports (front face)
 	var front_face = box_center + barrel_dir * (box_w/2)
-	draw_circle(front_face + barrel_perp * 2.0, 1.5, Color(1.0, 0.35, 0.1) if flash_timer <= 0.0 else Color(1, 1, 1))
-	draw_circle(front_face - barrel_perp * 2.0, 1.5, Color(1.0, 0.35, 0.1) if flash_timer <= 0.0 else Color(1, 1, 1))
+	var port_color = Color(1.0, 0.35, 0.1) if flash_timer <= 0.0 else Color(1, 1, 1)
+	if is_silhouette and flash_timer <= 0.0:
+		port_color = Color.BLACK
+	draw_circle(front_face + barrel_perp * 2.0, 1.5, port_color)
+	draw_circle(front_face - barrel_perp * 2.0, 1.5, port_color)
