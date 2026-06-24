@@ -132,19 +132,6 @@ func _physics_process(delta: float) -> void:
 	# Control tyre dust emissions
 	var speed = linear_velocity.length()
 	
-	# Calculate suspension bounce vibration (subtle and smooth)
-	var bounce = 0.0
-	if speed > 10.0:
-		# Very subtle road vibration, max 0.8 pixels
-		bounce = sin(Time.get_ticks_msec() * 0.025) * clamp(speed * 0.015, 0.3, 0.8)
-	else:
-		# Slow breathing idle trailer shake, max 0.3 pixels
-		bounce = sin(Time.get_ticks_msec() * 0.012) * 0.3
-		
-	bounce_offset = Vector2(0, bounce)
-	
-	if backdoor:
-		backdoor.position = backdoor_start_pos + bounce_offset
 	var emit_2 = false
 	var emit_3 = false
 	if speed > 30.0:
@@ -237,21 +224,13 @@ func _draw() -> void:
 	if not is_instance_valid(truck):
 		return
 		
-	# Apply visual container bounce/shake
-	draw_set_transform(bounce_offset)
+	# Apply visual container transform (none — physics owns motion)
+	draw_set_transform(Vector2.ZERO)
 		
 	var container_left = -117.0
 	var container_right = -5.0
 	var container_top = -80.0
 	var container_bottom = -1.0
-
-	# --- 1. Draw Suspension Springs ---
-	if is_instance_valid(tyre_2):
-		var local_tyre = to_local(tyre_2.global_position)
-		draw_spring(Vector2(-33, -30), local_tyre - bounce_offset, 7.0, 5)
-	if is_instance_valid(tyre_3):
-		var local_tyre = to_local(tyre_3.global_position)
-		draw_spring(Vector2(-93, -30), local_tyre - bounce_offset, 7.0, 5)
 
 	# --- 2. Draw Mudflap (Behind Rear Wheel) ---
 	draw_rect(Rect2(-114, 0, 3, 14), Color(0.12, 0.12, 0.14), true)

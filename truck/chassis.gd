@@ -104,20 +104,7 @@ func _physics_process(_delta: float) -> void:
 	dust_particles.emitting = emit_dust
 
 func _draw() -> void:
-	# Calculate engine wobble vibration
 	var speed = linear_velocity.length()
-	var wobble = 0.0
-	if speed < 15.0:
-		wobble = sin(Time.get_ticks_msec() * 0.06) * 0.7 # Engine idle vibration
-	else:
-		wobble = sin(Time.get_ticks_msec() * 0.03) * 0.4 # Drive vibration
-	
-	var wobble_offset = Vector2(0, wobble)
-
-	# --- 1. Draw Suspension Spring ---
-	if is_instance_valid(tyre_1):
-		var local_tyre = to_local(tyre_1.global_position)
-		draw_spring(Vector2(35, -30), local_tyre, 7.0, 5)
 
 	# --- 2. Draw Exhaust Pipe (Behind Cabin) ---
 	var exhaust_color = Color(0.6, 0.62, 0.65)
@@ -136,42 +123,42 @@ func _draw() -> void:
 	var shadow_color = Color(0.8, 0.32, 0.03)
 	
 	var cab_poly = PackedVector2Array([
-		Vector2(1, 0) + wobble_offset,
-		Vector2(1, -72) + wobble_offset,
-		Vector2(36, -72) + wobble_offset,
-		Vector2(60, -42) + wobble_offset,
-		Vector2(68, -42) + wobble_offset,
-		Vector2(68, 0) + wobble_offset
+		Vector2(1, 0),
+		Vector2(1, -72),
+		Vector2(36, -72),
+		Vector2(60, -42),
+		Vector2(68, -42),
+		Vector2(68, 0)
 	])
 	draw_polygon(cab_poly, PackedColorArray([cab_color]))
 	
 	# Draw bottom metal plate / side skirts
 	var plate_poly = PackedVector2Array([
-		Vector2(1, -12) + wobble_offset,
-		Vector2(68, -12) + wobble_offset,
-		Vector2(68, 0) + wobble_offset,
-		Vector2(1, 0) + wobble_offset
+		Vector2(1, -12),
+		Vector2(68, -12),
+		Vector2(68, 0),
+		Vector2(1, 0)
 	])
 	draw_polygon(plate_poly, PackedColorArray([Color(0.18, 0.18, 0.2)]))
 
 	# Draw cabin side shadow band (horizontal strip)
 	var shadow_poly = PackedVector2Array([
-		Vector2(1, -44) + wobble_offset,
-		Vector2(58, -44) + wobble_offset,
-		Vector2(62, -42) + wobble_offset,
-		Vector2(68, -42) + wobble_offset,
-		Vector2(68, -34) + wobble_offset,
-		Vector2(1, -34) + wobble_offset
+		Vector2(1, -44),
+		Vector2(58, -44),
+		Vector2(62, -42),
+		Vector2(68, -42),
+		Vector2(68, -34),
+		Vector2(1, -34)
 	])
 	draw_polygon(shadow_poly, PackedColorArray([shadow_color]))
 
 	# --- 4. Draw Cabin Side Window (Cyan glass with reflection) ---
 	var window_color = Color(0.25, 0.75, 0.9, 0.65)
 	var window_poly = PackedVector2Array([
-		Vector2(18, -66) + wobble_offset,
-		Vector2(35, -66) + wobble_offset,
-		Vector2(54, -45) + wobble_offset,
-		Vector2(18, -45) + wobble_offset
+		Vector2(18, -66),
+		Vector2(35, -66),
+		Vector2(54, -45),
+		Vector2(18, -45)
 	])
 	draw_polygon(window_poly, PackedColorArray([window_color]))
 	# Window border
@@ -179,19 +166,19 @@ func _draw() -> void:
 	
 	# Windshield white reflection glint
 	var glint_poly = PackedVector2Array([
-		Vector2(28, -66) + wobble_offset,
-		Vector2(32, -66) + wobble_offset,
-		Vector2(44, -45) + wobble_offset,
-		Vector2(40, -45) + wobble_offset
+		Vector2(28, -66),
+		Vector2(32, -66),
+		Vector2(44, -45),
+		Vector2(40, -45)
 	])
 	draw_polygon(glint_poly, PackedColorArray([Color(1, 1, 1, 0.35)]))
 
 	# Draw driver silhouette inside (subtle steering driver)
-	draw_circle(Vector2(26, -53) + wobble_offset, 4.5, Color(0.08, 0.08, 0.1, 0.8)) # head
-	draw_rect(Rect2(Vector2(22, -48) + wobble_offset, Vector2(9, 3)), Color(0.08, 0.08, 0.1, 0.8), true) # shoulders
+	draw_circle(Vector2(26, -53), 4.5, Color(0.08, 0.08, 0.1, 0.8)) # head
+	draw_rect(Rect2(Vector2(22, -48), Vector2(9, 3)), Color(0.08, 0.08, 0.1, 0.8), true) # shoulders
 
 	# --- 4.5 Draw Tiny Miniature Dashboard inside cabin window ---
-	var dash_pos = Vector2(44, -51) + wobble_offset
+	var dash_pos = Vector2(44, -51)
 	# Black mini gauge backing
 	draw_circle(dash_pos, 4.0, Color(0.08, 0.08, 0.1))
 	draw_circle(dash_pos, 3.2, Color(0.04, 0.04, 0.06))
@@ -207,7 +194,7 @@ func _draw() -> void:
 	draw_line(dash_pos, dash_pos + mini_dir * 2.8, Color(0.95, 0.15, 0.15), 1.0)
 	
 	# Tiny Gear LED next to the gauge
-	var led_pos = Vector2(49, -54) + wobble_offset
+	var led_pos = Vector2(49, -54)
 	var mini_gear = 1 # DRIVE default
 	if not Engine.is_editor_hint():
 		var parent_node = get_parent()
@@ -228,10 +215,10 @@ func _draw() -> void:
 	# Grille lines (black metallic slots)
 	for i in range(4):
 		var y_off = -32 + (i * 5)
-		draw_line(Vector2(61, y_off) + wobble_offset, Vector2(68, y_off) + wobble_offset, Color(0.1, 0.1, 0.12), 2.0)
+		draw_line(Vector2(61, y_off), Vector2(68, y_off), Color(0.1, 0.1, 0.12), 2.0)
 
 	# Bumper
-	draw_rect(Rect2(Vector2(63, -12) + wobble_offset, Vector2(5, 12)), Color(0.12, 0.12, 0.14), true)
+	draw_rect(Rect2(Vector2(63, -12), Vector2(5, 12)), Color(0.12, 0.12, 0.14), true)
 
 	# --- 6. Draw Carbon Wheel Arch ---
 	# Centered at (35, 0)
