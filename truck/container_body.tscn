@@ -1,0 +1,71 @@
+[gd_scene load_steps=3 format=3 uid="uid://dfg8iaj0k1l2n"]
+
+[ext_resource type="Script" uid="uid://cvxsn60hgik2a" path="res://truck/container_body.gd" id="1_container_body_gd"]
+[ext_resource type="PackedScene" uid="uid://bo6otg6erdwgb" path="res://truck/tyre.tscn" id="2_tyre_scene"]
+
+[node name="container_body" type="RigidBody2D"]
+mass = 3.0
+script = ExtResource("1_container_body_gd")
+
+[node name="container" type="ColorRect" parent="."]
+visible = false
+offset_left = -117.0
+offset_top = -80.0
+offset_right = -5.0
+offset_bottom = -1.0
+
+[node name="rim_back" type="ColorRect" parent="."]
+visible = false
+offset_left = -117.0
+offset_top = -7.0
+offset_right = -5.0
+offset_bottom = -3.0
+
+[node name="backdoor" type="ColorRect" parent="."]
+offset_left = -120.0
+offset_top = -79.0
+offset_right = -115.0
+offset_bottom = -3.0
+pivot_offset = Vector2(2.5, 76)
+color = Color(0.18, 0.18, 0.2, 1)
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="."]
+polygon = PackedVector2Array(-119, -80, -5, -81, -4, -1, -10, -1, -10, -10, -15, -19, -25, -25, -36, -28, -48, -22, -54, -12, -57, -1, -70, -1, -70, -10, -74, -17, -80, -22, -92, -27, -108, -22, -113, -14, -115, -2, -118, -2)
+
+[node name="tyre-2" parent="." instance=ExtResource("2_tyre_scene")]
+position = Vector2(-33, 0)
+contact_monitor = true
+max_contacts_reported = 2
+
+[node name="tyre-3" parent="." instance=ExtResource("2_tyre_scene")]
+position = Vector2(-93, 0)
+contact_monitor = true
+max_contacts_reported = 2
+
+[node name="PinJoint2D2" type="PinJoint2D" parent="."]
+position = Vector2(-33, 0)
+node_a = NodePath("..")
+node_b = NodePath("../tyre-2")
+
+[node name="PinJoint2D3" type="PinJoint2D" parent="."]
+position = Vector2(-93, 0)
+node_a = NodePath("..")
+node_b = NodePath("../tyre-3")
+
+[node name="SpringJoint2" type="DampedSpringJoint2D" parent="."]
+position = Vector2(-33, -30)
+node_a = NodePath("..")
+node_b = NodePath("../tyre-2")
+length = 30.0
+rest_length = 30.0
+stiffness = 50.0
+damping = 2.0
+
+[node name="SpringJoint3" type="DampedSpringJoint2D" parent="."]
+position = Vector2(-93, -30)
+node_a = NodePath("..")
+node_b = NodePath("../tyre-3")
+length = 30.0
+rest_length = 30.0
+stiffness = 50.0
+damping = 2.0

@@ -4,7 +4,7 @@ extends RigidBody2D
 var smoke_particles: CPUParticles2D
 var dust_particles: CPUParticles2D
 
-@onready var tyre_1: RigidBody2D = get_node_or_null("../tyre-1")
+@onready var tyre_1: RigidBody2D = get_node_or_null("tyre-1")
 
 func _ready() -> void:
 	# Hide placeholder primitive rectangles

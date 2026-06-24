@@ -1,0 +1,43 @@
+[gd_scene load_steps=3 format=3 uid="uid://dfg8iaj0k1l2m"]
+
+[ext_resource type="Script" uid="uid://vbdudsdqvg6h" path="res://truck/chassis.gd" id="1_chassis_gd"]
+[ext_resource type="PackedScene" uid="uid://bo6otg6erdwgb" path="res://truck/tyre.tscn" id="2_tyre_scene"]
+
+[node name="chassis" type="RigidBody2D"]
+mass = 2.0
+script = ExtResource("1_chassis_gd")
+
+[node name="head" type="ColorRect" parent="."]
+visible = false
+offset_left = 1.0
+offset_top = -72.0
+offset_right = 68.0
+
+[node name="rim_front" type="ColorRect" parent="."]
+visible = false
+offset_left = 1.0
+offset_top = -7.0
+offset_right = 68.0
+offset_bottom = -3.0
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="."]
+polygon = PackedVector2Array(0, -72, 37, -72, 61, -42, 67, -42, 67, -4, 58, -3, 53, -17, 41, -24, 27, -26, 18, -18, 11, -8, 11, -2, -1, -2)
+
+[node name="tyre-1" parent="." instance=ExtResource("2_tyre_scene")]
+position = Vector2(35, 0)
+contact_monitor = true
+max_contacts_reported = 2
+
+[node name="PinJoint2D1" type="PinJoint2D" parent="."]
+position = Vector2(35, 0)
+node_a = NodePath("..")
+node_b = NodePath("../tyre-1")
+
+[node name="SpringJoint1" type="DampedSpringJoint2D" parent="."]
+position = Vector2(35, -30)
+node_a = NodePath("..")
+node_b = NodePath("../tyre-1")
+length = 30.0
+rest_length = 30.0
+stiffness = 50.0
+damping = 2.0

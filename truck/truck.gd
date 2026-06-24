@@ -6,9 +6,9 @@ extends Node2D
 
 @onready var chassis: RigidBody2D = $chassis
 @onready var container_body: RigidBody2D = $container_body
-@onready var tyre_1: RigidBody2D = $"tyre-1"
-@onready var tyre_2: RigidBody2D = $"tyre-2"
-@onready var tyre_3: RigidBody2D = $"tyre-3"
+@onready var tyre_1: RigidBody2D = $"chassis/tyre-1"
+@onready var tyre_2: RigidBody2D = $"container_body/tyre-2"
+@onready var tyre_3: RigidBody2D = $"container_body/tyre-3"
 
 @onready var park_btn: Button = $HUD/ShifterPanel/VBox/ParkBtn
 @onready var rev_btn: Button = $HUD/ShifterPanel/VBox/RevBtn

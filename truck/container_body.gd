@@ -26,8 +26,8 @@ var slot_rects = [
 
 @onready var truck = get_parent()
 @onready var backdoor = get_node_or_null("backdoor")
-@onready var tyre_2: RigidBody2D = get_node_or_null("../tyre-2")
-@onready var tyre_3: RigidBody2D = get_node_or_null("../tyre-3")
+@onready var tyre_2: RigidBody2D = get_node_or_null("tyre-2")
+@onready var tyre_3: RigidBody2D = get_node_or_null("tyre-3")
 
 var backdoor_blocked: bool = false
 var dust_particles_2: CPUParticles2D
