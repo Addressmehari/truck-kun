@@ -1,0 +1,17 @@
+[gd_scene load_steps=3 format=3 uid="uid://b7ax68e0o8qb2"]
+
+[ext_resource type="Script" uid="uid://brnkjnlrsqk32" path="res://obstacles/enemy_car.gd" id="1_enemy_car_gd"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_enemy"]
+size = Vector2(80, 41.428574)
+
+[node name="enemy_car" type="Area2D"]
+z_index = -4
+scale = Vector2(1.4, 1.4)
+script = ExtResource("1_enemy_car_gd")
+variant = "Heavy"
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, -10.714286)
+scale = Vector2(0.9999998, 0.9999998)
+shape = SubResource("RectangleShape2D_enemy")

@@ -10,7 +10,7 @@ var target: Node2D
 @export var horizontal_offset := 150.0 # Horizontal offset from target (positive moves camera right, placing truck on the left)
 
 var inside_tunnel := false
-
+var target_horizontal_offset := 220.0
 
 func _ready():
 	if target_path:
@@ -18,9 +18,13 @@ func _ready():
 	else:
 		# Search for the chassis automatically in the scene tree
 		target = get_node_or_null("../truck/chassis")
+	target_horizontal_offset = horizontal_offset
 
 func _physics_process(delta):
 	if is_instance_valid(target):
+		# Interpolate horizontal offset dynamically (combat transition shift)
+		horizontal_offset = lerp(horizontal_offset, target_horizontal_offset, 1.5 * delta)
+		
 		# Interpolate position smoothly to center the truck in the camera view with offsets
 		var target_pos = target.global_position + Vector2(horizontal_offset, vertical_offset)
 		global_position = global_position.lerp(target_pos, 10.0 * delta)
