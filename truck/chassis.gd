@@ -7,9 +7,9 @@ var dust_particles: CPUParticles2D
 @onready var tyre_1: RigidBody2D = get_node_or_null("tyre-1")
 
 # Suspension configuration
-var suspension_rest_dist := 5.0
-var suspension_stiffness := 250.0
-var suspension_damping := 25.0
+var suspension_rest_dist := 10.0
+var suspension_stiffness := 150.0
+var suspension_damping := 8.0
 
 func _ready() -> void:
 	# Hide placeholder primitive rectangles

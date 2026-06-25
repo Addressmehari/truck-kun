@@ -32,7 +32,7 @@ color = Color(0.18, 0.18, 0.2, 1)
 polygon = PackedVector2Array(-119, -80, -5, -81, -4, -1, -10, -1, -10, -10, -15, -19, -25, -25, -36, -28, -48, -22, -54, -12, -57, -1, -70, -1, -70, -10, -74, -17, -80, -22, -92, -27, -108, -22, -113, -14, -115, -2, -118, -2)
 
 [node name="tyre-2" parent="." instance=ExtResource("2_tyre_scene")]
-position = Vector2(-31, 5)
+position = Vector2(-31, 10)
 contact_monitor = true
 max_contacts_reported = 2
 
@@ -41,11 +41,11 @@ position = Vector2(-31, 0)
 node_a = NodePath("..")
 node_b = NodePath("../tyre-2")
 disable_collision = false
-length = 9.0
-initial_offset = 5.0
+length = 20.0
+initial_offset = 10.0
 
 [node name="tyre-3" parent="." instance=ExtResource("2_tyre_scene")]
-position = Vector2(-91, 5)
+position = Vector2(-91, 10)
 contact_monitor = true
 max_contacts_reported = 2
 
@@ -54,5 +54,5 @@ position = Vector2(-91, 0)
 node_a = NodePath("..")
 node_b = NodePath("../tyre-3")
 disable_collision = false
-length = 9.0
-initial_offset = 5.0
+length = 20.0
+initial_offset = 10.0
