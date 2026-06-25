@@ -239,6 +239,14 @@ func _draw() -> void:
 		arch_points.append(arch_center + Vector2(cos(angle), sin(angle)) * arch_radius)
 	draw_polyline(arch_points, Color(0.12, 0.12, 0.14), 4.5)
 
+	# --- 6.5 Draw Suspension Spring (Tyre 1) ---
+	if is_instance_valid(tyre_1) and not Engine.is_editor_hint():
+		draw_spring(Vector2(35, -8), tyre_1.position, 5.0, 4)
+		# Upper mount bracket
+		draw_rect(Rect2(29, -14, 12, 4), Color(0.22, 0.22, 0.25), true)
+		# Lower mount bracket (at tyre)
+		draw_rect(Rect2(tyre_1.position.x - 6, tyre_1.position.y - 2, 12, 4), Color(0.22, 0.22, 0.25), true)
+
 	# Draw Center of Mass indicator in the editor to help the user adjust it (moved to top layer)
 	if Engine.is_editor_hint():
 		var com = center_of_mass

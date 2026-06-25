@@ -89,7 +89,7 @@ func _draw() -> void:
 	
 	# Draw circular progress bar if holding "O" (progress bar color also modulated by fade alpha)
 	if truck.o_hold_time > 0.0:
-		var ratio = clamp(truck.o_hold_time / truck.O_HOLD_THRESHOLD, 0.0, 1.0)
+		var ratio = clamp(truck.o_hold_time / truck.park_hold_threshold, 0.0, 1.0)
 		if ratio > 0.0:
 			var prg_col = Color(progress_color.r, progress_color.g, progress_color.b, progress_color.a * current_alpha)
 			var prg_glow_col = Color(progress_glow_color.r, progress_glow_color.g, progress_glow_color.b, progress_glow_color.a * current_alpha)

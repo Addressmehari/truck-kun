@@ -282,6 +282,17 @@ func _draw() -> void:
 			arch_points.append(arch_center + Vector2(cos(angle), sin(angle)) * arch_radius)
 		draw_polyline(arch_points, Color(0.12, 0.12, 0.14), 4.5)
 
+	# --- 7.5 Draw Suspension Springs (Tyre 2 & 3) ---
+	if not Engine.is_editor_hint():
+		if is_instance_valid(tyre_2):
+			draw_spring(Vector2(-31, -8), tyre_2.position, 5.0, 4)
+			draw_rect(Rect2(-37, -14, 12, 4), Color(0.22, 0.22, 0.25), true)
+			draw_rect(Rect2(tyre_2.position.x - 6, tyre_2.position.y - 2, 12, 4), Color(0.22, 0.22, 0.25), true)
+		if is_instance_valid(tyre_3):
+			draw_spring(Vector2(-91, -8), tyre_3.position, 5.0, 4)
+			draw_rect(Rect2(-97, -14, 12, 4), Color(0.22, 0.22, 0.25), true)
+			draw_rect(Rect2(tyre_3.position.x - 6, tyre_3.position.y - 2, 12, 4), Color(0.22, 0.22, 0.25), true)
+
 	# --- 8. Draw Inventory Slots (if zoom requested) ---
 	var zoom_requested = false
 	if not Engine.is_editor_hint() and is_instance_valid(truck) and truck.has_method("is_zoom_requested"):
