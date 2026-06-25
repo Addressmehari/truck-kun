@@ -24,6 +24,8 @@ offset_bottom = -3.0
 polygon = PackedVector2Array(0, -72, 37, -72, 61, -42, 67, -42, 67, -4, 58, -3, 53, -17, 41, -24, 27, -26, 18, -18, 11, -8, 11, -2, -1, -2)
 
 [node name="tyre-1" parent="." instance=ExtResource("2_tyre_scene")]
-position = Vector2(35, -1)
+position = Vector2(36, 28)
 contact_monitor = true
 max_contacts_reported = 2
+torque_power = null
+max_angular_velocity = null

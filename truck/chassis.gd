@@ -114,7 +114,7 @@ func _draw() -> void:
 	draw_circle(Vector2(6, -80), 2.0, exhaust_color)
 	# Moving exhaust flap (opens based on speed)
 	var flap_angle = clamp(speed * 0.02, 0.0, 0.8)
-	var flap_end = Vector2(6, -82) + Vector2(cos(flap_angle - PI/4), sin(flap_angle - PI/4)) * 6.0
+	var flap_end = Vector2(6, -82) + Vector2(cos(flap_angle - PI / 4), sin(flap_angle - PI / 4)) * 6.0
 	draw_line(Vector2(6, -82), flap_end, Color(0.3, 0.3, 0.3), 2.0)
 
 	# --- 3. Draw Cabin Body (Styled wedge shape) ---

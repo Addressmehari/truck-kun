@@ -1,9 +1,9 @@
 [gd_scene load_steps=5 format=3 uid="uid://y4vbinwdj2t8"]
 
 [ext_resource type="Script" uid="uid://cbfysr7tnjtrc" path="res://truck/truck.gd" id="1_truck_gd"]
-[ext_resource type="PackedScene" uid="uid://dfg8h9j0k1l2m" path="res://truck/chassis.tscn" id="2_chassis_scene"]
-[ext_resource type="PackedScene" uid="uid://dfg8h9j0k1l2n" path="res://truck/container_body.tscn" id="3_container_body_scene"]
-[ext_resource type="Script" path="res://ui/dashboard.gd" id="4_dashboard_gd"]
+[ext_resource type="PackedScene" uid="uid://dfg8iaj0k1l2m" path="res://truck/chassis.tscn" id="2_chassis_scene"]
+[ext_resource type="PackedScene" uid="uid://dfg8iaj0k1l2n" path="res://truck/container_body.tscn" id="3_container_body_scene"]
+[ext_resource type="Script" uid="uid://bll7pralp5bce" path="res://ui/dashboard.gd" id="4_dashboard_gd"]
 
 [node name="truck" type="Node2D"]
 script = ExtResource("1_truck_gd")
@@ -13,10 +13,11 @@ script = ExtResource("1_truck_gd")
 [node name="container_body" parent="." instance=ExtResource("3_container_body_scene")]
 
 [node name="CabinJoint" type="PinJoint2D" parent="."]
-position = Vector2(-2, -25)
+position = Vector2(-1, -16)
 node_a = NodePath("../chassis")
 node_b = NodePath("../container_body")
 disable_collision = false
+softness = 2.13
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
@@ -65,5 +66,3 @@ offset_bottom = -40.0
 grow_horizontal = 0
 grow_vertical = 0
 script = ExtResource("4_dashboard_gd")
-
-
