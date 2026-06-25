@@ -231,6 +231,13 @@ func _draw() -> void:
 		arch_points.append(arch_center + Vector2(cos(angle), sin(angle)) * arch_radius)
 	draw_polyline(arch_points, Color(0.12, 0.12, 0.14), 4.5)
 
+	# Draw Center of Mass indicator in the editor to help the user adjust it (moved to top layer)
+	if Engine.is_editor_hint():
+		var com = center_of_mass
+		draw_circle(com, 3.0, Color.MAGENTA)
+		draw_line(com - Vector2(10, 0), com + Vector2(10, 0), Color.MAGENTA, 2.0)
+		draw_line(com - Vector2(0, 10), com + Vector2(0, 10), Color.MAGENTA, 2.0)
+
 # Helper function to draw dynamic coil springs
 func draw_spring(from_pos: Vector2, to_pos: Vector2, width: float, coils: int) -> void:
 	var dir = (to_pos - from_pos).normalized()

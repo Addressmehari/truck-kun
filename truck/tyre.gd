@@ -13,8 +13,8 @@ extends RigidBody2D
 		queue_redraw()
 
 # ── Driving parameters (tweakable per wheel in the Inspector) ──
-@export var torque_power := 25000.0
-@export var max_angular_velocity := 45.0
+@export var torque_power := 45000.0
+@export var max_angular_velocity := 70.0
 
 # ── Public API: called by truck.gd inside its own _physics_process ──
 # All physics is applied immediately here so there is no race condition
@@ -48,12 +48,12 @@ func drive(delta: float, move_input: float, braking: bool, parked: bool, boost: 
 		apply_torque(move_input * torque_power)
 
 	# Cap angular velocity
-	var cap := 60.0 if boost else max_angular_velocity
+	var cap := 85.0 if boost else max_angular_velocity
 	angular_velocity = clamp(angular_velocity, -cap, cap)
 
 	# During boost, enforce full spin directly
 	if boost:
-		angular_velocity = 55.0
+		angular_velocity = 80.0
 
 func update_collision_shape() -> void:
 	var shape_node = get_node_or_null("CollisionShape2D")

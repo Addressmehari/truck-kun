@@ -5,6 +5,8 @@
 
 [node name="chassis" type="RigidBody2D"]
 mass = 0.5
+center_of_mass_mode = 1
+center_of_mass = Vector2(36.87, -30.81)
 script = ExtResource("1_chassis_gd")
 
 [node name="head" type="ColorRect" parent="."]
@@ -27,6 +29,8 @@ polygon = PackedVector2Array(0, -72, 37, -72, 61, -42, 67, -42, 67, -4, 58, -3, 
 position = Vector2(35, 5)
 contact_monitor = true
 max_contacts_reported = 2
+torque_power = 25000.0
+max_angular_velocity = 45.0
 
 [node name="GrooveJoint2D" type="GrooveJoint2D" parent="."]
 position = Vector2(35, 0)

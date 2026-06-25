@@ -9,6 +9,8 @@
 script = ExtResource("1_truck_gd")
 
 [node name="chassis" parent="." instance=ExtResource("2_chassis_scene")]
+position = Vector2(-1, 0)
+center_of_mass = Vector2(33.82, -22.05)
 can_sleep = false
 
 [node name="container_body" parent="." instance=ExtResource("3_container_body_scene")]
@@ -63,7 +65,7 @@ grow_vertical = 0
 script = ExtResource("4_dashboard_gd")
 
 [node name="PinJoint2D" type="PinJoint2D" parent="."]
-position = Vector2(3, -10)
+position = Vector2(0, -28)
 node_a = NodePath("../chassis")
 node_b = NodePath("../container_body")
 disable_collision = false
