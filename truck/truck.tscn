@@ -9,15 +9,10 @@
 script = ExtResource("1_truck_gd")
 
 [node name="chassis" parent="." instance=ExtResource("2_chassis_scene")]
+can_sleep = false
 
 [node name="container_body" parent="." instance=ExtResource("3_container_body_scene")]
-position = Vector2(3, -1)
-
-[node name="CabinJoint" type="PinJoint2D" parent="."]
-position = Vector2(-2, -37)
-node_a = NodePath("../chassis")
-node_b = NodePath("../container_body")
-disable_collision = false
+position = Vector2(0, -1)
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
@@ -66,3 +61,9 @@ offset_bottom = -40.0
 grow_horizontal = 0
 grow_vertical = 0
 script = ExtResource("4_dashboard_gd")
+
+[node name="PinJoint2D" type="PinJoint2D" parent="."]
+position = Vector2(3, -10)
+node_a = NodePath("../chassis")
+node_b = NodePath("../container_body")
+disable_collision = false

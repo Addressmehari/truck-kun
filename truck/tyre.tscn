@@ -4,7 +4,7 @@
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_tyre"]
 friction = 1.5
-rough = true
+absorbent = true
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_smqpn"]
 radius = 19.25
