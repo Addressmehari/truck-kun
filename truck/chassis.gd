@@ -90,7 +90,7 @@ func _physics_process(_delta: float) -> void:
 		return
 		
 	# Process fake programmatic suspension for tyre_1
-	_process_custom_suspension(tyre_1, Vector2(35, 0), _delta)
+	_process_custom_suspension(tyre_1, Vector2(35, -8), _delta)
 	
 	# Control exhaust smoke emission based on speed
 	var speed = linear_velocity.length()

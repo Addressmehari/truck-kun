@@ -7,6 +7,8 @@
 
 [node name="truck" type="Node2D"]
 script = ExtResource("1_truck_gd")
+suspension_stiffness = 10.0
+suspension_damping = 10.0
 
 [node name="chassis" parent="." instance=ExtResource("2_chassis_scene")]
 position = Vector2(-1, 0)
@@ -17,6 +19,7 @@ can_sleep = false
 position = Vector2(0, -1)
 
 [node name="HUD" type="CanvasLayer" parent="."]
+visible = false
 
 [node name="ShifterPanel" type="PanelContainer" parent="HUD"]
 offset_left = 25.0

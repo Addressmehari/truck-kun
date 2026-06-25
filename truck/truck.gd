@@ -1,9 +1,42 @@
 extends Node2D
 
-# air_tilt_power stays here since it affects chassis/container, not individual tyres
+# ─── Driving ────────────────────────────────────────────────────────────────
+@export_group("Driving")
+## Torque applied when tilting in the air (chassis + container)
 @export var air_tilt_power := 6000.0
-# torque_power and max_angular_velocity are now @export vars on each tyre node
+## Autopilot drive throttle (0–1). Full throttle when < 1.0 reduces top speed.
+@export_range(0.1, 1.0, 0.05) var autopilot_throttle := 0.7
 
+# ─── Suspension ─────────────────────────────────────────────────────────────
+@export_group("Suspension")
+## How far (px) the tyre rests below its anchor point at equilibrium
+@export_range(2.0, 40.0, 0.5) var suspension_rest_dist := 10.0
+## Spring stiffness — higher = stiffer / less sag
+@export_range(10.0, 600.0, 5.0) var suspension_stiffness := 150.0
+## Damping — higher = less bounce, more sluggish
+@export_range(0.5, 40.0, 0.5) var suspension_damping := 8.0
+
+# ─── Parking ────────────────────────────────────────────────────────────────
+@export_group("Parking")
+## Speed (km/h) below which parking is allowed
+@export_range(0.0, 60.0, 1.0) var park_speed_limit := 20.0
+## How long (seconds) O must be held to toggle park/drive
+@export_range(0.1, 3.0, 0.05) var park_hold_threshold := 1.0
+
+# ─── Combat / Convoy ─────────────────────────────────────────────────────────
+@export_group("Combat")
+## Maximum truck health during a convoy event
+@export_range(10.0, 500.0, 5.0) var truck_max_health := 100.0
+## Damage multiplier (incoming damage is scaled by this before applying)
+@export_range(0.0, 1.0, 0.05) var damage_scale := 0.3
+## Seconds between enemy spawn waves
+@export_range(1.0, 15.0, 0.5) var convoy_spawn_interval := 4.0
+## Maximum enemies on-screen at once
+@export_range(1, 10) var max_convoy_enemies := 4
+## Duration of the post-convoy velocity boost (seconds)
+@export_range(0.0, 15.0, 0.5) var boost_duration := 5.0
+
+# ─── Internal runtime state ──────────────────────────────────────────────────
 @onready var chassis: RigidBody2D = $chassis
 @onready var container_body: RigidBody2D = $container_body
 @onready var tyre_1: RigidBody2D = $"chassis/tyre-1"
@@ -15,25 +48,21 @@ extends Node2D
 @onready var drv_btn: Button = $HUD/ShifterPanel/VBox/DrvBtn
 @onready var shifter_panel: PanelContainer = $HUD/ShifterPanel
 
-enum Gear { PARK, DRIVE, REVERSE }
+enum Gear {PARK, DRIVE, REVERSE}
 var current_gear: Gear = Gear.DRIVE
 var is_e_toggled: bool = false
 
 # Parking with "O" hold logic
 var o_hold_time: float = 0.0
-const O_HOLD_THRESHOLD: float = 1.0
 var o_trigger_locked: bool = false
 var o_hold_start_ticks: int = 0
 var is_o_currently_holding: bool = false
 
 # Combat / Convoy Event State
 var is_autopilot := false
-var truck_max_health := 100.0
 var truck_health := 100.0
 var cheat_buffer := ""
 var convoy_spawn_timer := 0.0
-const CONVOY_SPAWN_INTERVAL := 4.0 # Spawn an enemy every 4 seconds
-const MAX_CONVOY_ENEMIES := 4
 var boost_timer := 0.0
 
 func _ready() -> void:
@@ -41,6 +70,9 @@ func _ready() -> void:
 	setup_shifter_ui()
 	if shifter_panel:
 		shifter_panel.visible = false
+	
+	# Propagate inspector-tweakable suspension values to child physics bodies
+	_apply_exports()
 		
 	# Instantiate visual parking indicator
 	var indicator_script = load("res://truck/parking_indicator.gd")
@@ -52,6 +84,17 @@ func _ready() -> void:
 		indicator.chassis = chassis
 		indicator.container_body = container_body
 		add_child(indicator)
+
+func _apply_exports() -> void:
+	# Push suspension settings to chassis and container so they match the inspector
+	for body in [chassis, container_body]:
+		if is_instance_valid(body):
+			if "suspension_rest_dist" in body:
+				body.suspension_rest_dist = suspension_rest_dist
+			if "suspension_stiffness" in body:
+				body.suspension_stiffness = suspension_stiffness
+			if "suspension_damping" in body:
+				body.suspension_damping = suspension_damping
 
 func setup_shifter_ui() -> void:
 	# Style Shifter Panel (wooden panel backboard)
@@ -152,8 +195,8 @@ func _physics_process(delta: float) -> void:
 		# Handle dynamic enemy spawning during active convoy
 		convoy_spawn_timer -= delta
 		if convoy_spawn_timer <= 0.0:
-			# Roll next spawn delay with a Gaussian distribution (mean=4.0s, deviation=1.2s, clamped between 2.0s and 6.0s)
-			convoy_spawn_timer = clamp(randfn(4.0, 1.2), 2.0, 6.0)
+			# Roll next spawn delay with a Gaussian distribution (mean=convoy_spawn_interval, deviation=1.2s)
+			convoy_spawn_timer = clamp(randfn(convoy_spawn_interval, 1.2), convoy_spawn_interval * 0.5, convoy_spawn_interval * 1.5)
 			var active_enemies = 0
 			for child in get_parent().get_children():
 				if child.is_in_group("enemies") and not child.get("is_exploding"):
@@ -162,7 +205,7 @@ func _physics_process(delta: float) -> void:
 			# Roll a wave size (Gaussian mean=3, dev=0.8, clamped 2 to 4) and spawn up to the active limit
 			var spawn_count = int(clamp(round(randfn(3.0, 0.8)), 2.0, 4.0))
 			for i in range(spawn_count):
-				if active_enemies < MAX_CONVOY_ENEMIES:
+				if active_enemies < max_convoy_enemies:
 					spawn_single_enemy_car()
 					active_enemies += 1
 			
@@ -171,7 +214,7 @@ func _physics_process(delta: float) -> void:
 	
 	if forward_pressed and not backward_pressed:
 		if current_gear != Gear.PARK:
-			move_input = 0.7 if is_autopilot else 1.0
+			move_input = autopilot_throttle if is_autopilot else 1.0
 	elif backward_pressed and not forward_pressed:
 		if current_gear != Gear.PARK:
 			move_input = -1.0
@@ -180,7 +223,7 @@ func _physics_process(delta: float) -> void:
 
 	# Long press "O" to park when speed is less than 20 (on speedometer)
 	var speed_kmh = chassis.linear_velocity.length() * 0.08 if is_instance_valid(chassis) else 0.0
-	var can_park = speed_kmh < 20.0
+	var can_park = speed_kmh < park_speed_limit
 	
 	if can_park:
 		if Input.is_key_pressed(KEY_O):
@@ -192,7 +235,7 @@ func _physics_process(delta: float) -> void:
 				var held_duration = (Time.get_ticks_msec() - o_hold_start_ticks) / 1000.0
 				o_hold_time = held_duration
 				
-				if held_duration >= O_HOLD_THRESHOLD:
+				if held_duration >= park_hold_threshold:
 					if current_gear == Gear.PARK:
 						set_gear(Gear.DRIVE)
 					else:
@@ -400,15 +443,15 @@ func start_active_event(event_name: String) -> void:
 		for i in range(initial_count):
 			spawn_single_enemy_car(i)
 			
-		convoy_spawn_timer = CONVOY_SPAWN_INTERVAL
+		convoy_spawn_timer = convoy_spawn_interval
 
 func end_active_event(event_name: String) -> void:
 	print("Truck ending active event: ", event_name)
 	if event_name == "Convoy":
 		is_autopilot = false
 		
-		# Trigger 5-second reward velocity boost
-		boost_timer = 5.0
+		# Trigger reward velocity boost
+		boost_timer = boost_duration
 		
 		# Restore camera
 		var camera = get_node_or_null("/root/main/Camera2D")
@@ -437,8 +480,8 @@ func end_active_event(event_name: String) -> void:
 func take_damage(amount: float) -> void:
 	if not is_autopilot:
 		return
-	# Scale down damage to 30% to make the event fun and surviveable
-	truck_health = max(0.0, truck_health - amount * 0.3)
+	# Scale damage by inspector-configurable multiplier
+	truck_health = max(0.0, truck_health - amount * damage_scale)
 	if truck_health <= 0.0:
 		# Dramatic explosion shake
 		var dashboard = get_node_or_null("HUD/Dashboard")

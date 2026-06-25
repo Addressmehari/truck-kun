@@ -135,8 +135,8 @@ func _physics_process(delta: float) -> void:
 	queue_redraw()
 	
 	# Process fake programmatic suspension for the tyres
-	_process_custom_suspension(tyre_2, Vector2(-31, 0), delta)
-	_process_custom_suspension(tyre_3, Vector2(-91, 0), delta)
+	_process_custom_suspension(tyre_2, Vector2(-31, -8), delta)
+	_process_custom_suspension(tyre_3, Vector2(-91, -8), delta)
 	
 	# Control tyre dust emissions
 	var speed = linear_velocity.length()
