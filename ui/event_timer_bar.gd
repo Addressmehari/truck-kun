@@ -95,9 +95,6 @@ func end_event() -> void:
 	if truck and truck.has_method("end_active_event"):
 		truck.call("end_active_event", event_name)
 
-	# 4. Restore settings to default (Engine speed scale, etc.)
-	Engine.time_scale = 1.0
-
 	# Slide up offscreen using offsets and queue free
 	var tween = create_tween().set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_BACK)
 	tween.tween_property(self, "offset_top", -140.0, 0.4)

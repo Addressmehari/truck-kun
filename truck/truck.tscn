@@ -19,7 +19,6 @@ can_sleep = false
 position = Vector2(0, -1)
 
 [node name="HUD" type="CanvasLayer" parent="."]
-visible = false
 
 [node name="ShifterPanel" type="PanelContainer" parent="HUD"]
 offset_left = 25.0
