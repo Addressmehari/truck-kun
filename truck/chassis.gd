@@ -6,6 +6,11 @@ var dust_particles: CPUParticles2D
 
 @onready var tyre_1: RigidBody2D = get_node_or_null("tyre-1")
 
+# Suspension configuration
+var suspension_rest_dist := 5.0
+var suspension_stiffness := 250.0
+var suspension_damping := 25.0
+
 func _ready() -> void:
 	# Hide placeholder primitive rectangles
 	var head_node = get_node_or_null("head")
@@ -83,6 +88,9 @@ func _physics_process(_delta: float) -> void:
 	queue_redraw()
 	if Engine.is_editor_hint():
 		return
+		
+	# Process fake programmatic suspension for tyre_1
+	_process_custom_suspension(tyre_1, Vector2(35, 0), _delta)
 	
 	# Control exhaust smoke emission based on speed
 	var speed = linear_velocity.length()
@@ -274,3 +282,27 @@ func draw_spring(from_pos: Vector2, to_pos: Vector2, width: float, coils: int) -
 	
 	# Glowing sports suspension red color
 	draw_polyline(points, Color(0.9, 0.15, 0.15), 2.8)
+
+
+func _process_custom_suspension(tyre: RigidBody2D, anchor_local: Vector2, delta: float) -> void:
+	if not is_instance_valid(tyre): return
+	var anchor_global = to_global(anchor_local)
+	var tyre_global = tyre.global_position
+	
+	var up_dir = -global_transform.y
+	var offset = tyre_global - anchor_global
+	
+	var r_chassis = anchor_global - global_position
+	var v_chassis_anchor = linear_velocity + Vector2(-angular_velocity * r_chassis.y, angular_velocity * r_chassis.x)
+	var rel_vel = tyre.linear_velocity - v_chassis_anchor
+	
+	# Vertical Suspension (spring on Y axis)
+	var vert_dist = offset.dot(-up_dir)
+	var vert_vel = rel_vel.dot(-up_dir)
+	var vert_error = vert_dist - suspension_rest_dist
+	
+	var vert_force_mag = -(vert_error * suspension_stiffness) - (vert_vel * suspension_damping)
+	var vert_force = -up_dir * vert_force_mag
+	
+	tyre.apply_central_force(vert_force)
+	apply_force(-vert_force, r_chassis)

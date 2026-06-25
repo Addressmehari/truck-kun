@@ -35,6 +35,11 @@ var dust_particles_3: CPUParticles2D
 var bounce_offset := Vector2.ZERO
 var backdoor_start_pos := Vector2.ZERO
 
+# Suspension configuration
+var suspension_rest_dist := 5.0
+var suspension_stiffness := 250.0
+var suspension_damping := 25.0
+
 func _ready() -> void:
 	# Hide default placeholder rectangles
 	var container_rect = get_node_or_null("container")
@@ -128,6 +133,10 @@ func _physics_process(delta: float) -> void:
 	time_alive += delta
 	# Refresh visuals
 	queue_redraw()
+	
+	# Process fake programmatic suspension for the tyres
+	_process_custom_suspension(tyre_2, Vector2(-31, 0), delta)
+	_process_custom_suspension(tyre_3, Vector2(-91, 0), delta)
 	
 	# Control tyre dust emissions
 	var speed = linear_velocity.length()
@@ -448,6 +457,31 @@ func draw_spring(from_pos: Vector2, to_pos: Vector2, width: float, coils: int) -
 	points.append(to_pos)
 	
 	draw_polyline(points, Color(0.9, 0.15, 0.15), 2.8)
+
+
+func _process_custom_suspension(tyre: RigidBody2D, anchor_local: Vector2, delta: float) -> void:
+	if not is_instance_valid(tyre): return
+	var anchor_global = to_global(anchor_local)
+	var tyre_global = tyre.global_position
+	
+	var up_dir = -global_transform.y
+	var offset = tyre_global - anchor_global
+	
+	var r_chassis = anchor_global - global_position
+	var v_chassis_anchor = linear_velocity + Vector2(-angular_velocity * r_chassis.y, angular_velocity * r_chassis.x)
+	var rel_vel = tyre.linear_velocity - v_chassis_anchor
+	
+	# Vertical Suspension (spring on Y axis)
+	var vert_dist = offset.dot(-up_dir)
+	var vert_vel = rel_vel.dot(-up_dir)
+	var vert_error = vert_dist - suspension_rest_dist
+	
+	var vert_force_mag = -(vert_error * suspension_stiffness) - (vert_vel * suspension_damping)
+	var vert_force = -up_dir * vert_force_mag
+	
+	tyre.apply_central_force(vert_force)
+	apply_force(-vert_force, r_chassis)
+
 
 func emit_glass_break() -> void:
 	if is_instance_valid(glass_break_particles):
