@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3 uid="uid://dfg8iaj0k1l2n"]
+[gd_scene load_steps=3 format=3 uid="uid://dfg8iaj0k1l2n"]
 
 [ext_resource type="Script" uid="uid://cvxsn60hgik2a" path="res://truck/container_body.gd" id="1_container_body_gd"]
+[ext_resource type="PackedScene" uid="uid://bo6otg6erdwgb" path="res://truck/tyre.tscn" id="2_tyre_scene"]
 
 [node name="container_body" type="RigidBody2D"]
 script = ExtResource("1_container_body_gd")
@@ -30,3 +31,29 @@ color = Color(0.18, 0.18, 0.2, 1)
 [node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="."]
 visible = false
 polygon = PackedVector2Array(-119, -80, -5, -81, -4, -1, -10, -1, -10, -10, -15, -19, -25, -25, -36, -28, -48, -22, -54, -12, -57, -1, -70, -1, -70, -10, -74, -17, -80, -22, -92, -27, -108, -22, -113, -14, -115, -2, -118, -2)
+
+[node name="tyre-1" parent="." instance=ExtResource("2_tyre_scene")]
+position = Vector2(-31, 6)
+contact_monitor = true
+max_contacts_reported = 2
+
+[node name="GrooveJoint2D" type="GrooveJoint2D" parent="."]
+position = Vector2(-31, 0)
+node_a = NodePath("..")
+node_b = NodePath("../tyre-1")
+disable_collision = false
+length = 9.0
+initial_offset = 5.0
+
+[node name="tyre-2" parent="." instance=ExtResource("2_tyre_scene")]
+position = Vector2(-91, 6)
+contact_monitor = true
+max_contacts_reported = 2
+
+[node name="GrooveJoint2D2" type="GrooveJoint2D" parent="."]
+position = Vector2(-91, 0)
+node_a = NodePath("..")
+node_b = NodePath("../tyre-2")
+disable_collision = false
+length = 9.0
+initial_offset = 5.0

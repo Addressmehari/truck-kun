@@ -128,7 +128,7 @@ func update_shifter_visuals() -> void:
 	rev_btn.add_theme_font_size_override("font_size", 22)
 	drv_btn.add_theme_font_size_override("font_size", 22)
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	# Simplified driving mechanics:
 	# "D" key (and W, UP, RIGHT) drives forward
 	# "A" key (and S, DOWN, LEFT) drives backward
@@ -137,7 +137,7 @@ func _physics_process(_delta: float) -> void:
 	
 	# Apply dynamic reward velocity boost after convoy event completes
 	if boost_timer > 0.0:
-		boost_timer -= _delta
+		boost_timer -= delta
 		forward_pressed = true
 		backward_pressed = false
 		if current_gear != Gear.DRIVE:
@@ -150,7 +150,7 @@ func _physics_process(_delta: float) -> void:
 			set_gear(Gear.DRIVE)
 			
 		# Handle dynamic enemy spawning during active convoy
-		convoy_spawn_timer -= _delta
+		convoy_spawn_timer -= delta
 		if convoy_spawn_timer <= 0.0:
 			# Roll next spawn delay with a Gaussian distribution (mean=4.0s, deviation=1.2s, clamped between 2.0s and 6.0s)
 			convoy_spawn_timer = clamp(randfn(4.0, 1.2), 2.0, 6.0)
@@ -230,7 +230,7 @@ func _physics_process(_delta: float) -> void:
 		is_braking = true
 
 	# Delegate all per-wheel physics to the tyres themselves
-	_drive_wheels(move_input, is_braking)
+	_drive_wheels(delta, move_input, is_braking)
 
 	# Locked differential: synchronise wheel speeds after each tyre updates
 	if is_instance_valid(tyre_1) and is_instance_valid(tyre_2) and is_instance_valid(tyre_3):
@@ -245,12 +245,12 @@ func _physics_process(_delta: float) -> void:
 		container_body.apply_torque(-tilt_input * air_tilt_power * 1.5)
 
 ## Calls each tyre's drive() method so the wheel handles its own physics.
-func _drive_wheels(move_input: float, braking: bool) -> void:
+func _drive_wheels(delta: float, move_input: float, braking: bool) -> void:
 	var parked = (current_gear == Gear.PARK)
 	var boosting = (boost_timer > 0.0)
 	for tyre in [tyre_1, tyre_2, tyre_3]:
 		if is_instance_valid(tyre) and tyre.has_method("drive"):
-			tyre.drive(move_input, braking, parked, boosting)
+			tyre.drive(delta, move_input, braking, parked, boosting)
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:

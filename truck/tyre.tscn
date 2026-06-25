@@ -6,7 +6,7 @@
 friction = 1.5
 rough = true
 
-[sub_resource type="CircleShape2D" id="CircleShape2D_s25gb"]
+[sub_resource type="CircleShape2D" id="CircleShape2D_smqpn"]
 radius = 19.25
 
 [node name="tyre" type="RigidBody2D"]
@@ -14,4 +14,4 @@ physics_material_override = SubResource("PhysicsMaterial_tyre")
 script = ExtResource("1_s25gb")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-shape = SubResource("CircleShape2D_s25gb")
+shape = SubResource("CircleShape2D_smqpn")

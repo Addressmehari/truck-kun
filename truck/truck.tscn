@@ -11,13 +11,13 @@ script = ExtResource("1_truck_gd")
 [node name="chassis" parent="." instance=ExtResource("2_chassis_scene")]
 
 [node name="container_body" parent="." instance=ExtResource("3_container_body_scene")]
+position = Vector2(3, -1)
 
 [node name="CabinJoint" type="PinJoint2D" parent="."]
-position = Vector2(-1, -16)
+position = Vector2(-2, -37)
 node_a = NodePath("../chassis")
 node_b = NodePath("../container_body")
 disable_collision = false
-softness = 2.13
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
