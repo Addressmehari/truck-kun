@@ -3,15 +3,17 @@
 [ext_resource type="Script" uid="uid://b2xru1n46x52" path="res://truck/tyre.gd" id="1_s25gb"]
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_tyre"]
-friction = 1.5
+friction = 0.58
 rough = true
+absorbent = true
 
-[sub_resource type="CircleShape2D" id="CircleShape2D_s25gb"]
+[sub_resource type="CircleShape2D" id="CircleShape2D_smqpn"]
 radius = 19.25
 
 [node name="tyre" type="RigidBody2D"]
+mass = 2.0
 physics_material_override = SubResource("PhysicsMaterial_tyre")
 script = ExtResource("1_s25gb")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-shape = SubResource("CircleShape2D_s25gb")
+shape = SubResource("CircleShape2D_smqpn")

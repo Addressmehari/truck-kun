@@ -1,14 +1,14 @@
 extends Node2D
 
-@export var torque_power := 25000.0
+# air_tilt_power stays here since it affects chassis/container, not individual tyres
 @export var air_tilt_power := 6000.0
-@export var max_angular_velocity := 45.0
+# torque_power and max_angular_velocity are now @export vars on each tyre node
 
 @onready var chassis: RigidBody2D = $chassis
 @onready var container_body: RigidBody2D = $container_body
-@onready var tyre_1: RigidBody2D = $"tyre-1"
-@onready var tyre_2: RigidBody2D = $"tyre-2"
-@onready var tyre_3: RigidBody2D = $"tyre-3"
+@onready var tyre_1: RigidBody2D = $"chassis/tyre-1"
+@onready var tyre_2: RigidBody2D = $"container_body/tyre-2"
+@onready var tyre_3: RigidBody2D = $"container_body/tyre-3"
 
 @onready var park_btn: Button = $HUD/ShifterPanel/VBox/ParkBtn
 @onready var rev_btn: Button = $HUD/ShifterPanel/VBox/RevBtn
@@ -128,7 +128,7 @@ func update_shifter_visuals() -> void:
 	rev_btn.add_theme_font_size_override("font_size", 22)
 	drv_btn.add_theme_font_size_override("font_size", 22)
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	# Simplified driving mechanics:
 	# "D" key (and W, UP, RIGHT) drives forward
 	# "A" key (and S, DOWN, LEFT) drives backward
@@ -137,7 +137,7 @@ func _physics_process(_delta: float) -> void:
 	
 	# Apply dynamic reward velocity boost after convoy event completes
 	if boost_timer > 0.0:
-		boost_timer -= _delta
+		boost_timer -= delta
 		forward_pressed = true
 		backward_pressed = false
 		if current_gear != Gear.DRIVE:
@@ -150,7 +150,7 @@ func _physics_process(_delta: float) -> void:
 			set_gear(Gear.DRIVE)
 			
 		# Handle dynamic enemy spawning during active convoy
-		convoy_spawn_timer -= _delta
+		convoy_spawn_timer -= delta
 		if convoy_spawn_timer <= 0.0:
 			# Roll next spawn delay with a Gaussian distribution (mean=4.0s, deviation=1.2s, clamped between 2.0s and 6.0s)
 			convoy_spawn_timer = clamp(randfn(4.0, 1.2), 2.0, 6.0)
@@ -220,75 +220,37 @@ func _physics_process(_delta: float) -> void:
 		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
 			tilt_input += 1.0
 
-	# Active braking logic to make controls feel premium and snappy
+	# Detect counter-direction braking (quick stop feel)
 	var avg_vel = 0.0
 	if is_instance_valid(tyre_1) and is_instance_valid(tyre_2) and is_instance_valid(tyre_3):
 		avg_vel = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
-		
-	# Quick braking: if moving opposite to input
 	if forward_pressed and avg_vel < -5.0:
 		is_braking = true
 	elif backward_pressed and avg_vel > 5.0:
 		is_braking = true
-		
-	# Mild coasting brake when no movement inputs are pressed
-	if not forward_pressed and not backward_pressed:
-		if is_instance_valid(tyre_1) and is_instance_valid(tyre_2) and is_instance_valid(tyre_3):
-			tyre_1.angular_velocity = lerp(tyre_1.angular_velocity, 0.0, 1.5 * _delta)
-			tyre_2.angular_velocity = lerp(tyre_2.angular_velocity, 0.0, 1.5 * _delta)
-			tyre_3.angular_velocity = lerp(tyre_3.angular_velocity, 0.0, 1.5 * _delta)
-			
-	# Apply driving state or parking handbrake
-	if current_gear == Gear.PARK:
-		tyre_1.lock_rotation = true
-		tyre_2.lock_rotation = true
-		tyre_3.lock_rotation = true
-		tyre_1.angular_velocity = 0.0
-		tyre_2.angular_velocity = 0.0
-		tyre_3.angular_velocity = 0.0
-	else:
-		tyre_1.lock_rotation = false
-		tyre_2.lock_rotation = false
-		tyre_3.lock_rotation = false
-		
-		# Apply driving torque (only if not actively braking)
-		if move_input != 0.0 and not is_braking:
-			tyre_1.apply_torque(move_input * torque_power)
-			tyre_2.apply_torque(move_input * torque_power)
-			tyre_3.apply_torque(move_input * torque_power)
-			
-		# Apply active braking/friction to quickly halt wheels
-		if is_braking:
-			tyre_1.angular_velocity = lerp(tyre_1.angular_velocity, 0.0, 12.0 * _delta)
-			tyre_2.angular_velocity = lerp(tyre_2.angular_velocity, 0.0, 12.0 * _delta)
-			tyre_3.angular_velocity = lerp(tyre_3.angular_velocity, 0.0, 12.0 * _delta)
-			
-		# Synchronize wheel speeds (locked differential)
-		if is_instance_valid(tyre_1) and is_instance_valid(tyre_2) and is_instance_valid(tyre_3):
-			var new_avg_vel = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
-			tyre_1.angular_velocity = new_avg_vel
-			tyre_2.angular_velocity = new_avg_vel
-			tyre_3.angular_velocity = new_avg_vel
-				
-			# Cap wheel spin velocity
-			var current_max_vel = 30.0 if is_autopilot else max_angular_velocity
-			if boost_timer > 0.0:
-				current_max_vel = 60.0
-			tyre_1.angular_velocity = clamp(tyre_1.angular_velocity, -current_max_vel, current_max_vel)
-			tyre_2.angular_velocity = clamp(tyre_2.angular_velocity, -current_max_vel, current_max_vel)
-			tyre_3.angular_velocity = clamp(tyre_3.angular_velocity, -current_max_vel, current_max_vel)
-			
-			# Enforce continuous high velocity during reward boost
-			if boost_timer > 0.0:
-				var target_wheel_spin = 55.0
-				tyre_1.angular_velocity = target_wheel_spin
-				tyre_2.angular_velocity = target_wheel_spin
-				tyre_3.angular_velocity = target_wheel_spin
+
+	# Delegate all per-wheel physics to the tyres themselves
+	_drive_wheels(delta, move_input, is_braking)
+
+	# Locked differential: synchronise wheel speeds after each tyre updates
+	if is_instance_valid(tyre_1) and is_instance_valid(tyre_2) and is_instance_valid(tyre_3):
+		var synced = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
+		tyre_1.angular_velocity = synced
+		tyre_2.angular_velocity = synced
+		tyre_3.angular_velocity = synced
 
 	# Apply air tilting torque (active in mid-air or balance controls)
 	if tilt_input != 0.0:
 		chassis.apply_torque(-tilt_input * air_tilt_power)
 		container_body.apply_torque(-tilt_input * air_tilt_power * 1.5)
+
+## Calls each tyre's drive() method so the wheel handles its own physics.
+func _drive_wheels(delta: float, move_input: float, braking: bool) -> void:
+	var parked = (current_gear == Gear.PARK)
+	var boosting = (boost_timer > 0.0)
+	for tyre in [tyre_1, tyre_2, tyre_3]:
+		if is_instance_valid(tyre) and tyre.has_method("drive"):
+			tyre.drive(delta, move_input, braking, parked, boosting)
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
