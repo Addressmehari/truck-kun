@@ -34,8 +34,8 @@ func _ready() -> void:
 	# Capture mouse inputs to block gameplay clicks
 	mouse_filter = MOUSE_FILTER_STOP
 	
-	# Pause gameplay feeling with slow motion
-	Engine.time_scale = 0.2
+	# Freeze truck physics so no forces accumulate while wheel is shown
+	_set_truck_frozen(true)
 	
 	# Set anchors for full screen block
 	anchor_left = 0.0
@@ -63,14 +63,33 @@ func _ready() -> void:
 	# Build the Text Labels
 	setup_ui_labels()
 	
-	# Animate pop-in effect
-	# Under time_scale = 0.2, we scale up the speed of UI animations to run in normal time!
-	var ui_speed_scale = 1.0 / Engine.time_scale # 5.0x speed
-	
+	# Animate pop-in effect (runs at normal real time, no time_scale needed)
 	var tween_in = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	tween_in.set_speed_scale(ui_speed_scale)
 	tween_in.tween_property(self, "scale", Vector2.ONE, 0.4)
 	tween_in.tween_callback(start_spin)
+
+## Freeze or unfreeze the truck chassis, container, and tyres so no physics
+## forces accumulate while the spin wheel overlay is visible.
+func _set_truck_frozen(frozen: bool) -> void:
+	var truck = get_node_or_null("/root/main/truck")
+	if not is_instance_valid(truck):
+		return
+	var bodies = [
+		truck.get_node_or_null("chassis"),
+		truck.get_node_or_null("container_body"),
+		truck.get_node_or_null("chassis/tyre-1"),
+		truck.get_node_or_null("container_body/tyre-2"),
+		truck.get_node_or_null("container_body/tyre-3"),
+	]
+	for body in bodies:
+		if is_instance_valid(body) and body is RigidBody2D:
+			if frozen:
+				body.freeze = true
+			else:
+				# Zero out all velocity before unfreezing to prevent the energy snap
+				body.freeze = false
+				body.linear_velocity = Vector2.ZERO
+				body.angular_velocity = 0.0
 
 func setup_ui_labels() -> void:
 	# Result Label (GTA 5 Style: Placed near the bottom pointer arrow)
@@ -108,10 +127,8 @@ func start_spin() -> void:
 	current_rotation = 0.0
 	last_sector_index = get_selected_section_index(current_rotation)
 	
-	# Spin tween
-	var ui_speed_scale = 1.0 / Engine.time_scale
+	# Spin tween (runs in real time, no speed_scale compensation needed)
 	var tween_spin = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUINT)
-	tween_spin.set_speed_scale(ui_speed_scale)
 	tween_spin.tween_property(self, "current_rotation", target_rotation, spin_duration)
 	tween_spin.tween_callback(on_spin_completed)
 
@@ -126,9 +143,7 @@ func _process(delta: float) -> void:
 		result_label.position = panel_center + Vector2(-250, 240)
 		
 	# Needle wiggle physics decay
-	# Multiply by speed scale so wiggles animate at real-time speed in slow motion
-	var ui_speed_scale = 1.0 / Engine.time_scale
-	needle_tilt = lerp(needle_tilt, 0.0, 12.0 * delta * ui_speed_scale)
+	needle_tilt = lerp(needle_tilt, 0.0, 12.0 * delta)
 	
 	# Check sector boundary crossing for ticking wiggles
 	if is_spinning:
@@ -145,7 +160,7 @@ func _process(delta: float) -> void:
 		result_label.text = ev["desc"]
 			
 	if is_highlighted:
-		flash_timer += delta * ui_speed_scale
+		flash_timer += delta
 		
 	queue_redraw()
 
@@ -161,10 +176,8 @@ func on_spin_completed() -> void:
 	result_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.1)) # Glowing gold
 	
 	# Pulsing label scale tween
-	var ui_speed_scale = 1.0 / Engine.time_scale
 	result_label.pivot_offset = result_label.size / 2.0
 	var tween_pulse = create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_ELASTIC)
-	tween_pulse.set_speed_scale(ui_speed_scale)
 	result_label.scale = Vector2(0.5, 0.5)
 	tween_pulse.tween_property(result_label, "scale", Vector2(1.1, 1.1), 0.5)
 	
@@ -172,36 +185,35 @@ func on_spin_completed() -> void:
 	event_selected.emit(ev["name"])
 	
 	# Wait 1.8 real seconds before closing
-	var timer = get_tree().create_timer(1.8 * Engine.time_scale) # Wait in scaled time (1.8 * 0.2 = 0.36s in-game = 1.8s real)
+	var timer = get_tree().create_timer(1.8)
 	await timer.timeout
 	
 	# Animate out
 	var tween_out = create_tween().set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_BACK)
-	tween_out.set_speed_scale(ui_speed_scale)
 	tween_out.tween_property(self, "scale", Vector2.ZERO, 0.35)
 	tween_out.tween_callback(close_popup)
 
 func close_popup() -> void:
-	# Spawn event timer bar on HUD
-	var hud = get_parent()
-	if hud:
-		# Clean up any existing active timer bar
-		var existing = hud.get_node_or_null("EventTimerBar")
-		if existing:
-			existing.queue_free()
-			
-		var timer_script = load("res://ui/event_timer_bar.gd")
-		if timer_script:
-			var timer_bar = Control.new()
-			timer_bar.set_script(timer_script)
-			hud.add_child(timer_bar)
-			
-			var ev = events[selected_index]
-			var duration = 30.0 if ev["name"] == "Convoy" else 15.0
-			timer_bar.call("setup", ev["name"], ev["icon"], ev["color"], duration)
-			
-	# Restore normal game speed
-	Engine.time_scale = 1.0
+	# Unfreeze truck physics (velocities already zeroed in _set_truck_frozen)
+	_set_truck_frozen(false)
+	
+	# Spawn event timer bar on HUD — only for Convoy. Others are stubs, just close cleanly.
+	if selected_index >= 0 and events[selected_index]["name"] == "Convoy":
+		var hud = get_parent()
+		if hud:
+			# Clean up any existing active timer bar
+			var existing = hud.get_node_or_null("EventTimerBar")
+			if existing:
+				existing.queue_free()
+				
+			var timer_script = load("res://ui/event_timer_bar.gd")
+			if timer_script:
+				var timer_bar = Control.new()
+				timer_bar.set_script(timer_script)
+				hud.add_child(timer_bar)
+				
+				var ev = events[selected_index]
+				timer_bar.call("setup", ev["name"], ev["icon"], ev["color"], 30.0)
 	queue_free()
 
 # Helper math to see which sector lands at the bottom pointer (PI/2)
