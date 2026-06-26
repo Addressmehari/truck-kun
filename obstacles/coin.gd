@@ -49,7 +49,7 @@ func _initialize_coin_tier() -> void:
 	#   else    →  ~98.5%  → Gold  (Common)
 	if roll >= 3.8:
 		# Red (Ultra Rare)
-		value = 500
+		value = 1000
 		_color_main = Color(0.65, 0.05, 0.05)
 		_color_inner = Color(0.95, 0.25, 0.25)
 		_color_gem_dark = Color(0.5, 0.0, 0.0)
@@ -70,7 +70,7 @@ func _initialize_coin_tier() -> void:
 		_color_gem_light = Color(0.7, 1.0, 0.8)
 	else:
 		# Gold (Common) — ~98.5% of all spawns
-		value = 10
+		value = 4
 		_color_main = Color(0.88, 0.60, 0.02)
 		_color_inner = Color(1.0, 0.88, 0.28)
 		_color_gem_dark = Color(0.72, 0.44, 0.0)
@@ -144,10 +144,10 @@ func _draw_coin() -> void:
 	var d_size = r * 0.40
 	var d_shadow = Color(0.0, 0.0, 0.0, 0.35)
 	
-	var d_top    = Vector2(0, -d_size)
-	var d_bottom = Vector2(0,  d_size)
-	var d_left   = Vector2(-d_size, 0)
-	var d_right  = Vector2( d_size, 0)
+	var d_top = Vector2(0, -d_size)
+	var d_bottom = Vector2(0, d_size)
+	var d_left = Vector2(-d_size, 0)
+	var d_right = Vector2(d_size, 0)
 	
 	# Diamond Shadow Offset
 	var s_off = Vector2(0, 1.5)

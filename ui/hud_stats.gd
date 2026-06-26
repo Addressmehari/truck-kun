@@ -1,5 +1,9 @@
 extends Control
 
+# Custom Font Configuration
+const FONT_PATH: String = "res://retro_font.ttf" # Change this to your exact font file path
+var custom_font: Font
+
 # Public State
 var coins: int = 0
 var _coin_pop_timer: float = 0.0
@@ -25,6 +29,13 @@ var _streak_shown: bool = false
 func _ready() -> void:
 	await get_tree().process_frame
 
+	# Load the custom font safely; fall back to default if not found
+	if ResourceLoader.exists(FONT_PATH):
+		custom_font = load(FONT_PATH)
+	else:
+		push_warning("Custom font not found at: " + FONT_PATH + ". Using default system font.")
+		custom_font = get_theme_default_font()
+
 	var hud = get_parent()
 	var truck = hud.get_parent() if hud else null
 	if truck:
@@ -33,15 +44,16 @@ func _ready() -> void:
 	if is_instance_valid(chassis):
 		_start_x = chassis.global_position.x
 
+	# ── Responsive Safe-Zone Setup ────────────────────────────────────
 	anchor_left = 0.0
-	anchor_right = 0.0
 	anchor_top = 0.0
-	anchor_bottom = 0.0
-
-	offset_left = 22.0
-	offset_top = 22.0
-	offset_right = 560.0
-	offset_bottom = 260.0
+	anchor_right = 0.5
+	anchor_bottom = 0.4
+	
+	offset_left = 32.0
+	offset_top = 32.0
+	offset_right = 0.0
+	offset_bottom = 0.0
 
 func _process(delta: float) -> void:
 	_elapsed += delta
@@ -56,7 +68,7 @@ func _process(delta: float) -> void:
 	if milestone > _last_milestone:
 		_last_milestone = milestone
 		_dist_bump_timer = 0.55
-		_streak_timer = 1.1
+		_streak_timer = 1.2
 		_streak_shown = true
 
 	if _coin_pop_timer > 0.0: _coin_pop_timer -= delta
@@ -74,159 +86,99 @@ func add_coin(amount: int = 1) -> void:
 	_coin_digit_flash = 0.60
 
 func _draw() -> void:
-	var font = get_theme_default_font()
+	# Use custom font if loaded, otherwise fall back dynamically
+	var font = custom_font if custom_font else get_theme_default_font()
 
-	# ── timers → normalised 0-1 progress ──────────────────────────────
+	# ── Timers ────────────────────────────────────────────────────────
 	var coin_t = clamp(_coin_pop_timer / 0.60, 0.0, 1.0)
 	var dist_t = clamp(_dist_bump_timer / 0.55, 0.0, 1.0)
 	var flash_t = clamp(_coin_digit_flash / 0.60, 0.0, 1.0)
-	var streak_t = clamp(_streak_timer / 1.10, 0.0, 1.0)
+	var streak_t = clamp(_streak_timer / 1.20, 0.0, 1.0)
 
-	# ── scale / size calculations ──────────────────────────────────────
-	var coin_pop = sin(coin_t * PI) * 0.38
-	var coin_idle = sin(_elapsed * 5.8) * 0.03
-	_coin_pop_scale = 1.0 + coin_pop + coin_idle
+	# ── Typography Scale ──────────────────────────────────────────────
+	var coin_pop = sin(coin_t * PI) * 0.30
+	var coin_scale = 1.0 + coin_pop + sin(_elapsed * 4.0) * 0.02
+	var coin_size = int(58.0 * coin_scale)
 
-	var dist_pop = sin(dist_t * PI) * 0.26
-	var dist_idle = sin(_elapsed * 3.0) * 0.02
+	var dist_pop = sin(dist_t * PI) * 0.20
+	var dist_scale = 1.0 + dist_pop + sin(_elapsed * 2.5) * 0.01
+	var dist_size = int(48.0 * dist_scale)
 
-	var coin_size = int(72.0 * _coin_pop_scale)
-	var dist_size = int(54.0 * (1.0 + dist_pop + dist_idle))
+	# ── Clean Spaced Layout Stack ─────────────────────────────────────
+	var score_lbl_y = 24.0
+	var score_val_y = score_lbl_y + 54.0
+	
+	var dist_lbl_y = score_val_y + 44.0
+	var dist_val_y = dist_lbl_y + 46.0
+	
+	var hi_score_y = dist_val_y + 38.0
 
-	# ── vertical positions (gentle bob) ───────────────────────────────
-	var coin_y = 76.0 + sin(_elapsed * 4.2) * 1.8
-	var dist_y = 162.0 + sin(_elapsed * 3.1 + 1.2) * 1.4
+	# ── Premium Arcade Color Palette ──────────────────────────────────
+	# Neon Coral/Crimson for headers
+	var color_score_lbl = Color("#ff2a6d")
+	if _coin_pop_timer > 0.0 and sin(_elapsed * 35.0) > 0.0:
+		color_score_lbl = Color(1.0, 1.0, 1.0, 0.4) # Aesthetic hit-flicker
 
-	# ── label strings ─────────────────────────────────────────────────
-	# Retro score-style: zero-pad coins to 6 digits
-	var coin_str = "%06d" % coins
-	var dist_str = "%d M" % int(_distance_m)
-
-	# Coin label prefix flickers during pop
-	var label_alpha = 1.0
-	if _coin_pop_timer > 0.0:
-		label_alpha = 0.55 + sin(_elapsed * 28.0) * 0.45 # fast flicker
-
-	# ── colors ────────────────────────────────────────────────────────
-	# Coin: hot amber→white flash on pickup, else warm gold
-	var coin_color: Color
+	# Rich, warm 18K Arcade Gold for numbers		
+	var color_coin_text = Color("#05ff00")
 	if flash_t > 0.0:
-		coin_color = Color(1.0, 1.0, 0.6 + flash_t * 0.4).lerp(Color(1.0, 0.82, 0.12), 1.0 - flash_t)
-	else:
-		coin_color = Color(1.0, 0.80, 0.14)
+		color_coin_text = Color(1.0, 1.0, 1.0).lerp(Color("#ffb900"), 1.0 - flash_t)
 
-	# Distance: cyan-mint, brighter on milestone
-	var dist_color: Color
-	if dist_t > 0.0:
-		dist_color = Color(0.18, 1.0, 0.78).lerp(Color(0.55, 1.0, 0.88), dist_t)
-	else:
-		dist_color = Color(0.44, 0.98, 0.76)
+	# Vivid Electric Cyan/Mint suite
+	var color_dist_lbl = Color("#00f0ff")
+	var color_dist_text = Color("#9b20ffff") if dist_t <= 0.0 else Color(0.80, 1.0, 0.95).lerp(Color("#05ffa1"), 1.0 - dist_t)
 
-	# ── draw coin row ─────────────────────────────────────────────────
-	# Tiny uppercase label above
-	_draw_arcade_label(font, "SCORE", Vector2(2.0, coin_y - coin_size * 0.88),
-		20, Color(1.0, 0.65, 0.0, label_alpha * 0.85))
+	# ── Draw Elements ─────────────────────────────────────────────────
+	# SCORE BLOCK
+	_draw_clean_label(font, "SCORE", Vector2(0, score_lbl_y), 14, color_score_lbl)
+	var coin_str = str(coins)
+	_draw_clean_text(font, coin_str, Vector2(0, score_val_y), coin_size, color_coin_text)
 
-	# Score digits — each digit drawn with a slight chromatic shadow for depth
-	_draw_arcade_text(font, coin_str, Vector2(0.0, coin_y),
-		coin_size, coin_color, Color(1.0, 0.40, 0.0, 0.55))
+	# DISTANCE BLOCK
+	_draw_clean_label(font, "DISTANCE", Vector2(0, dist_lbl_y), 14, color_dist_lbl)
+	var dist_str = "%d M" % int(_distance_m)
+	_draw_clean_text(font, dist_str, Vector2(0, dist_val_y), dist_size, color_dist_text)
 
-	# ── sparkles on coin pickup ────────────────────────────────────────
-	_draw_sparkles(Vector2(8.0, coin_y - coin_size * 0.5), coin_t)
+	# HI-SCORE BLOCK (Minimalist white ivory with soft alpha)
+	if _best_distance_m > 0.0:
+		var best_str = "HI-SCORE  %d M" % int(_best_distance_m)
+		_draw_clean_label(font, best_str, Vector2(0, hi_score_y), 13, Color("#f0f4f8", 0.35))
 
-	# ── floating +N popup ─────────────────────────────────────────────
+	# ── FX Overlays ───────────────────────────────────────────────────
+	# +N Popups
 	if _coin_pop_timer > 0.0:
 		var fade = coin_t
-		var rise = (1.0 - fade) * 48.0
-		var wobble = sin(_elapsed * 12.0) * 4.0
-		_draw_arcade_text(
-			font,
-			"+%d" % _last_coin_amount,
-			Vector2(200.0 + wobble, coin_y - 20.0 - rise),
-			32,
-			Color(1.0, 0.95, 0.30, fade),
-			Color(1.0, 0.55, 0.0, fade * 0.6)
-		)
+		var rise = (1.0 - fade) * 32.0
+		var popup_x = (coin_str.length() * (coin_size * 0.55)) + 24.0
+		_draw_clean_text(font, "+%d" % _last_coin_amount, Vector2(popup_x, score_val_y - rise), 24, Color("#fff4a3", fade))
+		_draw_vector_sparkles(Vector2(popup_x - 8.0, score_val_y - 18.0), coin_t)
 
-	# ── draw distance row ─────────────────────────────────────────────
-	_draw_arcade_label(font, "DIST", Vector2(2.0, dist_y - dist_size * 0.82),
-		18, Color(0.10, 0.85, 0.58, 0.80))
-
-	_draw_arcade_text(font, dist_str, Vector2(0.0, dist_y),
-		dist_size, dist_color, Color(0.0, 0.80, 0.45, 0.45))
-
-	# ── milestone burst ───────────────────────────────────────────────
+	# Milestone Alerts
 	if _streak_shown and _streak_timer > 0.0:
-		var st = streak_t
-		var fade = st
-		var rise = (1.0 - st) * 18.0
-		# "100 M!" arcade callout
-		_draw_arcade_text(
-			font,
-			"%dM!" % (_last_milestone * 100),
-			Vector2(130.0, dist_y - 36.0 - rise),
-			28,
-			Color(0.22, 1.0, 0.72, fade),
-			Color(0.0, 0.90, 0.50, fade * 0.5)
-		)
+		var fade = streak_t
+		var rise = (1.0 - streak_t) * 16.0
+		var milestone_x = (dist_str.length() * (dist_size * 0.55)) + 28.0
+		_draw_clean_text(font, "MILESTONE!", Vector2(milestone_x, dist_val_y - rise), 24, Color("#ffffff", fade))
 
-	# ── static best-distance watermark ────────────────────────────────
-	if _best_distance_m > 0.0:
-		var best_str = "BEST %dM" % int(_best_distance_m)
-		_draw_arcade_label(font, best_str, Vector2(2.0, dist_y + 38.0),
-			16, Color(0.55, 1.0, 0.80, 0.38))
+# ── Drawing Engines ──────────────────────────────────────────────────────
 
-# ── helpers ──────────────────────────────────────────────────────────────
+func _draw_clean_text(font: Font, text: String, pos: Vector2, font_size: int, color: Color) -> void:
+	# Ultra soft clean drop projection to enhance visibility over game backgrounds without an ugly outline
+	draw_string(font, pos + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0, 0, 0, 0.20))
+	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
-func _draw_arcade_text(font: Font, text: String, pos: Vector2,
-		font_size: int, color: Color, glow: Color) -> void:
-	# Hard pixel shadow (offset 3,3) — classic arcade cabinet feel
-	draw_string(font, pos + Vector2(3.0, 3.0), text,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, font_size,
-		Color(0.0, 0.0, 0.0, 0.70))
-	# Chromatic offset — red channel shifted right gives depth without blur
-	draw_string(font, pos + Vector2(2.0, 1.0), text,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, font_size,
-		Color(glow.r, 0.0, 0.0, glow.a * 0.55))
-	# Glow layer
-	draw_string(font, pos + Vector2(1.0, 1.0), text,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, glow)
-	# Main text
-	draw_string(font, pos, text,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+func _draw_clean_label(font: Font, text: String, pos: Vector2, font_size: int, color: Color) -> void:
+	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
-func _draw_arcade_label(font: Font, text: String, pos: Vector2,
-		font_size: int, color: Color) -> void:
-	# Tiny uppercase category label — no glow, just a faint shadow
-	draw_string(font, pos + Vector2(1.0, 1.0), text,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, font_size,
-		Color(0.0, 0.0, 0.0, 0.45))
-	draw_string(font, pos, text,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
-
-func _draw_sparkles(origin: Vector2, coin_t: float) -> void:
-	if _coin_pop_timer <= 0.0:
-		return
-
+func _draw_vector_sparkles(origin: Vector2, coin_t: float) -> void:
 	var fade = coin_t
-
-	for i in range(9):
-		var angle = _elapsed * 6.0 + float(i) * 0.698 # ~40° apart
-		var r_base = 14.0 + float(i % 3) * 9.0
-		var radius = r_base + (1.0 - fade) * 28.0
-		var pos = origin + Vector2(cos(angle), sin(angle)) * radius
-		var sz = 1.8 + sin(_elapsed * 14.0 + float(i) * 1.3) * 1.2
-
-		# Alternate gold / white sparkle tips
-		var sc = Color(1.0, 0.92, 0.22, fade * 0.95) if (i % 2 == 0) \
-				else Color(1.0, 1.0, 0.70, fade * 0.65)
-
-		draw_circle(pos, sz, sc)
-
-		# Tiny cross-hair on larger sparkles for a star-burst hint
-		if i % 3 == 0:
-			var arm = sz * 1.6
-			draw_line(pos - Vector2(arm, 0), pos + Vector2(arm, 0),
-				Color(1.0, 0.95, 0.40, fade * 0.50), 1.0)
-			draw_line(pos - Vector2(0, arm), pos + Vector2(0, arm),
-				Color(1.0, 0.95, 0.40, fade * 0.50), 1.0)
+	var count = 4
+	for i in range(count):
+		var angle = (_elapsed * 4.5) + (float(i) * (TAU / count))
+		var distance = (1.0 - fade) * 35.0
+		var spark_pos = origin + Vector2(cos(angle), sin(angle)) * distance
+		var star_size = 4.5 * fade
+		var c = Color("#ffea79", fade * 0.75) if i % 2 == 0 else Color("#00f0ff", fade * 0.75)
+		
+		draw_line(spark_pos - Vector2(star_size, 0), spark_pos + Vector2(star_size, 0), c, 1.2)
+		draw_line(spark_pos - Vector2(0, star_size), spark_pos + Vector2(0, star_size), c, 1.2)
