@@ -130,7 +130,7 @@ func _draw() -> void:
 
 	# ── Draw Elements ─────────────────────────────────────────────────
 	# SCORE BLOCK
-	_draw_clean_label(font, "SCORE", Vector2(0, score_lbl_y), 14, color_score_lbl)
+	_draw_clean_label(font, "COINS", Vector2(0, score_lbl_y), 14, color_score_lbl)
 	var coin_str = str(coins)
 	_draw_clean_text(font, coin_str, Vector2(0, score_val_y), coin_size, color_coin_text)
 
