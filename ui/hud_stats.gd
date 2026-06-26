@@ -9,6 +9,12 @@ var coins: int = 0
 var _coin_pop_timer: float = 0.0
 var _coin_pop_scale: float = 1.0
 
+# Petrol State
+var petrol: float = 100.0        # 0–100
+var petrol_max: float = 100.0
+var _petrol_fill_timer: float = 0.0  # animation when refilled
+var _petrol_fill_amount: float = 0.0
+
 # Internal
 var chassis: RigidBody2D
 var _start_x: float = 0.0
@@ -76,6 +82,7 @@ func _process(delta: float) -> void:
 	if _coin_digit_flash > 0.0: _coin_digit_flash -= delta
 	if _streak_timer > 0.0: _streak_timer -= delta
 	else: _streak_shown = false
+	if _petrol_fill_timer > 0.0: _petrol_fill_timer -= delta
 
 	queue_redraw()
 
@@ -84,6 +91,12 @@ func add_coin(amount: int = 1) -> void:
 	_last_coin_amount = amount
 	_coin_pop_timer = 0.60
 	_coin_digit_flash = 0.60
+
+func fill_petrol(amount: float = 30.0) -> void:
+	var old = petrol
+	petrol = clamp(petrol + amount, 0.0, petrol_max)
+	_petrol_fill_amount = petrol - old
+	_petrol_fill_timer = 0.80
 
 func _draw() -> void:
 	# Use custom font if loaded, otherwise fall back dynamically
@@ -112,6 +125,9 @@ func _draw() -> void:
 	var dist_val_y = dist_lbl_y + 46.0
 	
 	var hi_score_y = dist_val_y + 38.0
+
+	var petrol_lbl_y = hi_score_y + 36.0
+	var petrol_bar_y = petrol_lbl_y + 18.0
 
 	# ── Premium Arcade Color Palette ──────────────────────────────────
 	# Neon Coral/Crimson for headers
@@ -144,6 +160,9 @@ func _draw() -> void:
 		var best_str = "HI-SCORE  %d M" % int(_best_distance_m)
 		_draw_clean_label(font, best_str, Vector2(0, hi_score_y), 13, Color("#f0f4f8", 0.35))
 
+	# ── PETROL BAR ────────────────────────────────────────────────────
+	_draw_petrol_bar(font, petrol_lbl_y, petrol_bar_y)
+
 	# ── FX Overlays ───────────────────────────────────────────────────
 	# +N Popups
 	if _coin_pop_timer > 0.0:
@@ -161,6 +180,55 @@ func _draw() -> void:
 		_draw_clean_text(font, "MILESTONE!", Vector2(milestone_x, dist_val_y - rise), 24, Color("#ffffff", fade))
 
 # ── Drawing Engines ──────────────────────────────────────────────────────
+
+func _draw_petrol_bar(font: Font, lbl_y: float, bar_y: float) -> void:
+	var bar_w: float = 130.0
+	var bar_h: float = 14.0
+	var ratio: float = clamp(petrol / petrol_max, 0.0, 1.0)
+	var is_low: bool = ratio < 0.25
+
+	# Label — flicker red when low
+	var lbl_color: Color
+	if is_low and sin(_elapsed * 9.0) > 0.0:
+		lbl_color = Color("#ff2a2a")
+	else:
+		lbl_color = Color("#ff9900")
+	_draw_clean_label(font, "FUEL", Vector2(0, lbl_y), 14, lbl_color)
+
+	# Background track
+	draw_rect(Rect2(0.0, bar_y, bar_w, bar_h), Color(0.08, 0.08, 0.12, 0.75), true)
+	draw_rect(Rect2(0.0, bar_y, bar_w, bar_h), Color(0.2, 0.2, 0.3, 0.5), false, 1.0)
+
+	# Filled portion with gradient colour: green → orange → red
+	var fill_w: float = bar_w * ratio
+	var fill_color: Color
+	if ratio > 0.5:
+		fill_color = Color("#00e676").lerp(Color("#ff9900"), 1.0 - ((ratio - 0.5) * 2.0))
+	elif ratio > 0.25:
+		fill_color = Color("#ff9900").lerp(Color("#ff3d00"), 1.0 - ((ratio - 0.25) * 4.0))
+	else:
+		var low_pulse = 0.5 + sin(_elapsed * 8.0) * 0.5
+		fill_color = Color("#ff3d00", 0.6 + low_pulse * 0.4)
+	if fill_w > 1.0:
+		draw_rect(Rect2(0.0, bar_y, fill_w, bar_h), fill_color, true)
+
+	# Segment ticks (5 divisions)
+	for i in range(1, 5):
+		var tx = (bar_w / 5.0) * i
+		draw_line(Vector2(tx, bar_y + 2.0), Vector2(tx, bar_y + bar_h - 2.0), Color(0.0, 0.0, 0.0, 0.3), 1.0)
+
+	# Glow edge on top of fill
+	if fill_w > 2.0:
+		var glow_c = fill_color.lightened(0.35)
+		glow_c.a = 0.7
+		draw_line(Vector2(fill_w - 1.5, bar_y + 1.5), Vector2(fill_w - 1.5, bar_y + bar_h - 1.5), glow_c, 2.5)
+
+	# Fill popup: "+Xℓ" rising text
+	if _petrol_fill_timer > 0.0:
+		var ft = clamp(_petrol_fill_timer / 0.80, 0.0, 1.0)
+		var rise = (1.0 - ft) * 24.0
+		var popup_str = "+%dL" % int(_petrol_fill_amount)
+		_draw_clean_text(font, popup_str, Vector2(bar_w + 8.0, bar_y - rise), 20, Color("#00e676", ft))
 
 func _draw_clean_text(font: Font, text: String, pos: Vector2, font_size: int, color: Color) -> void:
 	# Ultra soft clean drop projection to enhance visibility over game backgrounds without an ugly outline

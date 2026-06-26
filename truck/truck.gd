@@ -36,6 +36,13 @@ extends Node2D
 ## Duration of the post-convoy velocity boost (seconds)
 @export_range(0.0, 15.0, 0.5) var boost_duration := 5.0
 
+# ─── Petrol ──────────────────────────────────────────────────────────────────
+@export_group("Petrol")
+## Litres per second consumed while the truck is driving (at full throttle)
+@export_range(0.5, 20.0, 0.5) var petrol_drain_rate: float = 3.0
+## Toggle ON to disable petrol consumption — useful for UI testing
+@export var unlimited_petrol: bool = false
+
 # ─── Internal runtime state ──────────────────────────────────────────────────
 @onready var chassis: RigidBody2D = $chassis
 @onready var container_body: RigidBody2D = $container_body
@@ -271,6 +278,19 @@ func _physics_process(delta: float) -> void:
 		is_braking = true
 	elif backward_pressed and avg_vel > 5.0:
 		is_braking = true
+
+	# ── Petrol gate ───────────────────────────────────────────────────────────
+	if not unlimited_petrol:
+		var hud_stats = get_node_or_null("HUD/HudStats")
+		if hud_stats and "petrol" in hud_stats:
+			# Drain fuel proportional to throttle (idle drain at 0.1x rate)
+			var speed_factor = clamp(abs(move_input), 0.1, 1.0) if (forward_pressed or backward_pressed) else 0.1
+			hud_stats.petrol = maxf(0.0, hud_stats.petrol - petrol_drain_rate * speed_factor * delta)
+
+			# No fuel → cut drive input completely (truck coasts / rolls to a stop)
+			if hud_stats.petrol <= 0.0:
+				move_input = 0.0
+				is_braking = false  # don't force-lock wheels, let it roll naturally
 
 	# Delegate all per-wheel physics to the tyres themselves
 	_drive_wheels(delta, move_input, is_braking)

@@ -4,7 +4,7 @@
 [ext_resource type="PackedScene" uid="uid://dfg8iaj0k1l2m" path="res://truck/chassis.tscn" id="2_chassis_scene"]
 [ext_resource type="PackedScene" uid="uid://dfg8iaj0k1l2n" path="res://truck/container_body.tscn" id="3_container_body_scene"]
 [ext_resource type="Script" uid="uid://bll7pralp5bce" path="res://ui/dashboard.gd" id="4_dashboard_gd"]
-[ext_resource type="Script" path="res://ui/hud_stats.gd" id="5_hud_stats_gd"]
+[ext_resource type="Script" uid="uid://cc3j223efer3f" path="res://ui/hud_stats.gd" id="5_hud_stats_gd"]
 
 [node name="truck" type="Node2D"]
 script = ExtResource("1_truck_gd")
@@ -69,17 +69,11 @@ script = ExtResource("4_dashboard_gd")
 
 [node name="HudStats" type="Control" parent="HUD"]
 layout_mode = 3
-anchors_preset = 1
-anchor_left = 0.0
-anchor_top = 0.0
-anchor_right = 0.0
-anchor_bottom = 0.0
+anchors_preset = 0
 offset_left = 10.0
 offset_top = 340.0
 offset_right = 170.0
 offset_bottom = 470.0
-grow_horizontal = 1
-grow_vertical = 1
 script = ExtResource("5_hud_stats_gd")
 
 [node name="PinJoint2D" type="PinJoint2D" parent="."]

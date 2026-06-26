@@ -13,11 +13,14 @@ extends Node
 @export var despawn_trail: float = 600.0
 ## Chance (0-1) that the next slot gets a triple-coin cluster instead of single
 @export_range(0.0, 1.0, 0.05) var cluster_chance: float = 0.22
+## Chance (0-1) that the next slot spawns a petrol can instead of coins
+@export_range(0.0, 0.5, 0.02) var petrol_chance: float = 0.10
 ## Y offset above road surface so coins hover visibly
 @export var hover_height: float = -20.0
 
 # ─── Internal ─────────────────────────────────────────────────────────────────
 var _coin_scene: PackedScene
+var _petrol_scene: PackedScene
 var _road: StaticBody2D
 var _chassis: RigidBody2D
 var _coins: Array[Node] = []       # live coin nodes
@@ -37,6 +40,10 @@ func _ready() -> void:
 	if not _coin_scene:
 		push_error("CoinSpawner: cannot load res://obstacles/coin.tscn")
 		return
+
+	_petrol_scene = load("res://obstacles/petrol.tscn")
+	if not _petrol_scene:
+		push_warning("CoinSpawner: petrol.tscn not found — petrol cans won't spawn")
 
 	# Seed the first spawn position just ahead of the chassis start
 	if is_instance_valid(_chassis):
@@ -83,8 +90,12 @@ func _fill_pool() -> void:
 			ahead_count += 1
 
 	while ahead_count < pool_size and _next_spawn_x < chassis_x + spawn_lead:
-		# Decide whether to place a single or a cluster
-		if _rng.randf() < cluster_chance:
+		# Decide whether to place a petrol can, cluster, or single coin
+		var roll = _rng.randf()
+		if _petrol_scene and roll < petrol_chance:
+			_spawn_petrol(_next_spawn_x)
+			ahead_count += 1
+		elif roll < petrol_chance + cluster_chance:
 			_spawn_cluster(_next_spawn_x)
 			ahead_count += 3
 		else:
@@ -113,3 +124,15 @@ func _spawn_cluster(world_x: float) -> void:
 	_spawn_coin(world_x, 0.0)
 	_spawn_coin(world_x, -38.0)
 	_spawn_coin(world_x,  38.0)
+
+# ── Spawn a petrol can at world X ─────────────────────────────────────────────
+func _spawn_petrol(world_x: float) -> void:
+	if not _petrol_scene:
+		return
+	var can = _petrol_scene.instantiate()
+	get_parent().add_child(can)
+	var road_y = 0.0
+	if _road and _road.has_method("get_road_height"):
+		road_y = _road.call("get_road_height", world_x)
+	can.global_position = Vector2(world_x, road_y + hover_height - 8.0)
+	_coins.append(can)  # reuse the same tracking array for lifecycle management
