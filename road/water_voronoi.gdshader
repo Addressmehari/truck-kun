@@ -64,8 +64,8 @@ float voronoi_borders(vec2 p) {
 	
 	// Second pass: find distance to the closest border/edge
 	md = 8.0;
-	for (int y = -2; y <= 2; y++) {
-		for (int x = -2; x <= 2; x++) {
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
 			vec2 neighbor = mg + vec2(float(x), float(y));
 			vec2 point = hash2d_vec2(ip + neighbor);
 			point = 0.5 + 0.5 * sin(TIME * wave_speed + point * 6.2831);
@@ -79,6 +79,7 @@ float voronoi_borders(vec2 p) {
 		}
 	}
 	return md;
+
 }
 
 void fragment() {

@@ -119,6 +119,7 @@ var seed_offset_3 := 0.0
 
 # Dictionary to track runtime active chunks: { chunk_index: { "collision": Col, "fill": Fill, "line": Line } }
 var active_chunks := {}
+var wave_physics_tick := 0
 
 const TUNNEL_MIN_SPACING := 6000.0
 
@@ -447,9 +448,9 @@ func get_base_road_height(x: float) -> float:
 	
 	# Combine waves to create interesting rolling hills and dips, offset by seed
 	var mult = hill_amplitude_multiplier * get_convoy_multiplier(x)
-	var long_hills = sin((x + seed_offset_1) * 0.0015) * 140.0 * mult   # Large elevations
-	var medium_waves = cos((x + seed_offset_2) * 0.004) * 50.0 * mult   # Medium slopes
-	var small_bumps = sin((x + seed_offset_3) * 0.012) * 12.0 * mult     # Small bumpy texture
+	var long_hills = sin((x + seed_offset_1) * 0.0015) * 140.0 * mult # Large elevations
+	var medium_waves = cos((x + seed_offset_2) * 0.004) * 50.0 * mult # Medium slopes
+	var small_bumps = sin((x + seed_offset_3) * 0.012) * 12.0 * mult # Small bumpy texture
 	
 	var height = 42.0 + (long_hills + medium_waves + small_bumps)
 	return lerp(42.0, height, factor)
@@ -546,7 +547,7 @@ func get_road_height(x: float) -> float:
 			var dist = x - tunnel_x
 			if abs(dist) <= half_width + padding:
 				return tunnel_y
-			elif dist < 0 and dist >= -(half_width + padding + transition_dist):
+			elif dist < 0 and dist >= - (half_width + padding + transition_dist):
 				# Incoming transition (left side)
 				var t = (x - (flat_start - transition_dist)) / transition_dist
 				var smooth_t = t * t * (3.0 - 2.0 * t) # smoothstep S-curve
@@ -567,8 +568,14 @@ func get_second_line_height(x: float, y_base: float) -> float:
 func get_current_step_size() -> float:
 	var biome = get_current_biome()
 	if biome and biome.is_water:
-		return 300.0 # Very large step size to keep polygon count low and remove lag!
+		return 450.0 # Very large step size to keep polygon count low and remove lag!
 	return step_size
+
+func get_current_view_distance() -> float:
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return 3500.0 # Only load chunks near the camera to keep CPU usage low
+	return view_distance
 
 
 func generate_road() -> void:
@@ -709,6 +716,9 @@ func update_active_chunks_geometry() -> void:
 	if not biome or not biome.is_water:
 		return
 		
+	wave_physics_tick += 1
+	var update_collision = (wave_physics_tick % 5 == 0)
+	
 	for i in active_chunks.keys():
 		var chunk = active_chunks[i]
 		var start_x = i * chunk_width
@@ -723,8 +733,8 @@ func update_active_chunks_geometry() -> void:
 			x += step
 		surface_points.append(Vector2(end_x, get_road_height(end_x)))
 		
-		# Update CollisionPolygon2D
-		if is_instance_valid(chunk.collision):
+		# Update CollisionPolygon2D (throttled for performance)
+		if update_collision and is_instance_valid(chunk.collision):
 			var polygon_points = PackedVector2Array(surface_points)
 			polygon_points.append(Vector2(end_x, road_bottom))
 			polygon_points.append(Vector2(start_x, road_bottom))
@@ -770,8 +780,9 @@ func regenerate_runtime_chunks() -> void:
 		update_chunks(get_target_x())
 
 func update_chunks(player_x: float) -> void:
-	var start_chunk = int(floor((player_x - view_distance) / chunk_width))
-	var end_chunk = int(ceil((player_x + view_distance) / chunk_width))
+	var current_view_dist = get_current_view_distance()
+	var start_chunk = int(floor((player_x - current_view_dist) / chunk_width))
+	var end_chunk = int(ceil((player_x + current_view_dist) / chunk_width))
 	
 	# Create new chunks
 	for i in range(start_chunk, end_chunk + 1):
