@@ -123,6 +123,7 @@ var active_chunks := {}
 const TUNNEL_MIN_SPACING := 6000.0
 
 var ground_material: ShaderMaterial = null
+var water_material: ShaderMaterial = null
 
 # Captured styles for runtime chunk styling
 var template_fill_color := Color(0.12, 0.12, 0.14, 1)
@@ -189,6 +190,27 @@ func initialize_default_biomes() -> void:
 	b2.enable_headlight = true
 	biomes.append(b2)
 
+	# 3. Deep Water
+	var b3 = BiomeConfig.new()
+	b3.biome_name = "Deep Water"
+	b3.sky_shader = load("res://road/sky_gradient.gdshader")
+	b3.sky_shader_params = {
+		"top_color": Color(0.02, 0.06, 0.14, 1.0),
+		"bottom_color": Color(0.05, 0.18, 0.28, 1.0),
+		"gradient_offset": 0.2,
+		"gradient_power": 1.6,
+		"show_moon": true,
+		"show_stars": false
+	}
+	b3.road_color = Color(0.25, 0.65, 0.75, 1.0)
+	b3.road_fill_color = Color(0.08, 0.28, 0.38, 1.0)
+	b3.spawn_foliage = false
+	b3.is_water = true
+	b3.use_silhouette_truck = true
+	b3.truck_silhouette_color = Color(0.04, 0.12, 0.22, 1.0)
+	b3.enable_headlight = false
+	biomes.append(b3)
+
 func apply_active_biome() -> void:
 	var biome = get_current_biome()
 	if not biome:
@@ -225,7 +247,9 @@ func _input(event: InputEvent) -> void:
 			cycle_biome()
 
 func cycle_biome() -> void:
-	if biomes.is_empty():
+	# Always reinitialize if we have fewer biomes than expected (e.g. scene was saved
+	# before the Water biome was added, so the exported array is stale).
+	if biomes.size() < 3:
 		initialize_default_biomes()
 	var new_idx = (active_biome_index + 1) % biomes.size()
 	active_biome_index = new_idx
@@ -318,6 +342,19 @@ func get_ground_vertex_colors(surface_size: int, fill_color: Color, line_color: 
 	return colors
 
 func get_ground_material(fill_col: Color, line_col: Color) -> ShaderMaterial:
+	var biome = get_current_biome()
+	# Water biome uses the animated Voronoi water shader instead of ground shader
+	if biome and biome.is_water:
+		if not water_material:
+			water_material = ShaderMaterial.new()
+			var water_shader = load("res://road/water_voronoi.gdshader")
+			if water_shader:
+				water_material.shader = water_shader
+		if water_material:
+			# Keep player_position / player_velocity_length at default (updated each frame by truck.gd)
+			water_material.set_shader_parameter("blue_bg", fill_col)
+		return water_material
+
 	if not ground_material:
 		ground_material = ShaderMaterial.new()
 		var shader_res = load("res://road/ground_voronoi.gdshader")
@@ -328,7 +365,6 @@ func get_ground_material(fill_col: Color, line_col: Color) -> ShaderMaterial:
 		ground_material.set_shader_parameter("line_color", line_col)
 		
 		# Set silhouette road parameters from current biome
-		var biome = get_current_biome()
 		if biome:
 			ground_material.set_shader_parameter("is_silhouette", biome.use_silhouette_road)
 			ground_material.set_shader_parameter("silhouette_color", biome.road_silhouette_color)
@@ -390,6 +426,20 @@ func get_convoy_multiplier(x: float) -> float:
 func get_base_road_height(x: float) -> float:
 	if is_flat:
 		return flat_height
+
+	# Water biome: gentle rolling sine waves (shallow amplitude, slow frequency)
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		# Flat start zone near spawn
+		if abs(x) < 300.0:
+			return 42.0
+		var raw_factor = clamp((abs(x) - 300.0) / 200.0, 0.0, 1.0)
+		var factor = raw_factor * raw_factor * (3.0 - 2.0 * raw_factor)
+		# Slow, lazy ocean swell — three overlapping sine frequencies
+		var swell = sin((x + seed_offset_1) * 0.002) * 55.0
+		var ripple = cos((x + seed_offset_2) * 0.006) * 18.0
+		var chop = sin((x + seed_offset_3) * 0.018) * 6.0
+		return lerp(42.0, 42.0 + swell + ripple + chop, factor)
 		
 	# Make a flat starting zone around the spawn area (x = 0)
 	if abs(x) < 400.0:
@@ -443,6 +493,11 @@ func is_event_active() -> bool:
 # Deterministically get tunnel details for a given chunk
 func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 	if is_event_active():
+		return {}
+
+	# No tunnels in water biome (submerged road)
+	var biome = get_current_biome()
+	if biome and biome.is_water:
 		return {}
 		
 	# Avoid tunnels too close to spawn (within 1500 units)
@@ -635,6 +690,13 @@ func _physics_process(_delta: float) -> void:
 		return
 		
 	update_chunks(get_target_x())
+
+	# Feed interactive ripple uniforms into the water shader every frame
+	if water_material and water_material.shader:
+		var chassis = get_node_or_null("../truck/chassis")
+		if chassis and is_instance_valid(chassis):
+			water_material.set_shader_parameter("player_position", chassis.global_position)
+			water_material.set_shader_parameter("player_velocity_length", chassis.linear_velocity.length())
 
 func get_target_x() -> float:
 	if is_inside_tree():

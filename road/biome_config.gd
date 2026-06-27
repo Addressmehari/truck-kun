@@ -25,3 +25,7 @@ class_name BiomeConfig
 @export var use_silhouette_truck: bool = false
 @export var truck_silhouette_color: Color = Color.BLACK
 @export var enable_headlight: bool = false
+
+@export_group("Water Mode")
+## When true, the road surface becomes animated waves and the water Voronoi shader is applied.
+@export var is_water: bool = false

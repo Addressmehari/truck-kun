@@ -344,6 +344,7 @@ func _input(event: InputEvent) -> void:
 						hud.add_child(timer_bar)
 						timer_bar.call("setup", "Convoy", "🚚", Color(0.15, 0.42, 0.85), 30.0)
 
+
 func _on_gear_button_pressed(gear_type: Gear) -> void:
 	set_gear(gear_type)
 
