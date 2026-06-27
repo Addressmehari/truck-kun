@@ -206,8 +206,7 @@ func initialize_default_biomes() -> void:
 	b3.road_fill_color = Color(0.08, 0.28, 0.38, 1.0)
 	b3.spawn_foliage = false
 	b3.is_water = true
-	b3.use_silhouette_truck = true
-	b3.truck_silhouette_color = Color(0.04, 0.12, 0.22, 1.0)
+	b3.use_silhouette_truck = false
 	b3.enable_headlight = false
 	biomes.append(b3)
 
@@ -376,6 +375,7 @@ func _ready() -> void:
 		apply_active_biome()
 	else:
 		capture_templates()
+		initialize_default_biomes()
 		
 		# Free template nodes at runtime to avoid collision/visual duplication at the start
 		var col_poly = _get_collision_polygon()
@@ -427,19 +427,10 @@ func get_base_road_height(x: float) -> float:
 	if is_flat:
 		return flat_height
 
-	# Water biome: gentle rolling sine waves (shallow amplitude, slow frequency)
+	# Water biome: flat road
 	var biome = get_current_biome()
 	if biome and biome.is_water:
-		# Flat start zone near spawn
-		if abs(x) < 300.0:
-			return 42.0
-		var raw_factor = clamp((abs(x) - 300.0) / 200.0, 0.0, 1.0)
-		var factor = raw_factor * raw_factor * (3.0 - 2.0 * raw_factor)
-		# Slow, lazy ocean swell — three overlapping sine frequencies
-		var swell = sin((x + seed_offset_1) * 0.002) * 55.0
-		var ripple = cos((x + seed_offset_2) * 0.006) * 18.0
-		var chop = sin((x + seed_offset_3) * 0.018) * 6.0
-		return lerp(42.0, 42.0 + swell + ripple + chop, factor)
+		return flat_height
 		
 	# Make a flat starting zone around the spawn area (x = 0)
 	if abs(x) < 400.0:
@@ -609,8 +600,9 @@ func generate_road() -> void:
 	fill.material = get_ground_material(fill.color, road_color)
 		
 	# Apply to visual surface line
+	var current_biome = get_current_biome()
 	line.points = surface_points
-	line.width = road_thickness
+	line.width = 0.0 if (current_biome and current_biome.is_water) else road_thickness
 	line.default_color = road_color
 	
 	# Apply to second visual surface line
@@ -627,11 +619,11 @@ func generate_road() -> void:
 				line2.owner = get_tree().edited_scene_root
 		if line2:
 			line2.points = surface_points_2
-			line2.width = road_thickness
+			line2.width = 0.0 if (current_biome and current_biome.is_water) else road_thickness
 			line2.default_color = road_color
 	
 	# Create or update GrassDecorator in editor
-	var current_biome = get_current_biome()
+	current_biome = get_current_biome()
 	
 	var grass = get_node_or_null("GrassDecorator")
 	if not current_biome.spawn_foliage:
@@ -744,6 +736,7 @@ func spawn_tunnel_node(chunk_index: int, tunnel_data: Dictionary) -> Node2D:
 
 
 func create_chunk(i: int) -> void:
+	var current_biome = get_current_biome()
 	var start_x = i * chunk_width
 	var end_x = (i + 1) * chunk_width
 	
@@ -782,7 +775,7 @@ func create_chunk(i: int) -> void:
 	# Create Line2D
 	var line = Line2D.new()
 	line.points = surface_points
-	line.width = road_thickness
+	line.width = 0.0 if current_biome.is_water else road_thickness
 	line.default_color = road_color
 	add_child(line)
 	
@@ -791,12 +784,12 @@ func create_chunk(i: int) -> void:
 	if enable_second_road:
 		line2 = Line2D.new()
 		line2.points = surface_points_2
-		line2.width = road_thickness
+		line2.width = 0.0 if current_biome.is_water else road_thickness
 		line2.default_color = road_color
 		add_child(line2)
 	
 	# Create GrassDecorator
-	var current_biome = get_current_biome()
+	current_biome = get_current_biome()
 	var grass = null
 	var grass2 = null
 	var grass_script = load("res://road/grass_decorator.gd")
