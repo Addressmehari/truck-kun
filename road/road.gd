@@ -119,10 +119,12 @@ var seed_offset_3 := 0.0
 
 # Dictionary to track runtime active chunks: { chunk_index: { "collision": Col, "fill": Fill, "line": Line } }
 var active_chunks := {}
+var wave_physics_tick := 0
 
 const TUNNEL_MIN_SPACING := 6000.0
 
 var ground_material: ShaderMaterial = null
+var water_material: ShaderMaterial = null
 
 # Captured styles for runtime chunk styling
 var template_fill_color := Color(0.12, 0.12, 0.14, 1)
@@ -189,6 +191,26 @@ func initialize_default_biomes() -> void:
 	b2.enable_headlight = true
 	biomes.append(b2)
 
+	# 3. Deep Water
+	var b3 = BiomeConfig.new()
+	b3.biome_name = "Deep Water"
+	b3.sky_shader = load("res://road/sky_gradient.gdshader")
+	b3.sky_shader_params = {
+		"top_color": Color(0.02, 0.06, 0.14, 1.0),
+		"bottom_color": Color(0.05, 0.18, 0.28, 1.0),
+		"gradient_offset": 0.2,
+		"gradient_power": 1.6,
+		"show_moon": true,
+		"show_stars": false
+	}
+	b3.road_color = Color(0.25, 0.65, 0.75, 1.0)
+	b3.road_fill_color = Color(0.08, 0.28, 0.38, 1.0)
+	b3.spawn_foliage = false
+	b3.is_water = true
+	b3.use_silhouette_truck = false
+	b3.enable_headlight = false
+	biomes.append(b3)
+
 func apply_active_biome() -> void:
 	var biome = get_current_biome()
 	if not biome:
@@ -225,7 +247,9 @@ func _input(event: InputEvent) -> void:
 			cycle_biome()
 
 func cycle_biome() -> void:
-	if biomes.is_empty():
+	# Always reinitialize if we have fewer biomes than expected (e.g. scene was saved
+	# before the Water biome was added, so the exported array is stale).
+	if biomes.size() < 3:
 		initialize_default_biomes()
 	var new_idx = (active_biome_index + 1) % biomes.size()
 	active_biome_index = new_idx
@@ -318,6 +342,19 @@ func get_ground_vertex_colors(surface_size: int, fill_color: Color, line_color: 
 	return colors
 
 func get_ground_material(fill_col: Color, line_col: Color) -> ShaderMaterial:
+	var biome = get_current_biome()
+	# Water biome uses the animated Voronoi water shader instead of ground shader
+	if biome and biome.is_water:
+		if not water_material:
+			water_material = ShaderMaterial.new()
+			var water_shader = load("res://road/water_voronoi.gdshader")
+			if water_shader:
+				water_material.shader = water_shader
+		if water_material:
+			# Keep player_position / player_velocity_length at default (updated each frame by truck.gd)
+			water_material.set_shader_parameter("blue_bg", fill_col)
+		return water_material
+
 	if not ground_material:
 		ground_material = ShaderMaterial.new()
 		var shader_res = load("res://road/ground_voronoi.gdshader")
@@ -328,7 +365,6 @@ func get_ground_material(fill_col: Color, line_col: Color) -> ShaderMaterial:
 		ground_material.set_shader_parameter("line_color", line_col)
 		
 		# Set silhouette road parameters from current biome
-		var biome = get_current_biome()
 		if biome:
 			ground_material.set_shader_parameter("is_silhouette", biome.use_silhouette_road)
 			ground_material.set_shader_parameter("silhouette_color", biome.road_silhouette_color)
@@ -340,6 +376,7 @@ func _ready() -> void:
 		apply_active_biome()
 	else:
 		capture_templates()
+		initialize_default_biomes()
 		
 		# Free template nodes at runtime to avoid collision/visual duplication at the start
 		var col_poly = _get_collision_polygon()
@@ -390,6 +427,16 @@ func get_convoy_multiplier(x: float) -> float:
 func get_base_road_height(x: float) -> float:
 	if is_flat:
 		return flat_height
+
+	# Water biome: flat road with gentle time-based waving
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		var time = 0.0
+		if not Engine.is_editor_hint():
+			time = Time.get_ticks_msec() / 1000.0
+		var wave = sin((x + seed_offset_1) * 0.005 - time * 2.0) * 12.0
+		var wave2 = cos((x + seed_offset_2) * 0.012 - time * 3.5) * 4.0
+		return flat_height + wave + wave2
 		
 	# Make a flat starting zone around the spawn area (x = 0)
 	if abs(x) < 400.0:
@@ -401,9 +448,9 @@ func get_base_road_height(x: float) -> float:
 	
 	# Combine waves to create interesting rolling hills and dips, offset by seed
 	var mult = hill_amplitude_multiplier * get_convoy_multiplier(x)
-	var long_hills = sin((x + seed_offset_1) * 0.0015) * 140.0 * mult   # Large elevations
-	var medium_waves = cos((x + seed_offset_2) * 0.004) * 50.0 * mult   # Medium slopes
-	var small_bumps = sin((x + seed_offset_3) * 0.012) * 12.0 * mult     # Small bumpy texture
+	var long_hills = sin((x + seed_offset_1) * 0.0015) * 140.0 * mult # Large elevations
+	var medium_waves = cos((x + seed_offset_2) * 0.004) * 50.0 * mult # Medium slopes
+	var small_bumps = sin((x + seed_offset_3) * 0.012) * 12.0 * mult # Small bumpy texture
 	
 	var height = 42.0 + (long_hills + medium_waves + small_bumps)
 	return lerp(42.0, height, factor)
@@ -443,6 +490,11 @@ func is_event_active() -> bool:
 # Deterministically get tunnel details for a given chunk
 func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 	if is_event_active():
+		return {}
+
+	# No tunnels in water biome (submerged road)
+	var biome = get_current_biome()
+	if biome and biome.is_water:
 		return {}
 		
 	# Avoid tunnels too close to spawn (within 1500 units)
@@ -495,7 +547,7 @@ func get_road_height(x: float) -> float:
 			var dist = x - tunnel_x
 			if abs(dist) <= half_width + padding:
 				return tunnel_y
-			elif dist < 0 and dist >= -(half_width + padding + transition_dist):
+			elif dist < 0 and dist >= - (half_width + padding + transition_dist):
 				# Incoming transition (left side)
 				var t = (x - (flat_start - transition_dist)) / transition_dist
 				var smooth_t = t * t * (3.0 - 2.0 * t) # smoothstep S-curve
@@ -513,6 +565,19 @@ func get_second_line_height(x: float, y_base: float) -> float:
 	var offset = 140.0 + sin(x * 0.005) * 30.0 + cos(x * 0.012) * 10.0
 	return y_base + max(60.0, offset)
 
+func get_current_step_size() -> float:
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return 450.0 # Very large step size to keep polygon count low and remove lag!
+	return step_size
+
+func get_current_view_distance() -> float:
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return 3500.0 # Only load chunks near the camera to keep CPU usage low
+	return view_distance
+
+
 func generate_road() -> void:
 	var col_poly = _get_collision_polygon()
 	var fill = _get_road_fill()
@@ -528,10 +593,11 @@ func generate_road() -> void:
 	var end_x = road_length
 	
 	var x = start_x
+	var step = get_current_step_size()
 	while x <= end_x:
 		var y = get_road_height(x)
 		surface_points.append(Vector2(x, y))
-		x += step_size
+		x += step
 		
 	# Ensure the last point is exactly at the end
 	surface_points.append(Vector2(end_x, get_road_height(end_x)))
@@ -554,8 +620,9 @@ func generate_road() -> void:
 	fill.material = get_ground_material(fill.color, road_color)
 		
 	# Apply to visual surface line
+	var current_biome = get_current_biome()
 	line.points = surface_points
-	line.width = road_thickness
+	line.width = 0.0 if (current_biome and current_biome.is_water) else road_thickness
 	line.default_color = road_color
 	
 	# Apply to second visual surface line
@@ -572,11 +639,11 @@ func generate_road() -> void:
 				line2.owner = get_tree().edited_scene_root
 		if line2:
 			line2.points = surface_points_2
-			line2.width = road_thickness
+			line2.width = 0.0 if (current_biome and current_biome.is_water) else road_thickness
 			line2.default_color = road_color
 	
 	# Create or update GrassDecorator in editor
-	var current_biome = get_current_biome()
+	current_biome = get_current_biome()
 	
 	var grass = get_node_or_null("GrassDecorator")
 	if not current_biome.spawn_foliage:
@@ -635,6 +702,62 @@ func _physics_process(_delta: float) -> void:
 		return
 		
 	update_chunks(get_target_x())
+	update_active_chunks_geometry()
+
+	# Feed interactive ripple uniforms into the water shader every frame
+	if water_material and water_material.shader:
+		var chassis = get_node_or_null("../truck/chassis")
+		if chassis and is_instance_valid(chassis):
+			water_material.set_shader_parameter("player_position", chassis.global_position)
+			water_material.set_shader_parameter("player_velocity_length", chassis.linear_velocity.length())
+
+func update_active_chunks_geometry() -> void:
+	var biome = get_current_biome()
+	if not biome or not biome.is_water:
+		return
+		
+	wave_physics_tick += 1
+	var update_collision = (wave_physics_tick % 5 == 0)
+	
+	for i in active_chunks.keys():
+		var chunk = active_chunks[i]
+		var start_x = i * chunk_width
+		var end_x = (i + 1) * chunk_width
+		
+		var surface_points = PackedVector2Array()
+		var x = start_x
+		var step = get_current_step_size()
+		while x < end_x:
+			var y = get_road_height(x)
+			surface_points.append(Vector2(x, y))
+			x += step
+		surface_points.append(Vector2(end_x, get_road_height(end_x)))
+		
+		# Update CollisionPolygon2D (throttled for performance)
+		if update_collision and is_instance_valid(chunk.collision):
+			var polygon_points = PackedVector2Array(surface_points)
+			polygon_points.append(Vector2(end_x, road_bottom))
+			polygon_points.append(Vector2(start_x, road_bottom))
+			chunk.collision.polygon = polygon_points
+			
+		# Update Polygon2D
+		if is_instance_valid(chunk.fill):
+			var polygon_points = PackedVector2Array(surface_points)
+			polygon_points.append(Vector2(end_x, road_bottom))
+			polygon_points.append(Vector2(start_x, road_bottom))
+			chunk.fill.polygon = polygon_points
+			
+		# Update Line2D
+		if is_instance_valid(chunk.line):
+			chunk.line.points = surface_points
+			
+		# Update Line2D2
+		if "line2" in chunk and is_instance_valid(chunk.line2):
+			var surface_points_2 = PackedVector2Array()
+			for pt in surface_points:
+				surface_points_2.append(Vector2(pt.x, get_second_line_height(pt.x, pt.y)))
+			chunk.line2.points = surface_points_2
+
 
 func get_target_x() -> float:
 	if is_inside_tree():
@@ -657,8 +780,9 @@ func regenerate_runtime_chunks() -> void:
 		update_chunks(get_target_x())
 
 func update_chunks(player_x: float) -> void:
-	var start_chunk = int(floor((player_x - view_distance) / chunk_width))
-	var end_chunk = int(ceil((player_x + view_distance) / chunk_width))
+	var current_view_dist = get_current_view_distance()
+	var start_chunk = int(floor((player_x - current_view_dist) / chunk_width))
+	var end_chunk = int(ceil((player_x + current_view_dist) / chunk_width))
 	
 	# Create new chunks
 	for i in range(start_chunk, end_chunk + 1):
@@ -682,15 +806,17 @@ func spawn_tunnel_node(chunk_index: int, tunnel_data: Dictionary) -> Node2D:
 
 
 func create_chunk(i: int) -> void:
+	var current_biome = get_current_biome()
 	var start_x = i * chunk_width
 	var end_x = (i + 1) * chunk_width
 	
 	var surface_points = PackedVector2Array()
 	var x = start_x
+	var step = get_current_step_size()
 	while x < end_x:
 		var y = get_road_height(x)
 		surface_points.append(Vector2(x, y))
-		x += step_size
+		x += step
 		
 	# Ensure the last point is exactly at the end
 	surface_points.append(Vector2(end_x, get_road_height(end_x)))
@@ -720,7 +846,7 @@ func create_chunk(i: int) -> void:
 	# Create Line2D
 	var line = Line2D.new()
 	line.points = surface_points
-	line.width = road_thickness
+	line.width = 0.0 if current_biome.is_water else road_thickness
 	line.default_color = road_color
 	add_child(line)
 	
@@ -729,12 +855,12 @@ func create_chunk(i: int) -> void:
 	if enable_second_road:
 		line2 = Line2D.new()
 		line2.points = surface_points_2
-		line2.width = road_thickness
+		line2.width = 0.0 if current_biome.is_water else road_thickness
 		line2.default_color = road_color
 		add_child(line2)
 	
 	# Create GrassDecorator
-	var current_biome = get_current_biome()
+	current_biome = get_current_biome()
 	var grass = null
 	var grass2 = null
 	var grass_script = load("res://road/grass_decorator.gd")
