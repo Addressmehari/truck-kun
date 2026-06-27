@@ -427,10 +427,15 @@ func get_base_road_height(x: float) -> float:
 	if is_flat:
 		return flat_height
 
-	# Water biome: flat road
+	# Water biome: flat road with gentle time-based waving
 	var biome = get_current_biome()
 	if biome and biome.is_water:
-		return flat_height
+		var time = 0.0
+		if not Engine.is_editor_hint():
+			time = Time.get_ticks_msec() / 1000.0
+		var wave = sin((x + seed_offset_1) * 0.005 - time * 2.0) * 12.0
+		var wave2 = cos((x + seed_offset_2) * 0.012 - time * 3.5) * 4.0
+		return flat_height + wave + wave2
 		
 	# Make a flat starting zone around the spawn area (x = 0)
 	if abs(x) < 400.0:
@@ -559,6 +564,13 @@ func get_second_line_height(x: float, y_base: float) -> float:
 	var offset = 140.0 + sin(x * 0.005) * 30.0 + cos(x * 0.012) * 10.0
 	return y_base + max(60.0, offset)
 
+func get_current_step_size() -> float:
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return 300.0 # Very large step size to keep polygon count low and remove lag!
+	return step_size
+
+
 func generate_road() -> void:
 	var col_poly = _get_collision_polygon()
 	var fill = _get_road_fill()
@@ -574,10 +586,11 @@ func generate_road() -> void:
 	var end_x = road_length
 	
 	var x = start_x
+	var step = get_current_step_size()
 	while x <= end_x:
 		var y = get_road_height(x)
 		surface_points.append(Vector2(x, y))
-		x += step_size
+		x += step
 		
 	# Ensure the last point is exactly at the end
 	surface_points.append(Vector2(end_x, get_road_height(end_x)))
@@ -682,6 +695,7 @@ func _physics_process(_delta: float) -> void:
 		return
 		
 	update_chunks(get_target_x())
+	update_active_chunks_geometry()
 
 	# Feed interactive ripple uniforms into the water shader every frame
 	if water_material and water_material.shader:
@@ -689,6 +703,51 @@ func _physics_process(_delta: float) -> void:
 		if chassis and is_instance_valid(chassis):
 			water_material.set_shader_parameter("player_position", chassis.global_position)
 			water_material.set_shader_parameter("player_velocity_length", chassis.linear_velocity.length())
+
+func update_active_chunks_geometry() -> void:
+	var biome = get_current_biome()
+	if not biome or not biome.is_water:
+		return
+		
+	for i in active_chunks.keys():
+		var chunk = active_chunks[i]
+		var start_x = i * chunk_width
+		var end_x = (i + 1) * chunk_width
+		
+		var surface_points = PackedVector2Array()
+		var x = start_x
+		var step = get_current_step_size()
+		while x < end_x:
+			var y = get_road_height(x)
+			surface_points.append(Vector2(x, y))
+			x += step
+		surface_points.append(Vector2(end_x, get_road_height(end_x)))
+		
+		# Update CollisionPolygon2D
+		if is_instance_valid(chunk.collision):
+			var polygon_points = PackedVector2Array(surface_points)
+			polygon_points.append(Vector2(end_x, road_bottom))
+			polygon_points.append(Vector2(start_x, road_bottom))
+			chunk.collision.polygon = polygon_points
+			
+		# Update Polygon2D
+		if is_instance_valid(chunk.fill):
+			var polygon_points = PackedVector2Array(surface_points)
+			polygon_points.append(Vector2(end_x, road_bottom))
+			polygon_points.append(Vector2(start_x, road_bottom))
+			chunk.fill.polygon = polygon_points
+			
+		# Update Line2D
+		if is_instance_valid(chunk.line):
+			chunk.line.points = surface_points
+			
+		# Update Line2D2
+		if "line2" in chunk and is_instance_valid(chunk.line2):
+			var surface_points_2 = PackedVector2Array()
+			for pt in surface_points:
+				surface_points_2.append(Vector2(pt.x, get_second_line_height(pt.x, pt.y)))
+			chunk.line2.points = surface_points_2
+
 
 func get_target_x() -> float:
 	if is_inside_tree():
@@ -742,10 +801,11 @@ func create_chunk(i: int) -> void:
 	
 	var surface_points = PackedVector2Array()
 	var x = start_x
+	var step = get_current_step_size()
 	while x < end_x:
 		var y = get_road_height(x)
 		surface_points.append(Vector2(x, y))
-		x += step_size
+		x += step
 		
 	# Ensure the last point is exactly at the end
 	surface_points.append(Vector2(end_x, get_road_height(end_x)))
