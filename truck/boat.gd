@@ -126,8 +126,8 @@ func _apply_buoyancy(local_pos: Vector2, delta: float) -> void:
 		apply_force(force, global_pos - global_position)
 		
 		# Apply water drag force to this flotation point (heavy immersive physics feel)
-		var drag_force = -point_vel * 1.5 * depth
-		drag_force = drag_force.limit_length(100.0)
+		var drag_force = -point_vel * 3.0 * depth
+		drag_force = drag_force.limit_length(180.0)
 		apply_force(drag_force, global_pos - global_position)
 
 func drive(move_input: float, braking: bool) -> void:
@@ -136,9 +136,9 @@ func drive(move_input: float, braking: bool) -> void:
 		
 	# Forward/Backward propulsion force along boat axis
 	if move_input != 0.0:
-		var thrust_power = 2200.0
+		var thrust_power = 1200.0
 		if move_input < 0.0:
-			thrust_power = 1200.0 # slower reverse
+			thrust_power = 700.0 # slower reverse
 		apply_central_force(global_transform.x * move_input * thrust_power)
 		
 		# Subtle lift torque (boat bows up when accelerating forward)

@@ -737,6 +737,10 @@ func set_water_mode(enabled: bool) -> void:
 	var camera = get_node_or_null("/root/main/Camera2D")
 	if camera:
 		camera.target = active_body
+		if enabled:
+			camera.set("target_horizontal_offset", 340.0) # Move boat more to the left side of the screen
+		else:
+			camera.set("target_horizontal_offset", -250.0 if is_autopilot else 220.0)
 		
 	var coin_spawner = get_node_or_null("/root/main/CoinSpawner")
 	if coin_spawner:
