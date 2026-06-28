@@ -194,15 +194,6 @@ func initialize_default_biomes() -> void:
 	# 3. Deep Water
 	var b3 = BiomeConfig.new()
 	b3.biome_name = "Deep Water"
-	b3.sky_shader = load("res://road/sky_gradient.gdshader")
-	b3.sky_shader_params = {
-		"top_color": Color(0.02, 0.06, 0.14, 1.0),
-		"bottom_color": Color(0.05, 0.18, 0.28, 1.0),
-		"gradient_offset": 0.2,
-		"gradient_power": 1.6,
-		"show_moon": true,
-		"show_stars": false
-	}
 	b3.road_color = Color(0.25, 0.65, 0.75, 1.0)
 	b3.road_fill_color = Color(0.08, 0.28, 0.38, 1.0)
 	b3.spawn_foliage = false
@@ -232,6 +223,8 @@ func apply_active_biome() -> void:
 			truck.call("set_silhouette_mode", biome.use_silhouette_truck, biome.truck_silhouette_color)
 		if truck.has_method("set_headlight_enabled"):
 			truck.call("set_headlight_enabled", biome.enable_headlight if "enable_headlight" in biome else false)
+		if truck.has_method("set_water_mode"):
+			truck.call("set_water_mode", biome.is_water)
 		
 	# Regenerate visuals
 	if Engine.is_editor_hint():
@@ -706,10 +699,16 @@ func _physics_process(_delta: float) -> void:
 
 	# Feed interactive ripple uniforms into the water shader every frame
 	if water_material and water_material.shader:
-		var chassis = get_node_or_null("../truck/chassis")
-		if chassis and is_instance_valid(chassis):
-			water_material.set_shader_parameter("player_position", chassis.global_position)
-			water_material.set_shader_parameter("player_velocity_length", chassis.linear_velocity.length())
+		var truck = get_node_or_null("../truck")
+		var player_node = null
+		if truck:
+			player_node = truck.boat if truck.get("is_water_mode_active") else truck.chassis
+		if not player_node:
+			player_node = get_node_or_null("../truck/chassis")
+			
+		if player_node and is_instance_valid(player_node):
+			water_material.set_shader_parameter("player_position", player_node.global_position)
+			water_material.set_shader_parameter("player_velocity_length", player_node.linear_velocity.length())
 
 func update_active_chunks_geometry() -> void:
 	var biome = get_current_biome()
@@ -767,9 +766,15 @@ func get_target_x() -> float:
 			if camera and is_instance_valid(camera):
 				return camera.global_position.x
 		
-	var chassis = get_node_or_null("../truck/chassis")
-	if chassis and is_instance_valid(chassis):
-		return chassis.global_position.x
+	var truck = get_node_or_null("../truck")
+	var player_node = null
+	if truck:
+		player_node = truck.boat if truck.get("is_water_mode_active") else truck.chassis
+	if not player_node:
+		player_node = get_node_or_null("../truck/chassis")
+		
+	if player_node and is_instance_valid(player_node):
+		return player_node.global_position.x
 		
 	return 0.0
 

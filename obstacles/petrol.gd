@@ -42,6 +42,7 @@ func _on_body_entered(body: Node) -> void:
 	var is_truck_part = (
 		body.is_in_group("truck") or
 		body.name == "chassis" or
+		body.name == "boat" or
 		body.name.begins_with("tyre")
 	)
 	if not is_truck_part:

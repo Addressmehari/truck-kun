@@ -44,11 +44,11 @@ extends Node2D
 @export var unlimited_petrol: bool = false
 
 # ─── Internal runtime state ──────────────────────────────────────────────────
-@onready var chassis: RigidBody2D = $chassis
-@onready var container_body: RigidBody2D = $container_body
-@onready var tyre_1: RigidBody2D = $"chassis/tyre-1"
-@onready var tyre_2: RigidBody2D = $"container_body/tyre-2"
-@onready var tyre_3: RigidBody2D = $"container_body/tyre-3"
+var chassis: RigidBody2D
+var container_body: RigidBody2D
+var tyre_1: RigidBody2D
+var tyre_2: RigidBody2D
+var tyre_3: RigidBody2D
 
 @onready var park_btn: Button = $HUD/ShifterPanel/VBox/ParkBtn
 @onready var rev_btn: Button = $HUD/ShifterPanel/VBox/RevBtn
@@ -72,7 +72,18 @@ var cheat_buffer := ""
 var convoy_spawn_timer := 0.0
 var boost_timer := 0.0
 
+var boat: RigidBody2D
+var is_water_mode_active := false
+
 func _ready() -> void:
+	chassis = get_node_or_null("chassis")
+	container_body = get_node_or_null("container_body")
+	if chassis:
+		tyre_1 = chassis.get_node_or_null("tyre-1")
+	if container_body:
+		tyre_2 = container_body.get_node_or_null("tyre-2")
+		tyre_3 = container_body.get_node_or_null("tyre-3")
+
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	setup_shifter_ui()
 	if shifter_panel:
@@ -179,6 +190,8 @@ func update_shifter_visuals() -> void:
 	drv_btn.add_theme_font_size_override("font_size", 22)
 
 func _physics_process(delta: float) -> void:
+	var active_body = boat if is_water_mode_active else chassis
+
 	# Simplified driving mechanics:
 	# "D" key (and W, UP, RIGHT) drives forward
 	# "A" key (and S, DOWN, LEFT) drives backward
@@ -229,10 +242,10 @@ func _physics_process(delta: float) -> void:
 		is_braking = true
 
 	# Long press "O" to park when speed is less than 20 (on speedometer)
-	var speed_kmh = chassis.linear_velocity.length() * 0.08 if is_instance_valid(chassis) else 0.0
+	var speed_kmh = active_body.linear_velocity.length() * 0.08 if is_instance_valid(active_body) else 0.0
 	var can_park = speed_kmh < park_speed_limit
 	
-	if can_park:
+	if can_park and not is_water_mode_active:
 		if Input.is_key_pressed(KEY_O):
 			if not o_trigger_locked:
 				if not is_o_currently_holding:
@@ -262,8 +275,8 @@ func _physics_process(delta: float) -> void:
 	# Read user input for air tilting (A/D or Left/Right)
 	var tilt_input = 0.0
 	if is_autopilot:
-		if is_instance_valid(chassis):
-			tilt_input = clamp(chassis.rotation * 4.0, -1.0, 1.0)
+		if is_instance_valid(active_body):
+			tilt_input = clamp(active_body.rotation * 4.0, -1.0, 1.0)
 	else:
 		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
 			tilt_input -= 1.0
@@ -272,12 +285,13 @@ func _physics_process(delta: float) -> void:
 
 	# Detect counter-direction braking (quick stop feel)
 	var avg_vel = 0.0
-	if is_instance_valid(tyre_1) and is_instance_valid(tyre_2) and is_instance_valid(tyre_3):
-		avg_vel = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
-	if forward_pressed and avg_vel < -5.0:
-		is_braking = true
-	elif backward_pressed and avg_vel > 5.0:
-		is_braking = true
+	if not is_water_mode_active:
+		if is_instance_valid(tyre_1) and is_instance_valid(tyre_2) and is_instance_valid(tyre_3):
+			avg_vel = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
+		if forward_pressed and avg_vel < -5.0:
+			is_braking = true
+		elif backward_pressed and avg_vel > 5.0:
+			is_braking = true
 
 	# ── Petrol gate ───────────────────────────────────────────────────────────
 	if not unlimited_petrol:
@@ -292,20 +306,26 @@ func _physics_process(delta: float) -> void:
 				move_input = 0.0
 				is_braking = false  # don't force-lock wheels, let it roll naturally
 
-	# Delegate all per-wheel physics to the tyres themselves
-	_drive_wheels(delta, move_input, is_braking)
+	# Delegate all per-wheel physics to the tyres themselves / boat
+	if is_water_mode_active and is_instance_valid(boat):
+		boat.drive(move_input, is_braking)
+	else:
+		_drive_wheels(delta, move_input, is_braking)
 
 	# Locked differential: synchronise wheel speeds after each tyre updates
-	if is_instance_valid(tyre_1) and is_instance_valid(tyre_2) and is_instance_valid(tyre_3):
-		var synced = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
-		tyre_1.angular_velocity = synced
-		tyre_2.angular_velocity = synced
-		tyre_3.angular_velocity = synced
+	if not is_water_mode_active:
+		if is_instance_valid(tyre_1) and is_instance_valid(tyre_2) and is_instance_valid(tyre_3):
+			var synced = (tyre_1.angular_velocity + tyre_2.angular_velocity + tyre_3.angular_velocity) / 3.0
+			tyre_1.angular_velocity = synced
+			tyre_2.angular_velocity = synced
+			tyre_3.angular_velocity = synced
 
 	# Apply air tilting torque (active in mid-air or balance controls)
-	if tilt_input != 0.0:
-		chassis.apply_torque(-tilt_input * air_tilt_power)
-		container_body.apply_torque(-tilt_input * air_tilt_power * 1.5)
+	if tilt_input != 0.0 and not is_water_mode_active:
+		if is_instance_valid(chassis):
+			chassis.apply_torque(-tilt_input * air_tilt_power)
+		if is_instance_valid(container_body):
+			container_body.apply_torque(-tilt_input * air_tilt_power * 1.5)
 
 ## Calls each tyre's drive() method so the wheel handles its own physics.
 func _drive_wheels(delta: float, move_input: float, braking: bool) -> void:
@@ -367,6 +387,8 @@ func _drop_all_dragging_crates() -> void:
 				crate.call("_check_drop_on_container")
 
 func is_any_crate_dragged_near() -> bool:
+	if not is_instance_valid(container_body):
+		return false
 	for crate in get_tree().get_nodes_in_group("crates"):
 		if crate.get("is_dragging"):
 			var dist = container_body.global_position.distance_to(crate.global_position)
@@ -590,7 +612,10 @@ func spawn_single_enemy_car(slot_index: int = -1) -> void:
 	enemy.set("target_distance", target_dist)
 	
 	# Spawn position is behind the screen/player
-	var spawn_x = chassis.global_position.x - target_dist - 250.0
+	var active_body = boat if is_water_mode_active else chassis
+	if not is_instance_valid(active_body):
+		return
+	var spawn_x = active_body.global_position.x - target_dist - 250.0
 	var road = get_node_or_null("/root/main/Road")
 	var spawn_y = 0.0
 	if road and road.has_method("get_road_height"):
@@ -598,3 +623,138 @@ func spawn_single_enemy_car(slot_index: int = -1) -> void:
 		
 	get_parent().add_child(enemy)
 	enemy.global_position = Vector2(spawn_x, spawn_y)
+
+func set_water_mode(enabled: bool) -> void:
+	if is_water_mode_active == enabled:
+		return
+	is_water_mode_active = enabled
+	
+	if enabled:
+		print("Swapping to Boat vehicle (Water Biome)")
+		
+		# Capture position/velocity from chassis
+		var pos = Vector2.ZERO
+		var rot = 0.0
+		var lin_vel = Vector2.ZERO
+		var ang_vel = 0.0
+		if is_instance_valid(chassis):
+			pos = chassis.global_position
+			rot = chassis.global_rotation
+			lin_vel = chassis.linear_velocity
+			ang_vel = chassis.angular_velocity
+			
+		# Completely destroy truck nodes
+		if is_instance_valid(chassis):
+			chassis.queue_free()
+		chassis = null
+		tyre_1 = null
+		
+		if is_instance_valid(container_body):
+			container_body.queue_free()
+		container_body = null
+		tyre_2 = null
+		tyre_3 = null
+		
+		var joint = get_node_or_null("PinJoint2D")
+		if joint:
+			joint.queue_free()
+			
+		# Spawn new boat scene
+		var boat_scene = load("res://truck/boat.tscn")
+		if boat_scene:
+			boat = boat_scene.instantiate()
+			boat.name = "boat"
+			add_child(boat)
+			
+			boat.global_position = pos
+			boat.global_rotation = rot
+			boat.linear_velocity = lin_vel
+			boat.angular_velocity = ang_vel
+			boat.set("is_active", true)
+	else:
+		print("Swapping to Truck vehicle (Land Biome)")
+		
+		# Capture position/velocity from boat
+		var pos = Vector2.ZERO
+		var rot = 0.0
+		var lin_vel = Vector2.ZERO
+		var ang_vel = 0.0
+		if is_instance_valid(boat):
+			pos = boat.global_position
+			rot = boat.global_rotation
+			lin_vel = boat.linear_velocity
+			ang_vel = boat.angular_velocity
+			
+			# Completely destroy boat scene
+			boat.queue_free()
+		boat = null
+		
+		# Spawn new truck chassis scene
+		var chassis_scene = load("res://truck/chassis.tscn")
+		if chassis_scene:
+			chassis = chassis_scene.instantiate()
+			chassis.name = "chassis"
+			add_child(chassis)
+			
+			chassis.global_position = pos
+			chassis.global_rotation = rot
+			chassis.linear_velocity = lin_vel
+			chassis.angular_velocity = ang_vel
+			
+			tyre_1 = chassis.get_node_or_null("tyre-1")
+			
+		# Spawn new container scene
+		var container_scene = load("res://truck/container_body.tscn")
+		if container_scene:
+			container_body = container_scene.instantiate()
+			container_body.name = "container_body"
+			add_child(container_body)
+			
+			container_body.global_position = pos + Vector2(1, -1).rotated(rot)
+			container_body.global_rotation = rot
+			container_body.linear_velocity = lin_vel
+			container_body.angular_velocity = ang_vel
+			
+			tyre_2 = container_body.get_node_or_null("tyre-2")
+			tyre_3 = container_body.get_node_or_null("tyre-3")
+			
+		# Spawn new PinJoint2D
+		var joint = PinJoint2D.new()
+		joint.name = "PinJoint2D"
+		joint.position = Vector2(0, -28)
+		add_child(joint)
+		
+		joint.node_a = joint.get_path_to(chassis)
+		joint.node_b = joint.get_path_to(container_body)
+		joint.disable_collision = false
+		
+		# Propagate suspension values to newly spawned chassis and container
+		_apply_exports()
+
+	# --- Update HUD, Camera, CoinSpawner references ---
+	var active_body = boat if enabled else chassis
+	
+	var camera = get_node_or_null("/root/main/Camera2D")
+	if camera:
+		camera.target = active_body
+		if enabled:
+			camera.set("target_horizontal_offset", 340.0) # Move boat more to the left side of the screen
+		else:
+			camera.set("target_horizontal_offset", -250.0 if is_autopilot else 220.0)
+		
+	var coin_spawner = get_node_or_null("/root/main/CoinSpawner")
+	if coin_spawner:
+		coin_spawner.set("_chassis", active_body)
+		
+	var hud_stats = get_node_or_null("HUD/HudStats")
+	if hud_stats and "chassis" in hud_stats:
+		hud_stats.chassis = active_body
+		
+	var dashboard = get_node_or_null("HUD/Dashboard")
+	if dashboard and "chassis" in dashboard:
+		dashboard.chassis = active_body
+		
+	var indicator = get_node_or_null("ParkingIndicator")
+	if indicator:
+		indicator.chassis = active_body
+		indicator.container_body = container_body
