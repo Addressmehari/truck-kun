@@ -194,15 +194,6 @@ func initialize_default_biomes() -> void:
 	# 3. Deep Water
 	var b3 = BiomeConfig.new()
 	b3.biome_name = "Deep Water"
-	b3.sky_shader = load("res://road/sky_gradient.gdshader")
-	b3.sky_shader_params = {
-		"top_color": Color(0.02, 0.06, 0.14, 1.0),
-		"bottom_color": Color(0.05, 0.18, 0.28, 1.0),
-		"gradient_offset": 0.2,
-		"gradient_power": 1.6,
-		"show_moon": true,
-		"show_stars": false
-	}
 	b3.road_color = Color(0.25, 0.65, 0.75, 1.0)
 	b3.road_fill_color = Color(0.08, 0.28, 0.38, 1.0)
 	b3.spawn_foliage = false
