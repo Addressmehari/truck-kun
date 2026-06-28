@@ -80,6 +80,7 @@ func _set_truck_frozen(frozen: bool) -> void:
 		truck.get_node_or_null("chassis/tyre-1"),
 		truck.get_node_or_null("container_body/tyre-2"),
 		truck.get_node_or_null("container_body/tyre-3"),
+		truck.get_node_or_null("boat"),
 	]
 	for body in bodies:
 		if is_instance_valid(body) and body is RigidBody2D:

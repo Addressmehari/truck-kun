@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://truck/boat.gd" id="1_boat_gd"]
+
+[node name="boat" type="RigidBody2D"]
+mass = 0.35
+linear_damp = 1.8
+angular_damp = 3.5
+can_sleep = false
+script = ExtResource("1_boat_gd")
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="."]
+polygon = PackedVector2Array(-42, -12, -38, 12, 26, 12, 48, -12, 24, -12, -42, -12)
