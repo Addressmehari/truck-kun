@@ -452,19 +452,6 @@ func start_active_event(event_name: String) -> void:
 		if camera:
 			camera.set("target_horizontal_offset", -250.0)
 			
-		# Spawn Gunner popping from top-left of container
-		var gunner_script = load("res://truck/gunner.gd")
-		if gunner_script and container_body:
-			var old_gunner = container_body.get_node_or_null("Gunner")
-			if old_gunner:
-				old_gunner.queue_free()
-			var gunner = Node2D.new()
-			gunner.set_script(gunner_script)
-			gunner.name = "Gunner"
-			gunner.position = Vector2(-95.0, -85.0)
-			gunner.z_index = -1
-			container_body.add_child(gunner)
-			
 		# Spawn Health Bar on top of truck chassis so it moves physically with the vehicle
 		var health_bar_script = load("res://truck/truck_health_bar.gd")
 		if health_bar_script and chassis:
@@ -500,12 +487,6 @@ func end_active_event(event_name: String) -> void:
 		var camera = get_node_or_null("/root/main/Camera2D")
 		if camera:
 			camera.set("target_horizontal_offset", 220.0)
-			
-		# Clean up Gunner
-		if container_body:
-			var gunner = container_body.get_node_or_null("Gunner")
-			if gunner:
-				gunner.queue_free()
 				
 		# Clean up Health Bar
 		if chassis:

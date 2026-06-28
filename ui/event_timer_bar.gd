@@ -2,13 +2,13 @@ extends Control
 
 var event_name: String = ""
 var event_icon: String = ""
-var duration: float = 15.0
-var time_left: float = 15.0
+var duration: float = 30.0
+var time_left: float = 30.0
 var event_color: Color = Color(0.2, 0.6, 1.0, 0.9)
 var is_active := false
 var elapsed_time := 0.0
 
-func setup(ev_name: String, ev_icon: String, ev_color: Color, ev_duration: float = 15.0) -> void:
+func setup(ev_name: String, ev_icon: String, ev_color: Color, ev_duration: float = 30.0) -> void:
 	event_name = ev_name
 	event_icon = ev_icon
 	event_color = ev_color
