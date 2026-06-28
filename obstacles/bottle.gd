@@ -10,6 +10,7 @@ var damage := 15.0
 # State flags
 var is_thrown_back := false
 var is_exploding := false
+var trajectory_initialized := false
 
 # Catch / Hold slingshot state
 var is_held := false
@@ -44,9 +45,6 @@ func _ready() -> void:
 		
 	# Randomize initial rotation speed and direction
 	rotation_speed = randf_range(3.0, 6.0) * (1.0 if randf() > 0.5 else -1.0)
-	
-	# Float upward initial push
-	velocity.y = randf_range(-220.0, -140.0)
 
 func _exit_tree() -> void:
 	# Restore normal time scale failsafe if freed while holding
@@ -61,6 +59,28 @@ func _physics_process(delta: float) -> void:
 	var truck_vel_x = 550.0
 	if is_instance_valid(chassis):
 		truck_vel_x = chassis.linear_velocity.x
+		
+	# Target trajectory calculation: runs on first frame when position is set
+	if not trajectory_initialized:
+		trajectory_initialized = true
+		if is_instance_valid(chassis):
+			# target a slightly randomized location on the truck chassis/container
+			var target_offset = Vector2(randf_range(-140.0, 40.0), -15.0)
+			var target_pos = chassis.global_position + target_offset
+			
+			# reactable slow-motion flight duration
+			var flight_time = randf_range(1.9, 2.3)
+			
+			var dx = target_pos.x - global_position.x
+			var dy = target_pos.y - global_position.y
+			
+			# Physics kinematics equations to solve for exact launch velocities
+			relative_vel_x = dx / flight_time
+			velocity.y = (dy / flight_time) - (0.5 * bottle_gravity * flight_time)
+		else:
+			# Static fallback values
+			relative_vel_x = 180.0
+			velocity.y = randf_range(-220.0, -140.0)
 		
 	if is_held:
 		# Keep catch_pos moving forward with the truck so it stays stationary relative to the screen!
@@ -78,14 +98,19 @@ func _physics_process(delta: float) -> void:
 	# Apply gravity
 	velocity.y += bottle_gravity * delta
 	
-	# Apply air drag to relative horizontal speed when not deflected yet
-	if not is_thrown_back:
-		relative_vel_x = lerp(relative_vel_x, 90.0, 0.5 * delta)
-	
 	# Update position
 	# Horizontal velocity tracks the chassis + our relative horizontal speed
 	global_position.x += (truck_vel_x + relative_vel_x) * delta
 	global_position.y += velocity.y * delta
+	
+	# Ground collision check: shatter if touching or falling below road height
+	var road_node = get_node_or_null("/root/main/road")
+	if road_node:
+		var ground_y = road_node.call("get_road_height", global_position.x)
+		if global_position.y >= ground_y - 6.0:
+			global_position.y = ground_y - 6.0
+			break_bottle()
+			return
 	
 	# Offscreen / missed cleanup
 	if global_position.y > 900.0 or global_position.x < (chassis.global_position.x - 800.0 if is_instance_valid(chassis) else 0.0):
@@ -229,10 +254,20 @@ func spawn_deflect_sparks() -> void:
 func _on_body_entered(body: Node2D) -> void:
 	if is_exploding or is_held:
 		return
-	# When falling normal, check if it hits truck chassis/container
-	if not is_thrown_back:
-		if body.name == "chassis" or body.name == "container_body":
+		
+	# Check if the body belongs to the player's truck (chassis, container, or tyres)
+	var is_truck_part = false
+	if "chassis" in body.name or "container" in body.name or "tyre" in body.name or body.is_in_group("player"):
+		is_truck_part = true
+		
+	if is_truck_part:
+		# When falling normally, deal damage to truck
+		if not is_thrown_back:
 			var truck_node = body.get_parent()
+			if truck_node and not truck_node.has_method("take_damage"):
+				# Traversal in case of wheels (parent of wheels is chassis/container)
+				truck_node = truck_node.get_parent()
+				
 			if truck_node and truck_node.has_method("take_damage"):
 				truck_node.call("take_damage", damage)
 				
@@ -250,36 +285,39 @@ func _on_body_entered(body: Node2D) -> void:
 					lbl_tween.tween_property(floating_label, "global_position:y", floating_label.global_position.y - 50.0, 0.7)
 					lbl_tween.parallel().tween_property(floating_label, "modulate:a", 0.0, 0.7)
 					lbl_tween.tween_callback(floating_label.queue_free)
-			break_bottle()
+		break_bottle()
 
 func _on_area_entered(area: Area2D) -> void:
 	if is_exploding or is_held:
 		return
-	# When thrown back, check if it hits an enemy car
-	if is_thrown_back:
-		if area.is_in_group("enemies"):
-			if area.has_method("take_damage"):
-				area.call("take_damage", 30.0) # Deals 30 damage to enemy buggy
-				
-				# Shorten convoy duration by 3.0 seconds
-				var timer_bar = get_node_or_null("/root/main/truck/HUD/EventTimerBar")
-				if timer_bar and "time_left" in timer_bar:
-					timer_bar.time_left = max(0.0, timer_bar.time_left - 3.0)
+		
+	# Check if it hits an enemy car
+	if area.is_in_group("enemies"):
+		# Prevent instant breaking when spawning from the enemy car
+		if is_thrown_back or global_position.distance_to(area.global_position) > 90.0:
+			if is_thrown_back:
+				if area.has_method("take_damage"):
+					area.call("take_damage", 30.0) # Deals 30 damage to enemy buggy
 					
-					# Spawn green floating time saved label
-					var main_node = get_node_or_null("/root/main")
-					if main_node:
-						var floating_label = Label.new()
-						floating_label.text = "-3.0s!"
-						floating_label.add_theme_font_size_override("font_size", 24)
-						floating_label.add_theme_color_override("font_color", Color(0.2, 0.9, 0.3))
-						main_node.add_child(floating_label)
-						floating_label.global_position = global_position + Vector2(-20, -30)
+					# Shorten convoy duration by 3.0 seconds
+					var timer_bar = get_node_or_null("/root/main/truck/HUD/EventTimerBar")
+					if timer_bar and "time_left" in timer_bar:
+						timer_bar.time_left = max(0.0, timer_bar.time_left - 3.0)
 						
-						var lbl_tween = main_node.create_tween()
-						lbl_tween.tween_property(floating_label, "global_position:y", floating_label.global_position.y - 60.0, 0.8)
-						lbl_tween.parallel().tween_property(floating_label, "modulate:a", 0.0, 0.8)
-						lbl_tween.tween_callback(floating_label.queue_free)
+						# Spawn green floating time saved label
+						var main_node = get_node_or_null("/root/main")
+						if main_node:
+							var floating_label = Label.new()
+							floating_label.text = "-3.0s!"
+							floating_label.add_theme_font_size_override("font_size", 24)
+							floating_label.add_theme_color_override("font_color", Color(0.2, 0.9, 0.3))
+							main_node.add_child(floating_label)
+							floating_label.global_position = global_position + Vector2(-20, -30)
+							
+							var lbl_tween = main_node.create_tween()
+							lbl_tween.tween_property(floating_label, "global_position:y", floating_label.global_position.y - 60.0, 0.8)
+							lbl_tween.parallel().tween_property(floating_label, "modulate:a", 0.0, 0.8)
+							lbl_tween.tween_callback(floating_label.queue_free)
 			break_bottle()
 
 func draw_dotted_line(from: Vector2, to: Vector2, color: Color, width: float, dot_spacing: float = 12.0) -> void:
