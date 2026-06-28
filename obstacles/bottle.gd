@@ -11,14 +11,14 @@ var damage := 15.0
 var is_thrown_back := false
 var is_exploding := false
 
+# Catch / Hold slingshot state
+var is_held := false
+var catch_pos := Vector2.ZERO
+var drag_start := Vector2.ZERO
+var pull_vector := Vector2.ZERO
+
 # References
 var chassis: RigidBody2D
-
-# Touch/Swipe tracking
-var pressed_on_bottle := false
-var press_start_pos := Vector2.ZERO
-var is_drag_active := false
-var last_mouse_pos := Vector2.ZERO
 
 func _ready() -> void:
 	# Enable input pickable to get events, though we also do a global backup check
@@ -48,23 +48,37 @@ func _ready() -> void:
 	# Float upward initial push
 	velocity.y = randf_range(-220.0, -140.0)
 
+func _exit_tree() -> void:
+	# Restore normal time scale failsafe if freed while holding
+	if is_held:
+		Engine.time_scale = 1.0
+
 func _physics_process(delta: float) -> void:
 	if is_exploding:
 		return
 		
-	# Rotate the bottle as it flies
-	rotation += rotation_speed * delta
-	
 	# Compute truck's current velocity
 	var truck_vel_x = 550.0
 	if is_instance_valid(chassis):
 		truck_vel_x = chassis.linear_velocity.x
 		
+	if is_held:
+		# Keep catch_pos moving forward with the truck so it stays stationary relative to the screen!
+		catch_pos.x += truck_vel_x * delta
+		global_position = catch_pos - pull_vector
+		
+		# Spin normally even when time is slowed down (compensate delta)
+		rotation += rotation_speed * delta * (1.0 / Engine.time_scale)
+		queue_redraw()
+		return
+		
+	# Rotate the bottle as it flies
+	rotation += rotation_speed * delta
+	
 	# Apply gravity
 	velocity.y += bottle_gravity * delta
 	
 	# Apply air drag to relative horizontal speed when not deflected yet
-	# This creates a natural slow down / hang time effect near the truck
 	if not is_thrown_back:
 		relative_vel_x = lerp(relative_vel_x, 90.0, 0.5 * delta)
 	
@@ -80,93 +94,94 @@ func _physics_process(delta: float) -> void:
 	queue_redraw()
 
 func _input(event: InputEvent) -> void:
-	if is_exploding or is_thrown_back:
+	if is_exploding:
 		return
 		
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var mouse_pos = get_global_mouse_position()
 			if event.pressed:
-				is_drag_active = true
-				last_mouse_pos = mouse_pos
-				# Check if clicked directly on/near the bottle
-				if global_position.distance_to(mouse_pos) < 40.0:
-					pressed_on_bottle = true
-					press_start_pos = mouse_pos
+				if not is_thrown_back and not is_held:
+					# Check if clicked directly on/near the bottle (using world space)
+					if global_position.distance_to(mouse_pos) < 45.0:
+						is_held = true
+						catch_pos = global_position
+						# Record drag start in viewport space to remain screen-independent
+						drag_start = get_viewport().get_mouse_position()
+						pull_vector = Vector2.ZERO
+						Engine.time_scale = 0.15 # Slow down time!
 			else:
-				is_drag_active = false
-				if pressed_on_bottle:
-					# Released without dragging much: it's a TAP!
-					if mouse_pos.distance_to(press_start_pos) < 15.0:
-						break_bottle()
-					pressed_on_bottle = false
+				if is_held:
+					# Release the bottle
+					Engine.time_scale = 1.0
+					is_held = false
 					
+					var pull_len = pull_vector.length()
+					if pull_len < 15.0:
+						# Click and release without much drag: TAP!
+						# Restore position to catch point and break
+						global_position = catch_pos
+						break_bottle()
+					else:
+						# Launch slingshot!
+						is_thrown_back = true
+						var launch_dir = pull_vector.normalized()
+						var launch_speed = (pull_len / 120.0) * 850.0 + 200.0
+						
+						relative_vel_x = launch_dir.x * launch_speed
+						velocity.y = launch_dir.y * launch_speed
+						
+						# Spin faster during throw
+						rotation_speed = randf_range(12.0, 18.0) * (-1.0 if rotation_speed < 0 else 1.0)
+						spawn_deflect_sparks()
+						
 	elif event is InputEventMouseMotion:
-		if is_drag_active:
-			var curr_mouse_pos = get_global_mouse_position()
-			if pressed_on_bottle:
-				# Clicked on bottle and dragged away: SWIPE!
-				if curr_mouse_pos.distance_to(press_start_pos) >= 15.0:
-					var swipe_dir = (curr_mouse_pos - press_start_pos).normalized()
-					throw_back(swipe_dir)
-					pressed_on_bottle = false
-			else:
-				# Started dragging outside and swiped through the bottle
-				var d = get_distance_to_segment(global_position, last_mouse_pos, curr_mouse_pos)
-				if d < 40.0:
-					var swipe_dir = (curr_mouse_pos - last_mouse_pos).normalized()
-					throw_back(swipe_dir)
-			last_mouse_pos = curr_mouse_pos
-
-func get_distance_to_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
-	var ab = b - a
-	var ap = p - a
-	var ab_len_sq = ab.length_squared()
-	if ab_len_sq == 0.0:
-		return p.distance_to(a)
-	var t = clamp(ap.dot(ab) / ab_len_sq, 0.0, 1.0)
-	var projection = a + t * ab
-	return p.distance_to(projection)
-
-func throw_back(swipe_dir: Vector2) -> void:
-	if is_thrown_back:
-		return
-	is_thrown_back = true
-	
-	# Biased throw towards left (where enemies are chasing)
-	var throw_dir = swipe_dir
-	if throw_dir.x > -0.2:
-		throw_dir.x = -0.8
-		throw_dir = throw_dir.normalized()
-		
-	var throw_speed = 750.0
-	relative_vel_x = throw_dir.x * throw_speed
-	velocity.y = throw_dir.y * throw_speed * 0.6
-	
-	# Double the spin speed for nice arcade effect
-	rotation_speed = randf_range(12.0, 18.0) * (-1.0 if rotation_speed < 0 else 1.0)
-	
-	spawn_deflect_sparks()
+		if is_held:
+			# Track drag delta in screen/viewport pixels to prevent movement jitter from moving camera
+			var current_mouse = get_viewport().get_mouse_position()
+			pull_vector = drag_start - current_mouse
+			pull_vector = pull_vector.limit_length(120.0)
+			
+			# Physically update position pulled back
+			global_position = catch_pos - pull_vector
 
 func break_bottle() -> void:
 	if is_exploding:
 		return
 	is_exploding = true
 	
+	if is_held:
+		Engine.time_scale = 1.0
+		is_held = false
+		
 	# Shatter particles
 	var particles = CPUParticles2D.new()
-	particles.amount = 22
-	particles.lifetime = 0.55
+	particles.amount = 26
+	particles.lifetime = 0.65
 	particles.one_shot = true
 	particles.explosiveness = 0.95
-	particles.direction = Vector2.ZERO
-	particles.spread = 180.0
-	particles.gravity = Vector2(0, 220)
-	particles.initial_velocity_min = 90.0
-	particles.initial_velocity_max = 180.0
+	particles.gravity = Vector2(0, 240)
 	particles.scale_amount_min = 2.0
-	particles.scale_amount_max = 5.0
+	particles.scale_amount_max = 5.5
 	
+	# Determine realistic direction based on momentum/velocity
+	var truck_vel_x = 550.0
+	if is_instance_valid(chassis):
+		truck_vel_x = chassis.linear_velocity.x
+	var current_vel = Vector2(truck_vel_x + relative_vel_x, velocity.y)
+	if current_vel.length() > 50.0:
+		# Flying pieces follow momentum of the bottle
+		particles.direction = current_vel.normalized()
+		particles.spread = 45.0 # Narrower cone
+		particles.initial_velocity_min = current_vel.length() * 0.35 + 40.0
+		particles.initial_velocity_max = current_vel.length() * 0.75 + 100.0
+	else:
+		# Static break (e.g. tapped when held)
+		particles.direction = Vector2.UP
+		particles.spread = 180.0
+		particles.initial_velocity_min = 80.0
+		particles.initial_velocity_max = 160.0
+		
 	var shard_color = Color(0.25, 0.65, 0.35, 0.8) if not is_thrown_back else Color(0.2, 0.75, 1.0, 0.8)
 	var ramp = Gradient.new()
 	ramp.set_color(0, shard_color)
@@ -181,7 +196,7 @@ func break_bottle() -> void:
 	var tween = create_tween()
 	tween.tween_property(self, "scale", Vector2.ZERO, 0.08)
 	
-	await get_tree().create_timer(0.6).timeout
+	await get_tree().create_timer(0.7).timeout
 	particles.queue_free()
 	queue_free()
 
@@ -212,7 +227,7 @@ func spawn_deflect_sparks() -> void:
 	particles.queue_free()
 
 func _on_body_entered(body: Node2D) -> void:
-	if is_exploding:
+	if is_exploding or is_held:
 		return
 	# When falling normal, check if it hits truck chassis/container
 	if not is_thrown_back:
@@ -238,7 +253,7 @@ func _on_body_entered(body: Node2D) -> void:
 			break_bottle()
 
 func _on_area_entered(area: Area2D) -> void:
-	if is_exploding:
+	if is_exploding or is_held:
 		return
 	# When thrown back, check if it hits an enemy car
 	if is_thrown_back:
@@ -267,17 +282,56 @@ func _on_area_entered(area: Area2D) -> void:
 						lbl_tween.tween_callback(floating_label.queue_free)
 			break_bottle()
 
+func draw_dotted_line(from: Vector2, to: Vector2, color: Color, width: float, dot_spacing: float = 12.0) -> void:
+	var dir = to - from
+	var length = dir.length()
+	if length == 0.0:
+		return
+	dir = dir.normalized()
+	var current_dist = 0.0
+	while current_dist < length:
+		var p = from + dir * current_dist
+		draw_circle(p, width * 0.6, color)
+		current_dist += dot_spacing
+
 func _draw() -> void:
 	if is_exploding:
 		return
 		
+	# Draw slingshot rubber bands and parabolic trajectory guide
+	if is_held:
+		var local_catch = to_local(catch_pos)
+		
+		# Draw a single dotted line for the slingshot stretch
+		var band_col = Color(1.0, 0.38, 0.15, 0.85)
+		draw_dotted_line(local_catch, Vector2.ZERO, band_col, 3.0, 10.0)
+		
+		# Draw parabolic trajectory dots in aimed direction
+		var pull_len = pull_vector.length()
+		if pull_len >= 15.0:
+			var launch_dir = pull_vector.normalized()
+			var launch_speed = (pull_len / 120.0) * 850.0 + 200.0
+			var launch_velocity = launch_dir * launch_speed
+			
+			var steps = 10
+			var time_step = 0.08
+			for i in range(1, steps + 1):
+				var time = i * time_step
+				var dot_pos = Vector2(
+					launch_velocity.x * time,
+					launch_velocity.y * time + 0.5 * bottle_gravity * time * time
+				)
+				var t = float(i) / steps
+				var dot_col = Color(0.2, 0.95, 0.4, 0.8 * (1.0 - t * 0.7))
+				draw_circle(local_catch + dot_pos, 3.5 - (t * 1.5), dot_col)
+				
 	# Draw glass trail
 	if is_thrown_back:
 		# Glowing cyan trail
 		var trail_color = Color(0.1, 0.8, 1.0, 0.25)
 		draw_line(Vector2.ZERO, Vector2(-25.0, 0).rotated(rotation), trail_color, 8.0)
 		draw_line(Vector2.ZERO, Vector2(-15.0, 0).rotated(rotation), Color(0.3, 0.9, 1.0, 0.6), 5.0)
-	else:
+	elif not is_held:
 		# Normal falling trail (faint white/green)
 		var trail_color = Color(1.0, 1.0, 1.0, 0.12)
 		draw_line(Vector2.ZERO, Vector2(-20.0, 0).rotated(rotation), trail_color, 5.0)
@@ -293,6 +347,11 @@ func _draw() -> void:
 		glass_color = Color(0.15, 0.65, 0.9, 0.7)
 		cap_color = Color(1.0, 0.9, 0.1)
 		line_color = Color(0.15, 0.75, 1.0)
+	elif is_held:
+		# Glow color when aiming
+		glass_color = Color(0.2, 0.75, 0.4, 0.7)
+		cap_color = Color(0.95, 0.2, 0.2)
+		line_color = Color(0.2, 0.9, 0.35)
 		
 	# Coordinates for drawing bottle centered
 	# Body: box from (-6, -10) to (6, 12)
