@@ -2,6 +2,8 @@ extends Control
 
 # Custom Font Configuration
 const FONT_PATH: String = "res://retro_font.ttf" # Change this to your exact font file path
+const SAVE_PATH: String = "user://highscore.cfg"
+
 var custom_font: Font
 
 # Public State
@@ -31,6 +33,7 @@ var _last_coin_amount: int = 1
 var _coin_digit_flash: float = 0.0
 var _streak_timer: float = 0.0
 var _streak_shown: bool = false
+var _best_beaten_active: bool = false
 
 func _ready() -> void:
 	await get_tree().process_frame
@@ -50,16 +53,29 @@ func _ready() -> void:
 	if is_instance_valid(chassis):
 		_start_x = chassis.global_position.x
 
-	# ── Responsive Safe-Zone Setup ────────────────────────────────────
+	# Load best distance from persistent save file
+	load_best_distance()
+
+	# ── Responsive Safe-Zone Setup (1.2x Enlarged Layout) ─────────────
 	anchor_left = 0.0
 	anchor_top = 0.0
 	anchor_right = 0.5
 	anchor_bottom = 0.4
 	
-	offset_left = 32.0
-	offset_top = 32.0
+	offset_left = 38.0  # 32.0 * 1.2
+	offset_top = 38.0   # 32.0 * 1.2
 	offset_right = 0.0
 	offset_bottom = 0.0
+
+func save_best_distance() -> void:
+	var config = ConfigFile.new()
+	config.set_value("progression", "best_distance", _best_distance_m)
+	config.save(SAVE_PATH)
+
+func load_best_distance() -> void:
+	var config = ConfigFile.new()
+	if config.load(SAVE_PATH) == OK:
+		_best_distance_m = config.get_value("progression", "best_distance", 0.0)
 
 func _process(delta: float) -> void:
 	_elapsed += delta
@@ -68,14 +84,14 @@ func _process(delta: float) -> void:
 		var raw = (chassis.global_position.x - _start_x) / 30.0
 		_distance_m = max(_distance_m, raw)
 		if _distance_m > _best_distance_m:
+			# Show milestone pop-up ONLY when high score is beaten
+			if _best_distance_m > 0.0 and not _best_beaten_active:
+				_best_beaten_active = true
+				_streak_timer = 1.5
+				_streak_shown = true
+				_dist_bump_timer = 0.55
 			_best_distance_m = _distance_m
-
-	var milestone = int(_distance_m / 100)
-	if milestone > _last_milestone:
-		_last_milestone = milestone
-		_dist_bump_timer = 0.55
-		_streak_timer = 1.2
-		_streak_shown = true
+			save_best_distance()
 
 	if _coin_pop_timer > 0.0: _coin_pop_timer -= delta
 	if _dist_bump_timer > 0.0: _dist_bump_timer -= delta
@@ -108,134 +124,221 @@ func _draw() -> void:
 	var flash_t = clamp(_coin_digit_flash / 0.60, 0.0, 1.0)
 	var streak_t = clamp(_streak_timer / 1.20, 0.0, 1.0)
 
-	# ── Typography Scale ──────────────────────────────────────────────
-	var coin_pop = sin(coin_t * PI) * 0.30
-	var coin_scale = 1.0 + coin_pop + sin(_elapsed * 4.0) * 0.02
-	var coin_size = int(58.0 * coin_scale)
+	# ── Typography Scale & Bob Animations (Numbers size slightly down) ──
+	var coin_scale = 1.0 + sin(_elapsed * 4.0) * 0.015
+	var coin_size = int(48.0 * coin_scale) # Sized down from 65.0
 
-	var dist_pop = sin(dist_t * PI) * 0.20
-	var dist_scale = 1.0 + dist_pop + sin(_elapsed * 2.5) * 0.01
-	var dist_size = int(48.0 * dist_scale)
+	var dist_pop = sin(dist_t * PI) * 0.28
+	var dist_scale = 1.0 + dist_pop + sin(_elapsed * 3.0) * 0.01
+	var dist_size = int(48.0 * dist_scale) # Sized down from 65.0
+	var dist_y_offset = -dist_pop * 14.0
 
-	# ── Clean Spaced Layout Stack ─────────────────────────────────────
-	var score_lbl_y = 24.0
-	var score_val_y = score_lbl_y + 54.0
-	
-	var dist_lbl_y = score_val_y + 44.0
-	var dist_val_y = dist_lbl_y + 46.0
-	
-	var hi_score_y = dist_val_y + 38.0
+	# ── ROW 1: [coin symbol]xxxxxx | [Location symbol] yyy M ───────────
+	# 1. Coin Symbol (Enlarged 1.3x more: radius 21.0)
+	var coin_center = Vector2(26.0, 26.0)
+	var coin_rad = 21.0
+	# Gold neon coin details
+	draw_circle(coin_center, coin_rad, Color("#ffea79", 0.25))
+	draw_circle(coin_center, coin_rad - 1.5, Color("#ffb900"))
+	draw_circle(coin_center, coin_rad * 0.60, Color("#ffea79"))
+	draw_circle(coin_center, coin_rad * 0.25, Color("#ffb900"))
+	draw_circle(coin_center + Vector2(-coin_rad * 0.35, -coin_rad * 0.35), coin_rad * 0.25, Color(1.0, 1.0, 1.0, 0.8))
 
-	var petrol_lbl_y = hi_score_y + 36.0
-	var petrol_bar_y = petrol_lbl_y + 18.0
-
-	# ── Premium Arcade Color Palette ──────────────────────────────────
-	# Neon Coral/Crimson for headers
-	var color_score_lbl = Color("#ff2a6d")
-	if _coin_pop_timer > 0.0 and sin(_elapsed * 35.0) > 0.0:
-		color_score_lbl = Color(1.0, 1.0, 1.0, 0.4) # Aesthetic hit-flicker
-
-	# Rich, warm 18K Arcade Gold for numbers		
-	var color_coin_text = Color("#05ff00")
+	# 2. Coin Text (Aligned to X = 58.0 due to bigger icon)
+	var color_coin_text = Color("#ffea79")
 	if flash_t > 0.0:
 		color_coin_text = Color(1.0, 1.0, 1.0).lerp(Color("#ffb900"), 1.0 - flash_t)
+	
+	var coins_val_str = str(coins)
+	var coins_val_w = font.get_string_size(coins_val_str, HORIZONTAL_ALIGNMENT_LEFT, -1, coin_size).x
+	_draw_clean_text(font, coins_val_str, Vector2(58.0, 50.0), coin_size, color_coin_text)
 
-	# Vivid Electric Cyan/Mint suite
-	var color_dist_lbl = Color("#00f0ff")
-	var color_dist_text = Color("#9b20ffff") if dist_t <= 0.0 else Color(0.80, 1.0, 0.95).lerp(Color("#05ffa1"), 1.0 - dist_t)
+	# 3. Divider Line |
+	var divider_x = 58.0 + coins_val_w + 24.0
+	draw_line(Vector2(divider_x, 10.0), Vector2(divider_x, 48.0), Color(0.2, 0.25, 0.35, 0.6), 2.0)
 
-	# ── Draw Elements ─────────────────────────────────────────────────
-	# SCORE BLOCK
-	_draw_clean_label(font, "COINS", Vector2(0, score_lbl_y), 14, color_score_lbl)
-	var coin_str = str(coins)
-	_draw_clean_text(font, coin_str, Vector2(0, score_val_y), coin_size, color_coin_text)
+	# 4. Location Pin Symbol (Enlarged 1.3x more: circle radius 13.0)
+	var pin_center = Vector2(divider_x + 36.0, 20.0 + dist_y_offset)
+	# Red neon pin
+	draw_circle(pin_center, 13.0, Color("#ff2a6d"))
+	var tri_pts = PackedVector2Array([
+		pin_center + Vector2(-13.0, 4.0),
+		pin_center + Vector2(13.0, 4.0),
+		pin_center + Vector2(0.0, 25.0)
+	])
+	draw_colored_polygon(tri_pts, Color("#ff2a6d"))
+	draw_circle(pin_center, 5.0, Color("#ffffff"))
 
-	# DISTANCE BLOCK
-	_draw_clean_label(font, "DISTANCE", Vector2(0, dist_lbl_y), 14, color_dist_lbl)
-	var dist_str = "%d M" % int(_distance_m)
-	_draw_clean_text(font, dist_str, Vector2(0, dist_val_y), dist_size, color_dist_text)
+	# 5. Distance Text (Aligned to X = divider_x + 62.0 due to bigger icon)
+	var color_dist_text = Color("#ffffff")
+	if dist_t > 0.0:
+		color_dist_text = Color(1.0, 1.0, 1.0).lerp(Color("#05ffa1"), 1.0 - dist_t)
 
-	# HI-SCORE BLOCK (Minimalist white ivory with soft alpha)
+	var dist_val_str = "%d M" % int(_distance_m)
+	var dist_val_w = font.get_string_size(dist_val_str, HORIZONTAL_ALIGNMENT_LEFT, -1, dist_size).x
+	var dist_x = divider_x + 62.0
+	var dist_y = 50.0 + dist_y_offset
+	_draw_clean_text(font, dist_val_str, Vector2(dist_x, dist_y), dist_size, color_dist_text)
+
+	# 6. Small High Score next to Distance
 	if _best_distance_m > 0.0:
-		var best_str = "HI-SCORE  %d M" % int(_best_distance_m)
-		_draw_clean_label(font, best_str, Vector2(0, hi_score_y), 13, Color("#f0f4f8", 0.35))
+		var best_lbl_size = 20
+		var best_str = "/  BEST %d M" % int(_best_distance_m)
+		_draw_clean_label(font, best_str, Vector2(dist_x + dist_val_w + 24, dist_y), best_lbl_size, Color("#ffffff", 0.45))
 
-	# ── PETROL BAR ────────────────────────────────────────────────────
-	_draw_petrol_bar(font, petrol_lbl_y, petrol_bar_y)
+	# ── ROW 2: [Petrol Symbol]######## ────────────────────────────────
+	# 1. Avatar Box [   ] containing Petrol Jerrycan Symbol
+	var av_rect = Rect2(0, 68, 58, 58)
+	var av_pos = av_rect.position
+	
+	# Draw background box outline (blue/cyan tint)
+	draw_rect(av_rect, Color("#00f0ff", 0.45), false, 2.4)
+	draw_rect(av_rect.grow(-3.6), Color("#00f0ff", 0.08), true)
 
-	# ── FX Overlays ───────────────────────────────────────────────────
-	# +N Popups
-	if _coin_pop_timer > 0.0:
-		var fade = coin_t
-		var rise = (1.0 - fade) * 32.0
-		var popup_x = (coin_str.length() * (coin_size * 0.55)) + 24.0
-		_draw_clean_text(font, "+%d" % _last_coin_amount, Vector2(popup_x, score_val_y - rise), 24, Color("#fff4a3", fade))
-		_draw_vector_sparkles(Vector2(popup_x - 8.0, score_val_y - 18.0), coin_t)
-
-	# Milestone Alerts
-	if _streak_shown and _streak_timer > 0.0:
-		var fade = streak_t
-		var rise = (1.0 - streak_t) * 16.0
-		var milestone_x = (dist_str.length() * (dist_size * 0.55)) + 28.0
-		_draw_clean_text(font, "MILESTONE!", Vector2(milestone_x, dist_val_y - rise), 24, Color("#ffffff", fade))
-
-# ── Drawing Engines ──────────────────────────────────────────────────────
-
-func _draw_petrol_bar(font: Font, lbl_y: float, bar_y: float) -> void:
-	var bar_w: float = 130.0
-	var bar_h: float = 14.0
+	# Low fuel alarm calculation
 	var ratio: float = clamp(petrol / petrol_max, 0.0, 1.0)
 	var is_low: bool = ratio < 0.25
 
-	# Label — flicker red when low
-	var lbl_color: Color
-	if is_low and sin(_elapsed * 9.0) > 0.0:
-		lbl_color = Color("#ff2a2a")
-	else:
-		lbl_color = Color("#ff9900")
-	_draw_clean_label(font, "FUEL", Vector2(0, lbl_y), 14, lbl_color)
+	# Draw Classic Jerrycan Petrol Symbol (Filled shapes, no outline)
+	var fuel_orange = Color("#ff9900")
+	if is_low and sin(_elapsed * 12.0) > 0.0:
+		fuel_orange = Color("#ff2a2a") # Blink red on low fuel
+	
+	var can_pos = av_pos + Vector2(17, 15)
+	var dark_bg = Color(0.08, 0.08, 0.12)
 
-	# Background track
-	draw_rect(Rect2(0.0, bar_y, bar_w, bar_h), Color(0.08, 0.08, 0.12, 0.75), true)
-	draw_rect(Rect2(0.0, bar_y, bar_w, bar_h), Color(0.2, 0.2, 0.3, 0.5), false, 1.0)
+	# Main body (solid filled)
+	draw_rect(Rect2(can_pos.x, can_pos.y, 24, 28), fuel_orange, true)
+	
+	# Spout (solid filled, slanted top-left)
+	var spout_pts = PackedVector2Array([
+		can_pos + Vector2(2, 0),
+		can_pos + Vector2(4, -4),
+		can_pos + Vector2(1, -5),
+		can_pos + Vector2(-1, -1)
+	])
+	draw_colored_polygon(spout_pts, fuel_orange)
 
-	# Filled portion with gradient colour: green → orange → red
-	var fill_w: float = bar_w * ratio
-	var fill_color: Color
-	if ratio > 0.5:
-		fill_color = Color("#00e676").lerp(Color("#ff9900"), 1.0 - ((ratio - 0.5) * 2.0))
-	elif ratio > 0.25:
-		fill_color = Color("#ff9900").lerp(Color("#ff3d00"), 1.0 - ((ratio - 0.25) * 4.0))
-	else:
-		var low_pulse = 0.5 + sin(_elapsed * 8.0) * 0.5
-		fill_color = Color("#ff3d00", 0.6 + low_pulse * 0.4)
-	if fill_w > 1.0:
-		draw_rect(Rect2(0.0, bar_y, fill_w, bar_h), fill_color, true)
+	# Handle (solid filled, top-right)
+	draw_rect(Rect2(can_pos.x + 8, can_pos.y - 4, 14, 4), fuel_orange, true)
+	# Cutout gap inside handle (matching shadow background)
+	draw_rect(Rect2(can_pos.x + 11, can_pos.y - 2, 8, 2), dark_bg, true)
 
-	# Segment ticks (5 divisions)
-	for i in range(1, 5):
-		var tx = (bar_w / 5.0) * i
-		draw_line(Vector2(tx, bar_y + 2.0), Vector2(tx, bar_y + bar_h - 2.0), Color(0.0, 0.0, 0.0, 0.3), 1.0)
+	# Debossed X pattern (drawn using thick lines matching background)
+	draw_line(can_pos + Vector2(6, 7), can_pos + Vector2(18, 21), dark_bg, 3.0)
+	draw_line(can_pos + Vector2(18, 7), can_pos + Vector2(6, 21), dark_bg, 3.0)
 
-	# Glow edge on top of fill
-	if fill_w > 2.0:
-		var glow_c = fill_color.lightened(0.35)
-		glow_c.a = 0.7
-		draw_line(Vector2(fill_w - 1.5, bar_y + 1.5), Vector2(fill_w - 1.5, bar_y + bar_h - 1.5), glow_c, 2.5)
+	# 2. Slanted Retro Petrol Bar (1.2x Enlarged, next to petrol icon)
+	_draw_slanted_petrol_bar(77, 74)
 
-	# Fill popup: "+Xℓ" rising text
+	# ── FX OVERLAYS ───────────────────────────────────────────────────
+	# +N Popups (Rising cleanly above the coin counter)
+	if _coin_pop_timer > 0.0:
+		var fade = coin_t
+		var rise = (1.0 - fade) * 43.0
+		var popup_x = 58.0 + (coins_val_w / 2.0)
+		_draw_clean_text(font, "+%d" % _last_coin_amount, Vector2(popup_x - 12, -8.0 - rise), 30, Color("#ffea79", fade))
+		_draw_vector_sparkles(Vector2(popup_x - 8.0, -18.0 - rise), coin_t)
+
+	# High score beaten announcement popup (Rising above the distance value)
+	if _streak_shown and _streak_timer > 0.0:
+		var fade = streak_t
+		var rise = (1.0 - streak_t) * 20.0
+		var milestone_x = dist_x + (dist_val_w / 2.0)
+		_draw_clean_text(font, "NEW BEST!", Vector2(milestone_x - 36, -8.0 - rise), 26, Color("#ffffff", fade))
+
+# ── Drawing Engines ──────────────────────────────────────────────────────
+
+func _draw_slanted_petrol_bar(start_x: float, bar_y: float) -> void:
+	var cell_w := 22.0        # 18 * 1.2
+	var cell_h := 46.0        # 38 * 1.2
+	var cell_gap := 6.0       # 5 * 1.2
+	var slant := -6.0         # -5 * 1.2
+	var outline_width := 2.4   # 2 * 1.2
+	var outline_color := Color(0.08, 0.08, 0.12)
+
+	var ratio: float = clamp(petrol / petrol_max, 0.0, 1.0)
+	var active_cells_count = int(ceil(ratio * 10.0))
+	var is_low: bool = ratio < 0.25
+
+	# Setup spring scale popup animation when refilled
+	var fill_t = clamp(_petrol_fill_timer / 0.80, 0.0, 1.0)
+	var cell_scale = 1.0
+	if fill_t > 0.0:
+		cell_scale = 1.0 + sin(fill_t * PI) * 0.22
+
+	for i in range(10):
+		# Wave bobbing when low fuel (equalizer look)
+		var bob = 0.0
+		if is_low:
+			bob = sin(_elapsed * 12.0 + i * 0.8) * 3.5
+
+		# Center coords for scaling
+		var cx = start_x + i * (cell_w + cell_gap) + cell_w / 2.0
+		var cy = bar_y + cell_h / 2.0
+		
+		var curr_w = cell_w * cell_scale
+		var curr_h = cell_h * cell_scale
+		var cell_rect = Rect2(cx - curr_w / 2.0, cy - curr_h / 2.0, curr_w, curr_h)
+
+		var cell_color = Color("#00e676") # Green healthy
+		if i < 3:
+			cell_color = Color("#ff3d00") # Red danger
+		elif i < 7:
+			cell_color = Color("#ffb900") # Yellow warning
+
+		# Flash low fuel active cells
+		if is_low and i < active_cells_count:
+			var pulse = 0.4 + (0.6 * (0.5 + sin(_elapsed * 15.0) * 0.5))
+			cell_color.a = pulse
+
+		if i < active_cells_count:
+			draw_slanted_bar_cell(cell_rect, cell_color, outline_color, outline_width, slant, bob)
+		else:
+			# Inactive slots
+			var bg_c = Color(0.18, 0.2, 0.25, 0.45)
+			draw_slanted_bar_cell(cell_rect, bg_c, outline_color, outline_width, slant, bob)
+
+	# Fuel Refuel "+X" text above the bar
 	if _petrol_fill_timer > 0.0:
+		var font = custom_font if custom_font else get_theme_default_font()
 		var ft = clamp(_petrol_fill_timer / 0.80, 0.0, 1.0)
 		var rise = (1.0 - ft) * 24.0
 		var popup_str = "+%dL" % int(_petrol_fill_amount)
-		_draw_clean_text(font, popup_str, Vector2(bar_w + 8.0, bar_y - rise), 20, Color("#00e676", ft))
+		var text_x = start_x + (10.0 * (cell_w + cell_gap)) + 14.0
+		_draw_clean_text(font, popup_str, Vector2(text_x, bar_y + 28.0 - rise), 24, Color("#00e676", ft))
+
+func draw_slanted_bar_cell(rect: Rect2, color: Color, outline_color: Color, outline_width: float, slant: float, bob: float) -> void:
+	var tl = Vector2(rect.position.x + slant, rect.position.y + bob)
+	var tr = Vector2(rect.position.x + rect.size.x + slant, rect.position.y + bob)
+	var br = Vector2(rect.position.x + rect.size.x, rect.position.y + rect.size.y + bob)
+	var bl = Vector2(rect.position.x, rect.position.y + rect.size.y + bob)
+	
+	# Skewed filled polygon
+	var points = PackedVector2Array([tl, tr, br, bl])
+	draw_colored_polygon(points, color)
+	
+	# Skewed border line
+	var outline_points = PackedVector2Array([tl, tr, br, bl, tl])
+	draw_polyline(outline_points, outline_color, outline_width)
 
 func _draw_clean_text(font: Font, text: String, pos: Vector2, font_size: int, color: Color) -> void:
-	# Ultra soft clean drop projection to enhance visibility over game backgrounds without an ugly outline
-	draw_string(font, pos + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0, 0, 0, 0.20))
+	# Outer dark 3D offset shadow
+	draw_string(font, pos + Vector2(2.5, 2.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0.04, 0.04, 0.08, 0.85))
+	
+	# Subtle neon backlight glow offset
+	var neon_glow = Color(0.0, 0.94, 1.0, 0.35)
+	if color.r > 0.8 and color.g < 0.3:
+		neon_glow = Color(1.0, 0.16, 0.43, 0.35) # Neon pink glow
+	elif color.r > 0.8 and color.g > 0.8:
+		neon_glow = Color(1.0, 0.85, 0.0, 0.3) # Gold glow
+	draw_string(font, pos + Vector2(-1.0, -1.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, neon_glow)
+	
+	# Main foreground text
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 func _draw_clean_label(font: Font, text: String, pos: Vector2, font_size: int, color: Color) -> void:
+	draw_string(font, pos + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0, 0, 0, 0.6))
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 func _draw_vector_sparkles(origin: Vector2, coin_t: float) -> void:
