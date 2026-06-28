@@ -112,22 +112,17 @@ func shoot_at_player() -> void:
 		
 	cooldown_timer = shoot_cooldown + randf_range(-0.4, 0.4)
 	
-	var bullet_script = load("res://truck/bullet.gd")
-	if bullet_script:
-		# Direction towards chassis center
-		var target_pos = chassis.global_position + Vector2(0, -20)
-		var turret_pos = global_position + Vector2(0, -32).rotated(rotation)
-		var dir = (target_pos - turret_pos).normalized()
+	var bottle_script = load("res://obstacles/bottle.gd")
+	if bottle_script:
+		var bottle = Area2D.new()
+		bottle.set_script(bottle_script)
+		bottle.name = "GlassBottle"
 		
-		var bullet = Area2D.new()
-		bullet.set_script(bullet_script)
-		bullet.name = "EnemyBullet"
-		bullet.is_enemy = true
-		bullet.direction = dir
-		bullet.damage = 10.0
+		# Spawn position: top of the car chassis
+		var spawn_pos = global_position + Vector2(0, -25).rotated(rotation)
 		
-		get_parent().add_child(bullet)
-		bullet.global_position = turret_pos
+		get_parent().add_child(bottle)
+		bottle.global_position = spawn_pos
 
 func take_damage(amount: float) -> void:
 	if is_exploding:
@@ -330,38 +325,4 @@ func _draw() -> void:
 			var spoke_end = w_pos + Vector2(cos(angle), sin(angle)) * 7.5
 			draw_line(w_pos, spoke_end, frame_color, 1.8)
 			
-	# 7. Roof-Mounted Combat Rocket Launcher Pod
-	var turret_pivot = Vector2(-2.0, -32.0)
-	draw_circle(turret_pivot, 4.0, frame_color)
-	
-	var turret_angle = 0.0
-	if is_instance_valid(chassis):
-		turret_angle = (chassis.global_position - global_position).angle() - rotation
-		
-	var barrel_dir = Vector2.RIGHT.rotated(turret_angle)
-	var barrel_perp = Vector2.UP.rotated(turret_angle)
-	
-	# Rocket Pod Launcher Box (angled towards player)
-	var box_center = turret_pivot + barrel_dir * 4.0
-	var box_w = 12.0
-	var box_h = 7.0
-	var box_pts = PackedVector2Array([
-		box_center - barrel_dir * (box_w/2) - barrel_perp * (box_h/2),
-		box_center + barrel_dir * (box_w/2) - barrel_perp * (box_h/2),
-		box_center + barrel_dir * (box_w/2) + barrel_perp * (box_h/2),
-		box_center - barrel_dir * (box_w/2) + barrel_perp * (box_h/2)
-	])
-	draw_colored_polygon(box_pts, frame_color)
-	draw_polyline(box_pts, metal_trim, 1.2)
-	
-	# Yellow/Black hazard warning stripe on rocket pod
-	if not is_silhouette and flash_timer <= 0.0:
-		draw_line(box_center - barrel_dir * 2.0 - barrel_perp * 3.0, box_center + barrel_dir * 2.0 + barrel_perp * 3.0, coil_color, 1.8)
-		
-	# Glowing rocket tube ports (front face)
-	var front_face = box_center + barrel_dir * (box_w/2)
-	var port_color = Color(1.0, 0.35, 0.1) if flash_timer <= 0.0 else Color(1, 1, 1)
-	if is_silhouette and flash_timer <= 0.0:
-		port_color = Color.BLACK
-	draw_circle(front_face + barrel_perp * 2.0, 1.5, port_color)
-	draw_circle(front_face - barrel_perp * 2.0, 1.5, port_color)
+	# 7. No turret pod drawn in bottle defend mode
