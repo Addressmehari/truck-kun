@@ -245,7 +245,7 @@ func _physics_process(delta: float) -> void:
 	var speed_kmh = active_body.linear_velocity.length() * 0.08 if is_instance_valid(active_body) else 0.0
 	var can_park = speed_kmh < park_speed_limit
 	
-	if can_park:
+	if can_park and not is_water_mode_active:
 		if Input.is_key_pressed(KEY_O):
 			if not o_trigger_locked:
 				if not is_o_currently_holding:
