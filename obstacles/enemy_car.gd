@@ -6,7 +6,7 @@ var max_health := 60.0
 var health := 60.0
 var speed := 550.0
 var target_distance := 450.0
-var shoot_cooldown := 2.2
+var shoot_cooldown := 4.2
 var cooldown_timer := 0.0
 
 # References
@@ -110,7 +110,14 @@ func shoot_at_player() -> void:
 	if not is_instance_valid(chassis):
 		return
 		
-	cooldown_timer = shoot_cooldown + randf_range(-0.4, 0.4)
+	# Check if there is already an active bottle on screen
+	var active_bottles = get_tree().get_nodes_in_group("bottles")
+	if active_bottles.size() > 0:
+		# Delay check by a short time to try again soon once the current bottle is gone
+		cooldown_timer = randf_range(0.4, 0.8)
+		return
+		
+	cooldown_timer = shoot_cooldown + randf_range(-0.5, 0.5)
 	
 	var bottle_script = load("res://obstacles/bottle.gd")
 	if bottle_script:

@@ -23,11 +23,13 @@ var last_mouse_pos := Vector2.ZERO
 func _ready() -> void:
 	# Enable input pickable to get events, though we also do a global backup check
 	input_pickable = true
+	add_to_group("bottles")
 	
-	# Add collision shape
+	# Add accurate capsule collision shape (matches drawn bottle bounds)
 	var collision = CollisionShape2D.new()
-	var shape = CircleShape2D.new()
-	shape.radius = 20.0
+	var shape = CapsuleShape2D.new()
+	shape.radius = 7.0
+	shape.height = 34.0
 	collision.shape = shape
 	add_child(collision)
 	
@@ -60,6 +62,11 @@ func _physics_process(delta: float) -> void:
 		
 	# Apply gravity
 	velocity.y += bottle_gravity * delta
+	
+	# Apply air drag to relative horizontal speed when not deflected yet
+	# This creates a natural slow down / hang time effect near the truck
+	if not is_thrown_back:
+		relative_vel_x = lerp(relative_vel_x, 90.0, 0.5 * delta)
 	
 	# Update position
 	# Horizontal velocity tracks the chassis + our relative horizontal speed
