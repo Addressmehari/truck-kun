@@ -87,8 +87,7 @@ func _physics_process(delta: float) -> void:
 		catch_pos.x += truck_vel_x * delta
 		global_position = catch_pos - pull_vector
 		
-		# Spin normally even when time is slowed down (compensate delta)
-		rotation += rotation_speed * delta * (1.0 / Engine.time_scale)
+		# Keep rotation static while locked/held in the air
 		queue_redraw()
 		return
 		
@@ -351,24 +350,6 @@ func _draw() -> void:
 		# Draw a single dotted line for the slingshot stretch
 		var band_col = Color(1.0, 0.38, 0.15, 0.85)
 		draw_dotted_line(local_catch, Vector2.ZERO, band_col, 3.0, 10.0)
-		
-		# Draw parabolic trajectory dots in aimed direction
-		if pull_len >= 15.0:
-			var launch_dir = pull_vector.normalized()
-			var launch_speed = (pull_len / 120.0) * 850.0 + 200.0
-			var launch_velocity = launch_dir * launch_speed
-			
-			var steps = 10
-			var time_step = 0.08
-			for i in range(1, steps + 1):
-				var time = i * time_step
-				var dot_pos = Vector2(
-					launch_velocity.x * time,
-					launch_velocity.y * time + 0.5 * bottle_gravity * time * time
-				)
-				var t = float(i) / steps
-				var dot_col = Color(0.2, 0.95, 0.4, 0.8 * (1.0 - t * 0.7))
-				draw_circle(local_catch + dot_pos, 3.5 - (t * 1.5), dot_col)
 				
 	# Draw glass trail
 	if is_thrown_back:
