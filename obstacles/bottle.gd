@@ -11,6 +11,7 @@ var damage := 15.0
 var is_thrown_back := false
 var is_exploding := false
 var trajectory_initialized := false
+var is_molotov := false
 
 # Catch / Hold slingshot state
 var is_held := false
@@ -37,6 +38,10 @@ func _ready() -> void:
 	# Connect collision signals
 	area_entered.connect(_on_area_entered)
 	body_entered.connect(_on_body_entered)
+	
+	# Enable scanning all collision layers to guarantee detecting the truck parts
+	collision_layer = 4
+	collision_mask = 0xFFFFFFFF
 	
 	# Find player chassis
 	var truck = get_node_or_null("/root/main/truck")
@@ -102,8 +107,32 @@ func _physics_process(delta: float) -> void:
 	global_position.x += (truck_vel_x + relative_vel_x) * delta
 	global_position.y += velocity.y * delta
 	
+	# Spawning flame trail particles (Throttled for performance)
+	if is_molotov and not is_held and Engine.get_physics_frames() % 3 == 0:
+		var parent = get_parent()
+		if parent:
+			var flame = CPUParticles2D.new()
+			flame.amount = 5
+			flame.lifetime = 0.22
+			flame.one_shot = true
+			flame.explosiveness = 0.8
+			flame.gravity = Vector2(0, -90)
+			flame.scale_amount_min = 2.0
+			flame.scale_amount_max = 5.0
+			
+			var ramp = Gradient.new()
+			ramp.set_color(0, Color(1.0, 0.45, 0.0, 0.85))
+			ramp.set_color(1, Color(1.0, 0.15, 0.0, 0.0))
+			flame.color_ramp = ramp
+			
+			parent.add_child(flame)
+			flame.global_position = global_position + Vector2(0, -22).rotated(rotation)
+			flame.emitting = true
+			
+			get_tree().create_timer(0.3).timeout.connect(flame.queue_free)
+	
 	# Ground collision check: shatter if touching or falling below road height
-	var road_node = get_node_or_null("/root/main/road")
+	var road_node = get_node_or_null("/root/main/Road")
 	if road_node:
 		var ground_y = road_node.call("get_road_height", global_position.x)
 		if global_position.y >= ground_y - 6.0:
@@ -180,13 +209,13 @@ func break_bottle() -> void:
 		
 	# Shatter particles
 	var particles = CPUParticles2D.new()
-	particles.amount = 26
-	particles.lifetime = 0.65
+	particles.amount = 45 if is_molotov else 26
+	particles.lifetime = 0.75 if is_molotov else 0.65
 	particles.one_shot = true
 	particles.explosiveness = 0.95
-	particles.gravity = Vector2(0, 240)
-	particles.scale_amount_min = 2.0
-	particles.scale_amount_max = 5.5
+	particles.gravity = Vector2(0, 150) if is_molotov else Vector2(0, 240)
+	particles.scale_amount_min = 4.0 if is_molotov else 2.0
+	particles.scale_amount_max = 8.5 if is_molotov else 5.5
 	
 	# Determine realistic direction based on momentum/velocity
 	var truck_vel_x = 550.0
@@ -207,9 +236,20 @@ func break_bottle() -> void:
 		particles.initial_velocity_max = 160.0
 		
 	var shard_color = Color(0.25, 0.65, 0.35, 0.8) if not is_thrown_back else Color(0.2, 0.75, 1.0, 0.8)
+	if is_molotov:
+		shard_color = Color(0.55, 0.35, 0.15, 0.85) # Brown glass shard
+		
 	var ramp = Gradient.new()
-	ramp.set_color(0, shard_color)
-	ramp.set_color(1, Color(shard_color.r, shard_color.g, shard_color.b, 0.0))
+	if is_molotov:
+		# Fiery explosion gradient (yellow to orange to smoke)
+		ramp.set_color(0, Color(1.0, 0.85, 0.1, 1.0))
+		ramp.set_color(1, Color(0.25, 0.25, 0.25, 0.0))
+		ramp.add_point(0.22, Color(1.0, 0.3, 0.0, 1.0))
+		ramp.add_point(0.65, Color(0.4, 0.4, 0.4, 0.6))
+	else:
+		ramp.set_color(0, shard_color)
+		ramp.set_color(1, Color(shard_color.r, shard_color.g, shard_color.b, 0.0))
+		
 	particles.color_ramp = ramp
 	
 	get_parent().add_child(particles)
@@ -256,7 +296,7 @@ func _on_body_entered(body: Node2D) -> void:
 		
 	# Check if the body belongs to the player's truck (chassis, container, or tyres)
 	var is_truck_part = false
-	if "chassis" in body.name or "container" in body.name or "tyre" in body.name or body.is_in_group("player"):
+	if "chassis" in body.name or "container" in body.name or "tyre" in body.name or body.is_in_group("player") or (body.get_parent() and body.get_parent().name == "truck"):
 		is_truck_part = true
 		
 	if is_truck_part:
@@ -268,13 +308,23 @@ func _on_body_entered(body: Node2D) -> void:
 				truck_node = truck_node.get_parent()
 				
 			if truck_node and truck_node.has_method("take_damage"):
-				truck_node.call("take_damage", damage)
+				# Target damage should deduct exactly 10% (1 bar) or 30% (3 bars) of max health
+				var max_health = truck_node.get("truck_max_health")
+				if max_health == null:
+					max_health = 100.0
+				var scale_val = truck_node.get("damage_scale")
+				if scale_val == null or scale_val == 0.0:
+					scale_val = 1.0
+					
+				var pct = 0.3 if is_molotov else 0.1
+				var target_damage = (max_health * pct) / scale_val
+				truck_node.call("take_damage", target_damage)
 				
 				# Spawn red floating label
 				var main_node = get_node_or_null("/root/main")
 				if main_node:
 					var floating_label = Label.new()
-					floating_label.text = "-15 HP"
+					floating_label.text = "-3 HP" if is_molotov else "-1 HP"
 					floating_label.add_theme_font_size_override("font_size", 22)
 					floating_label.add_theme_color_override("font_color", Color(1.0, 0.25, 0.2))
 					main_node.add_child(floating_label)
@@ -296,20 +346,22 @@ func _on_area_entered(area: Area2D) -> void:
 		if is_thrown_back or global_position.distance_to(area.global_position) > 90.0:
 			if is_thrown_back:
 				if area.has_method("take_damage"):
-					area.call("take_damage", 30.0) # Deals 30 damage to enemy buggy
+					var enemy_dmg = 90.0 if is_molotov else 30.0
+					area.call("take_damage", enemy_dmg) # Deals massive damage to enemy buggy
 					
-					# Shorten convoy duration by 3.0 seconds
+					# Shorten convoy duration by 3.0 seconds (8.0 seconds for Molotov!)
+					var time_reduction = 8.0 if is_molotov else 3.0
 					var timer_bar = get_node_or_null("/root/main/truck/HUD/EventTimerBar")
 					if timer_bar and "time_left" in timer_bar:
-						timer_bar.time_left = max(0.0, timer_bar.time_left - 3.0)
+						timer_bar.time_left = max(0.0, timer_bar.time_left - time_reduction)
 						
 						# Spawn green floating time saved label
 						var main_node = get_node_or_null("/root/main")
 						if main_node:
 							var floating_label = Label.new()
-							floating_label.text = "-3.0s!"
+							floating_label.text = ("-" + str(time_reduction) + "s!!") if is_molotov else "-3.0s!"
 							floating_label.add_theme_font_size_override("font_size", 24)
-							floating_label.add_theme_color_override("font_color", Color(0.2, 0.9, 0.3))
+							floating_label.add_theme_color_override("font_color", Color(0.2, 0.9, 0.3) if not is_molotov else Color(1.0, 0.6, 0.1))
 							main_node.add_child(floating_label)
 							floating_label.global_position = global_position + Vector2(-20, -30)
 							
@@ -353,14 +405,25 @@ func _draw() -> void:
 				
 	# Draw glass trail
 	if is_thrown_back:
-		# Glowing cyan trail
-		var trail_color = Color(0.1, 0.8, 1.0, 0.25)
-		draw_line(Vector2.ZERO, Vector2(-25.0, 0).rotated(rotation), trail_color, 8.0)
-		draw_line(Vector2.ZERO, Vector2(-15.0, 0).rotated(rotation), Color(0.3, 0.9, 1.0, 0.6), 5.0)
+		if is_molotov:
+			# Blazing orange/yellow fire trail
+			var trail_color = Color(1.0, 0.45, 0.0, 0.3)
+			draw_line(Vector2.ZERO, Vector2(-25.0, 0).rotated(rotation), trail_color, 9.0)
+			draw_line(Vector2.ZERO, Vector2(-15.0, 0).rotated(rotation), Color(1.0, 0.8, 0.1, 0.75), 5.5)
+		else:
+			# Glowing cyan trail
+			var trail_color = Color(0.1, 0.8, 1.0, 0.25)
+			draw_line(Vector2.ZERO, Vector2(-25.0, 0).rotated(rotation), trail_color, 8.0)
+			draw_line(Vector2.ZERO, Vector2(-15.0, 0).rotated(rotation), Color(0.3, 0.9, 1.0, 0.6), 5.0)
 	elif not is_held:
-		# Normal falling trail (faint white/green)
-		var trail_color = Color(1.0, 1.0, 1.0, 0.12)
-		draw_line(Vector2.ZERO, Vector2(-20.0, 0).rotated(rotation), trail_color, 5.0)
+		if is_molotov:
+			# Small flame trail for normal throw
+			var trail_color = Color(1.0, 0.4, 0.0, 0.15)
+			draw_line(Vector2.ZERO, Vector2(-20.0, 0).rotated(rotation), trail_color, 6.0)
+		else:
+			# Normal falling trail (faint white/green)
+			var trail_color = Color(1.0, 1.0, 1.0, 0.12)
+			draw_line(Vector2.ZERO, Vector2(-20.0, 0).rotated(rotation), trail_color, 5.0)
 
 	# Colors for the bottle
 	var glass_color = Color(0.2, 0.55, 0.3, 0.65) # Semi-translucent forest green
@@ -368,16 +431,26 @@ func _draw() -> void:
 	var label_color = Color(0.9, 0.85, 0.7)        # Vintage label
 	var line_color = Color(0.1, 0.25, 0.15)        # Dark green outline
 	
-	if is_thrown_back:
-		# Deflected glowing style
-		glass_color = Color(0.15, 0.65, 0.9, 0.7)
-		cap_color = Color(1.0, 0.9, 0.1)
-		line_color = Color(0.15, 0.75, 1.0)
-	elif is_held:
-		# Glow color when aiming
-		glass_color = Color(0.2, 0.75, 0.4, 0.7)
-		cap_color = Color(0.95, 0.2, 0.2)
-		line_color = Color(0.2, 0.9, 0.35)
+	if is_molotov:
+		glass_color = Color(0.55, 0.35, 0.15, 0.85) # Brown bottle for Molotov
+		line_color = Color(0.25, 0.15, 0.05)
+		if is_thrown_back:
+			glass_color = Color(1.0, 0.3, 0.05, 0.9)
+			line_color = Color(1.0, 0.6, 0.1)
+		elif is_held:
+			glass_color = Color(0.9, 0.45, 0.15, 0.85)
+			line_color = Color(0.95, 0.7, 0.2)
+	else:
+		if is_thrown_back:
+			# Deflected glowing style
+			glass_color = Color(0.15, 0.65, 0.9, 0.7)
+			cap_color = Color(1.0, 0.9, 0.1)
+			line_color = Color(0.15, 0.75, 1.0)
+		elif is_held:
+			# Glow color when aiming
+			glass_color = Color(0.2, 0.75, 0.4, 0.7)
+			cap_color = Color(0.95, 0.2, 0.2)
+			line_color = Color(0.2, 0.9, 0.35)
 		
 	# Coordinates for drawing bottle centered
 	# Body: box from (-6, -10) to (6, 12)
@@ -409,9 +482,40 @@ func _draw() -> void:
 	draw_colored_polygon(neck_points, glass_color)
 	draw_polyline(PackedVector2Array([Vector2(-3, -10), Vector2(-3, -22), Vector2(3, -22), Vector2(3, -10)]), line_color, 1.5)
 	
-	# Cap: from (-4, -22) to (4, -25)
-	draw_rect(Rect2(-4, -25, 8, 3), cap_color)
-	draw_rect(Rect2(-4, -25, 8, 3), line_color, false, 1.0)
+	# Neck cap or wick
+	if not is_molotov:
+		# Cap: from (-4, -22) to (4, -25)
+		draw_rect(Rect2(-4, -25, 8, 3), cap_color)
+		draw_rect(Rect2(-4, -25, 8, 3), line_color, false, 1.0)
+	else:
+		# Draw wick rag
+		var wick_pts = PackedVector2Array([
+			Vector2(-2, -22), Vector2(2, -22),
+			Vector2(3, -27), Vector2(-3, -27)
+		])
+		draw_colored_polygon(wick_pts, Color(0.85, 0.8, 0.75)) # Off-white wick
+		draw_polyline(wick_pts, line_color, 1.0)
+		
+		# Draw animated flickering flame
+		var time_ms = Time.get_ticks_msec()
+		var flick_w = sin(time_ms * 0.035) * 2.5
+		var flick_h = cos(time_ms * 0.025) * 4.0
+		
+		# Outer orange flame
+		var flame_pts_out = PackedVector2Array([
+			Vector2(-4.5 + flick_w * 0.4, -27),
+			Vector2(4.5 + flick_w * 0.4, -27),
+			Vector2(flick_w, -42 - flick_h)
+		])
+		draw_colored_polygon(flame_pts_out, Color(1.0, 0.45, 0.0, 0.95))
+		
+		# Inner yellow flame
+		var flame_pts_in = PackedVector2Array([
+			Vector2(-2.0 + flick_w * 0.25, -27),
+			Vector2(2.0 + flick_w * 0.25, -27),
+			Vector2(flick_w, -37 - flick_h * 0.65)
+		])
+		draw_colored_polygon(flame_pts_in, Color(1.0, 0.85, 0.1, 0.95))
 	
 	# Shine lines
 	draw_line(Vector2(-4, -8), Vector2(-4, 10), Color(1.0, 1.0, 1.0, 0.4), 1.0)

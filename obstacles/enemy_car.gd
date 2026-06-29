@@ -125,7 +125,13 @@ func shoot_at_player() -> void:
 	if bottle_script:
 		var bottle = Area2D.new()
 		bottle.set_script(bottle_script)
-		bottle.name = "GlassBottle"
+		
+		# 20% chance to spawn a burning Molotov instead of a standard glass bottle
+		if randf() < 0.20:
+			bottle.set("is_molotov", true)
+			bottle.name = "MolotovBottle"
+		else:
+			bottle.name = "GlassBottle"
 		
 		# Spawn position: top of the car chassis
 		var spawn_pos = global_position + Vector2(0, -25).rotated(rotation)
