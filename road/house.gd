@@ -405,7 +405,11 @@ func show_completion_dialogue(player_won: bool, payout: int) -> void:
 			"text": "Awesome!",
 			"callback": on_ok
 		}
-	])
+	], {
+		"type": "race_complete",
+		"player_won": player_won,
+		"reward": payout
+	})
 	hud.add_child(dialogue_box)
 
 func setup_racing_target(reward: int) -> void:
@@ -502,7 +506,9 @@ func show_race_completion_dialogue(player_won: bool, payout: int) -> void:
 			"callback": on_ok
 		}
 	], {
-		"type": "racing_contract"
+		"type": "race_complete",
+		"player_won": player_won,
+		"reward": payout
 	})
 	hud.add_child(dialogue_box)
 

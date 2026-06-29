@@ -166,9 +166,13 @@ func _physics_process(delta: float) -> void:
 
 	# Detect if finish line is crossed
 	var target_x = -1.0
-	if road and road.get("delivery_target_chunk") != -1:
-		var target_chunk = road.get("delivery_target_chunk")
-		target_x = (target_chunk + 0.5) * road.get("chunk_width")
+	if road:
+		if road.get("delivery_target_chunk") != -1:
+			var target_chunk = road.get("delivery_target_chunk")
+			target_x = (target_chunk + 0.5) * road.get("chunk_width")
+		elif road.get("racing_target_chunk") != -1:
+			var target_chunk = road.get("racing_target_chunk")
+			target_x = (target_chunk + 0.5) * road.get("chunk_width")
 	
 	var has_finished = target_x > 0.0 and global_position.x >= target_x
 	if has_finished:
