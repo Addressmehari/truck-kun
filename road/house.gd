@@ -24,6 +24,13 @@ var racing_reward := 0
 # Font reference
 var custom_font: Font
 
+var OPPONENT_NAMES = [
+	"Neon Viper", "Speedy McQueen", "Turbo Drift", "Apex Predator",
+	"Shadow Racer", "Nitro Boost", "Tire Shredder", "Drift Kun",
+	"Road Rage", "Shift King"
+]
+var opponent_name: String = ""
+
 
 # Particles for Chimney smoke
 var smoke_particles: CPUParticles2D
@@ -127,6 +134,9 @@ func open_dialogue() -> void:
 	
 	# Configure dialogue text and options based on current state
 	if not has_declined:
+		if opponent_name == "":
+			opponent_name = OPPONENT_NAMES.pick_random()
+			
 		var road = get_node_or_null("/root/main/Road")
 		var distance_m = 1800
 		if road:
@@ -140,7 +150,8 @@ func open_dialogue() -> void:
 			var contract_meta = {
 				"type": "racing_contract",
 				"reward": reward_amount,
-				"distance": distance_m
+				"distance": distance_m,
+				"opponent_name": opponent_name
 			}
 			
 			var on_accept = func():
@@ -156,6 +167,7 @@ func open_dialogue() -> void:
 					road.set("racing_target_chunk", target_chunk)
 					road.set("racing_reward", reward_amount)
 					road.set("is_racing_active", true)
+					road.set("active_opponent_name", opponent_name)
 					road.call("start_racing_event")
 					
 					# If target chunk is already active, initialize it immediately
@@ -187,7 +199,8 @@ func open_dialogue() -> void:
 				"type": "delivery_contract",
 				"crates": crate_count,
 				"reward": reward_amount,
-				"distance": distance_m
+				"distance": distance_m,
+				"opponent_name": opponent_name
 			}
 			
 			var on_accept = func():
@@ -204,6 +217,7 @@ func open_dialogue() -> void:
 					road.set("delivery_crate_count", crate_count)
 					road.set("delivery_crates_delivered", 0)
 					road.set("delivery_reward", reward_amount)
+					road.set("active_opponent_name", opponent_name)
 					
 					# If target chunk is already active, initialize it immediately
 					if road.get("active_chunks").has(target_chunk):

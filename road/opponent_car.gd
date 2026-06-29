@@ -21,6 +21,12 @@ var player_chassis: RigidBody2D
 # ── State / VFX ──
 var is_active := false
 var elapsed := 0.0
+var opponent_name: String = "Opponent":
+	set(val):
+		opponent_name = val
+		if is_instance_valid(name_label):
+			name_label.text = val
+var name_label: Label
 
 func _ready() -> void:
 	# Configure RigidBody2D properties to match player truck parameters
@@ -38,6 +44,29 @@ func _ready() -> void:
 	phys_mat.friction = 0.15
 	phys_mat.bounce = 0.05
 	physics_material_override = phys_mat
+
+	# Floating nameplate
+	name_label = Label.new()
+	name_label.name = "OpponentNameLabel"
+	name_label.text = opponent_name
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	var custom_font = null
+	var font_path = "res://retro_font.ttf"
+	if ResourceLoader.exists(font_path):
+		custom_font = load(font_path)
+	if custom_font:
+		name_label.add_theme_font_override("font", custom_font)
+		
+	name_label.add_theme_font_size_override("font_size", 16)
+	name_label.add_theme_color_override("font_color", Color("#ff007f")) # Pink neon text
+	name_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	name_label.add_theme_constant_override("outline_size", 4)
+	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	name_label.position = Vector2(-100, -115)
+	name_label.size = Vector2(200, 24)
+	add_child(name_label)
 
 	# 1. Setup Combined Truck Collision Polygon (Cabin + Container)
 	var col_poly = CollisionPolygon2D.new()
@@ -134,6 +163,10 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	elapsed += delta
 	queue_redraw()
+	
+	if is_instance_valid(name_label):
+		name_label.rotation = -global_rotation
+		name_label.global_position = global_position + Vector2(-100, -110)
 	
 	# Process suspension forces for all 3 tyres
 	if is_instance_valid(tyre_back):

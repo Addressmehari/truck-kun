@@ -108,7 +108,7 @@ func _fill_pool() -> void:
 # ── Spawn a single coin at world X ────────────────────────────────────────────
 func _spawn_coin(world_x: float, x_jitter: float = 0.0) -> void:
 	var coin = _coin_scene.instantiate()
-	get_parent().add_child(coin)
+	get_parent().add_child.call_deferred(coin)
 
 	var spawn_x = world_x + x_jitter
 	var road_y = 0.0
@@ -130,7 +130,7 @@ func _spawn_petrol(world_x: float) -> void:
 	if not _petrol_scene:
 		return
 	var can = _petrol_scene.instantiate()
-	get_parent().add_child(can)
+	get_parent().add_child.call_deferred(can)
 	var road_y = 0.0
 	if _road and _road.has_method("get_road_height"):
 		road_y = _road.call("get_road_height", world_x)

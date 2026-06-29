@@ -152,6 +152,7 @@ var racing_reward: int = 0
 var is_racing_active: bool = false
 var active_opponent: RigidBody2D = null
 var opponent_finished: bool = false
+var active_opponent_name: String = "Opponent"
 
 
 
@@ -1277,7 +1278,8 @@ func start_race_sequence() -> void:
 	active_opponent.global_position = spawn_pos
 	
 	get_parent().add_child(active_opponent)
-	print("[Road] Spawned opponent car at player position: ", spawn_pos)
+	active_opponent.set("opponent_name", active_opponent_name)
+	print("[Road] Spawned opponent car at player position: ", spawn_pos, " name: ", active_opponent_name)
 	
 	# 3. Create Countdown Overlay in a high-priority CanvasLayer to draw on top of everything
 	var main_node = get_parent()
