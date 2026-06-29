@@ -150,6 +150,7 @@ var used_house_chunks: Array[int] = []
 var racing_target_chunk: int = -1
 var racing_reward: int = 0
 var is_racing_active: bool = false
+var active_opponent: RigidBody2D = null
 
 
 
@@ -382,6 +383,7 @@ func get_ground_material(fill_col: Color, line_col: Color) -> ShaderMaterial:
 	return ground_material
 
 func _ready() -> void:
+	collision_layer = 3
 	update_seed_offsets()
 	if Engine.is_editor_hint():
 		apply_active_biome()
@@ -1205,3 +1207,41 @@ func get_next_house_chunk(from_chunk: int) -> int:
 		check_chunk += 1
 	# Fallback if none found
 	return from_chunk + 18
+
+
+func start_racing_event() -> void:
+	if is_instance_valid(active_opponent):
+		active_opponent.queue_free()
+		active_opponent = null
+		
+	var opponent_script = load("res://road/opponent_car.gd")
+	if not opponent_script:
+		push_error("[Road] Failed to load res://road/opponent_car.gd")
+		return
+		
+	active_opponent = RigidBody2D.new()
+	active_opponent.set_script(opponent_script)
+	active_opponent.name = "OpponentCar"
+	
+	# Determine spawn position: behind the player truck
+	var spawn_x = get_target_x() - 180.0
+	var spawn_y = get_road_height(spawn_x) - 40.0 # Rest above road surface
+	active_opponent.position = Vector2(spawn_x, spawn_y)
+	active_opponent.global_position = Vector2(spawn_x, spawn_y)
+	
+	get_parent().add_child(active_opponent)
+	print("[Road] Spawned opponent car at X: ", spawn_x, " Y: ", spawn_y)
+	
+	# Start countdown/race start after a 1.5s delay
+	var timer = get_tree().create_timer(1.5)
+	timer.timeout.connect(func():
+		if is_instance_valid(active_opponent):
+			active_opponent.call("start_race")
+	)
+
+func end_racing_event() -> void:
+	if is_instance_valid(active_opponent):
+		var tween = active_opponent.create_tween()
+		tween.tween_property(active_opponent, "modulate:a", 0.0, 1.2)
+		tween.tween_callback(active_opponent.queue_free)
+		active_opponent = null

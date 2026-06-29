@@ -156,6 +156,7 @@ func open_dialogue() -> void:
 					road.set("racing_target_chunk", target_chunk)
 					road.set("racing_reward", reward_amount)
 					road.set("is_racing_active", true)
+					road.call("start_racing_event")
 					
 					# If target chunk is already active, initialize it immediately
 					if road.get("active_chunks").has(target_chunk):
@@ -397,6 +398,7 @@ func setup_racing_target(reward: int) -> void:
 	# Create Area2D detector
 	racing_area = Area2D.new()
 	racing_area.name = "RacingArea"
+	racing_area.collision_mask = 3
 	
 	var col = CollisionShape2D.new()
 	var rect = RectangleShape2D.new()
@@ -418,14 +420,20 @@ func _on_racing_area_body_entered(body: Node2D) -> void:
 		
 	var truck = get_node_or_null("/root/main/truck")
 	if truck and (body == truck.get("chassis") or body == truck.get("boat") or body == truck):
-		complete_race()
+		complete_race(true)
+		return
+		
+	var opponent = get_node_or_null("/root/main/OpponentCar")
+	if opponent and (body == opponent or body.get_parent() == opponent):
+		complete_race(false)
 
-func complete_race() -> void:
-	print("[House] Race complete! Rewarding player with $", racing_reward)
+func complete_race(player_won: bool) -> void:
+	print("[House] Race complete! Player won: ", player_won)
 	
-	var hud_stats = get_node_or_null("/root/main/truck/HUD/HudStats")
-	if hud_stats:
-		hud_stats.call("add_coin", racing_reward)
+	if player_won:
+		var hud_stats = get_node_or_null("/root/main/truck/HUD/HudStats")
+		if hud_stats:
+			hud_stats.call("add_coin", racing_reward)
 		
 	is_racing_target = false
 	if is_instance_valid(racing_area):
@@ -435,14 +443,15 @@ func complete_race() -> void:
 	if road:
 		road.set("racing_target_chunk", -1)
 		road.set("is_racing_active", false)
+		road.call("end_racing_event")
 		var current_chunk = int(floor(global_position.x / road.get("chunk_width")))
 		if not road.get("used_house_chunks").has(current_chunk):
 			road.get("used_house_chunks").append(current_chunk)
 		
-	show_race_completion_dialogue()
+	show_race_completion_dialogue(player_won)
 	queue_redraw()
 
-func show_race_completion_dialogue() -> void:
+func show_race_completion_dialogue(player_won: bool) -> void:
 	var hud = get_node_or_null("/root/main/truck/HUD")
 	if not hud:
 		return
@@ -460,9 +469,15 @@ func show_race_completion_dialogue() -> void:
 	var on_ok = func():
 		dialogue_box.call("close_dialogue")
 		
-	dialogue_box.call("setup", "[ RACE VICTORY ]\n\nYou won the race!\nEarned: $%d" % racing_reward, [
+	var dialogue_text = ""
+	if player_won:
+		dialogue_text = "[ RACE VICTORY ]\n\nYou won the race!\nEarned: $%d" % racing_reward
+	else:
+		dialogue_text = "[ RACE DEFEAT ]\n\nThe opponent crossed the finish line first!\nBetter luck next time!"
+		
+	dialogue_box.call("setup", dialogue_text, [
 		{
-			"text": "Awesome!",
+			"text": "Awesome!" if player_won else "OK",
 			"callback": on_ok
 		}
 	], {
