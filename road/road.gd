@@ -976,21 +976,22 @@ func destroy_chunk(i: int) -> void:
 func spawn_crusher_on_next_chunk() -> void:
 	var player_x = get_target_x()
 	
-	# Place the sequence of 5 crushers starting ahead of the player
+	# Randomize number of crushers between 3 and 8
+	var num_crushers = randi_range(3, 8)
 	var first_crusher_x = player_x + 800.0
 	var spacing = 400.0
 	
-	# Define flat road zone boundaries to cover the entire sequence
+	# Define flat road zone boundaries to cover the entire sequence dynamically
 	crusher_flat_start_x = first_crusher_x - 300.0
-	crusher_flat_end_x = first_crusher_x + 4 * spacing + 300.0
+	crusher_flat_end_x = first_crusher_x + (num_crushers - 1) * spacing + 300.0
 	
 	# Regenerate the road chunks immediately to apply the flat terrain
 	regenerate_runtime_chunks()
 	
-	# Spawn 5 crushers spaced continuously
+	# Spawn num_crushers spaced continuously
 	var crusher_scene = load("res://obstacles/crusher.tscn")
 	if crusher_scene:
-		for i in range(5):
+		for i in range(num_crushers):
 			var spawn_x = first_crusher_x + i * spacing
 			var road_y = get_road_height(spawn_x)
 			
@@ -1004,4 +1005,24 @@ func spawn_crusher_on_next_chunk() -> void:
 			crusher.initialized = true
 			
 			get_parent().add_child(crusher)
-			print("[Road] Crusher ", i + 1, " spawned at X: ", spawn_x, " Y: ", road_y)
+			print("[Road] Crusher ", i + 1, "/", num_crushers, " spawned at X: ", spawn_x, " Y: ", road_y)
+			
+	# Setup the CrusherProgressBar UI under the HUD
+	var hud = get_node_or_null("../truck/HUD")
+	if hud and is_instance_valid(hud):
+		# Clean up any existing crusher progress bar safely
+		var existing = hud.get_node_or_null("CrusherProgressBar")
+		if existing:
+			existing.name = "CrusherProgressBarOld"
+			existing.queue_free()
+			
+		var pb_script = load("res://ui/crusher_progress_bar.gd")
+		if pb_script:
+			var pb = Control.new()
+			pb.set_script(pb_script)
+			hud.add_child(pb)
+			
+			var crusher_xs: Array[float] = []
+			for i in range(num_crushers):
+				crusher_xs.append(first_crusher_x + i * spacing)
+			pb.call("setup", crusher_flat_start_x, crusher_flat_end_x, crusher_xs)
