@@ -94,7 +94,9 @@ func _physics_process(delta: float) -> void:
 	else:
 		modulate = Color(1.0, 1.0, 1.0)
 		
-	queue_redraw()
+	# Throttle drawing to every second physics frame to optimize CPU rendering overhead
+	if Engine.get_physics_frames() % 2 == 0:
+		queue_redraw()
 
 func snap_to_road() -> void:
 	if road and road.has_method("get_road_height"):
@@ -245,6 +247,11 @@ func _draw() -> void:
 		var mount_pt = Vector2(w_pos.x * 0.5, -22.0)
 		# Draw solid suspension arm
 		draw_line(w_pos, mount_pt, Color(0.3, 0.32, 0.35) if flash_timer <= 0.0 else Color(1, 1, 1), 3.0)
+		
+		# Precalculate spring angle direction once outside the inner loop
+		var spring_vector = mount_pt - w_pos
+		var offset_dir = Vector2.UP.rotated(spring_vector.angle())
+		
 		# Draw detailed helical coil spring
 		var coil_steps = 7
 		for i in range(coil_steps):
@@ -253,7 +260,6 @@ func _draw() -> void:
 			var p1 = w_pos.lerp(mount_pt, t1)
 			var p2 = w_pos.lerp(mount_pt, t2)
 			# Alternate sides for spring coils
-			var offset_dir = Vector2.UP.rotated((mount_pt - w_pos).angle())
 			var offset = offset_dir * (3.5 if i % 2 == 0 else -3.5)
 			draw_line(p1 + offset, p2 - offset, coil_color, 2.0)
 			

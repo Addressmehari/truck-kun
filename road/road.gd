@@ -562,13 +562,13 @@ func get_current_step_size() -> float:
 	var biome = get_current_biome()
 	if biome and biome.is_water:
 		return 450.0 # Very large step size to keep polygon count low and remove lag!
-	return step_size
+	return step_size * 2.0 # Spaced twice as far apart for 2x fewer polygons and smoother physics rendering
 
 func get_current_view_distance() -> float:
 	var biome = get_current_biome()
 	if biome and biome.is_water:
-		return 3500.0 # Only load chunks near the camera to keep CPU usage low
-	return view_distance
+		return 3000.0 # Only load chunks near the camera to keep CPU usage low
+	return view_distance * 0.5 # Load 50% fewer chunks offscreen to optimize memory and CPU usage
 
 
 func generate_road() -> void:
@@ -694,7 +694,10 @@ func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
 		
-	update_chunks(get_target_x())
+	# Throttle chunk updates (check every 8 frames instead of every frame)
+	if Engine.get_physics_frames() % 8 == 0:
+		update_chunks(get_target_x())
+		
 	update_active_chunks_geometry()
 
 	# Feed interactive ripple uniforms into the water shader every frame
@@ -717,11 +720,17 @@ func update_active_chunks_geometry() -> void:
 		
 	wave_physics_tick += 1
 	var update_collision = (wave_physics_tick % 5 == 0)
+	var player_x = get_target_x()
+	var current_view_dist = get_current_view_distance()
 	
 	for i in active_chunks.keys():
 		var chunk = active_chunks[i]
 		var start_x = i * chunk_width
 		var end_x = (i + 1) * chunk_width
+		
+		# Optimization: Only update dynamic wave geometry for chunks that are close to the screen/camera
+		if abs(start_x + chunk_width * 0.5 - player_x) > current_view_dist * 0.75:
+			continue
 		
 		var surface_points = PackedVector2Array()
 		var x = start_x

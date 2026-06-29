@@ -345,7 +345,7 @@ func _draw() -> void:
 			var circle_color = Color(1.0, 0.38, 0.15, 0.06) # Low opacity orange fill
 			var border_color = Color(1.0, 0.38, 0.15, 0.18) # Low opacity orange border
 			draw_circle(local_catch, pull_len, circle_color)
-			draw_arc(local_catch, pull_len, 0.0, 2.0 * PI, 64, border_color, 1.2)
+			draw_arc(local_catch, pull_len, 0.0, 2.0 * PI, 32, border_color, 1.2)
 		
 		# Draw a single dotted line for the slingshot stretch
 		var band_col = Color(1.0, 0.38, 0.15, 0.85)
