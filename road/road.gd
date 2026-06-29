@@ -1006,8 +1006,8 @@ func spawn_crusher_on_next_chunk() -> void:
 			get_parent().add_child(crusher)
 			print("[Road] Crusher ", i + 1, "/", num_crushers, " spawned at X: ", spawn_x, " Y: ", road_y)
 			
-	# Roll 100% chance to spawn treadmill(s) for testing (change to 0.40 for final balance)
-	if randf() < 1.0:
+	# Roll 40% chance to spawn treadmill(s)
+	if randf() < 0.40:
 		# Decide belt direction/speed: 75% backward (-220 px/s), 25% forward (180 px/s)
 		var belt_spd = -220.0 if randf() < 0.75 else 180.0
 		var treadmill_script = load("res://obstacles/treadmill.gd")

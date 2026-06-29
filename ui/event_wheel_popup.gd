@@ -214,7 +214,12 @@ func close_popup() -> void:
 				hud.add_child(timer_bar)
 				
 				var ev = events[selected_index]
-				var event_dist = float(randi_range(500, 600))
+				# Roll target distance using Gaussian distribution: mean=550.0, deviation=30.0, clamp[500, 600]
+				var u1 = randf()
+				if u1 < 0.0001: u1 = 0.0001
+				var u2 = randf()
+				var norm = sqrt(-2.0 * log(u1)) * cos(TAU * u2)
+				var event_dist = clamp(550.0 + norm * 30.0, 500.0, 600.0)
 				timer_bar.call("setup", ev["name"], ev["icon"], ev["color"], event_dist)
 	queue_free()
 
