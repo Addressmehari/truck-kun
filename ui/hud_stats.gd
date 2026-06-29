@@ -247,65 +247,181 @@ func _draw() -> void:
 		var milestone_x = dist_x + (dist_val_w / 2.0)
 		_draw_clean_text(font, "NEW BEST!", Vector2(milestone_x - 36, -8.0 - rise), 26, Color("#ffffff", fade))
 
-	# ── DELIVERY TARGET HUD INDICATOR (RIGHT SIDE) ─────────────────────
+	# ── DELIVERY/RACING TARGET HUD INDICATOR (RIGHT SIDE) ─────────────
 	var road = get_node_or_null("/root/main/Road")
-	if road and road.get("delivery_target_chunk") != -1:
-		var target_chunk = road.get("delivery_target_chunk")
-		var target_x = (target_chunk + 0.5) * road.get("chunk_width")
-		if road.get("active_chunks").has(target_chunk):
-			var chunk_data = road.get("active_chunks")[target_chunk]
-			if "house" in chunk_data and is_instance_valid(chunk_data.house):
-				target_x = chunk_data.house.global_position.x
+	if road:
+		if road.get("delivery_target_chunk") != -1:
+			var target_chunk = road.get("delivery_target_chunk")
+			var target_x = (target_chunk + 0.5) * road.get("chunk_width")
+			if road.get("active_chunks").has(target_chunk):
+				var chunk_data = road.get("active_chunks")[target_chunk]
+				if "house" in chunk_data and is_instance_valid(chunk_data.house):
+					target_x = chunk_data.house.global_position.x
+					
+			var dist_rem = 0.0
+			if is_instance_valid(chassis):
+				dist_rem = (target_x - chassis.global_position.x) / 30.0
 				
-		var dist_rem = 0.0
-		if is_instance_valid(chassis):
-			dist_rem = (target_x - chassis.global_position.x) / 30.0
-			
-		if dist_rem > -50.0:
-			var crates_needed = road.get("delivery_crate_count")
-			var crates_delivered = road.get("delivery_crates_delivered")
-			
-			var screen_w = get_viewport_rect().size.x
-			var indicator_w = 220.0
-			var indicator_h = 100.0
-			var right_margin = 38.0
-			
-			var ibox_x = screen_w - global_position.x - indicator_w - right_margin
-			var ibox_y = 68.0 # Align vertically with Petrol bar box
-			
-			var ibox = Rect2(ibox_x, ibox_y, indicator_w, indicator_h)
-			
-			var pulse = 0.5 + 0.5 * sin(_elapsed * 6.0)
-			var green_glow = Color("#00ff66", 0.12 + 0.08 * pulse)
-			var green_line = Color("#00ff66", 0.8 + 0.2 * pulse)
-			
-			# Draw background container
-			draw_rect(ibox, Color(0.08, 0.08, 0.12, 0.85), true)
-			draw_rect(ibox, green_line, false, 2.0)
-			draw_rect(ibox.grow(-3), green_glow, true)
-			
-			var lbl_font_size = 14
-			var val_font_size = 18
-			
-			# Line 1: Title
-			var title_str = "DELIVERY TARGET"
-			_draw_clean_text_center(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 24.0), lbl_font_size, Color("#00ff66"))
-			
-			# Line 2: Crates Count
-			var progress_str = "CRATES: %d/%d" % [crates_delivered, crates_needed]
-			_draw_clean_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 52.0), val_font_size, Color("#ffffff"))
-			
-			# Line 3: Distance remaining & flash arrow
-			var dist_str = "%d M" % int(max(0.0, dist_rem))
-			if dist_rem <= 0.0:
-				dist_str = "ARRIVED"
+			if dist_rem > -50.0:
+				var crates_needed = road.get("delivery_crate_count")
+				var crates_delivered = road.get("delivery_crates_delivered")
 				
-			var arrow_char = "▶"
-			if dist_rem < 0.0:
-				arrow_char = "◀"
+				var screen_w = get_viewport_rect().size.x
+				var indicator_w = 220.0
+				var opponent = road.get("active_opponent")
+				var has_opponent = is_instance_valid(opponent)
+				var indicator_h = 125.0 if has_opponent else 100.0
+				var right_margin = 38.0
 				
-			var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
-			_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 82.0), val_font_size, green_line)
+				var ibox_x = screen_w - global_position.x - indicator_w - right_margin
+				var ibox_y = 68.0 # Align vertically with Petrol bar box
+				
+				var ibox = Rect2(ibox_x, ibox_y, indicator_w, indicator_h)
+				
+				var pulse = 0.5 + 0.5 * sin(_elapsed * 6.0)
+				var green_glow = Color("#00ff66", 0.12 + 0.08 * pulse)
+				var green_line = Color("#00ff66", 0.8 + 0.2 * pulse)
+				
+				# Draw background container
+				draw_rect(ibox, Color(0.08, 0.08, 0.12, 0.85), true)
+				draw_rect(ibox, green_line, false, 2.0)
+				draw_rect(ibox.grow(-3), green_glow, true)
+				
+				var lbl_font_size = 14
+				var val_font_size = 18
+				
+				if has_opponent:
+					# Line 1: Title
+					var title_str = "DELIVERY TARGET"
+					_draw_clean_text_center(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 22.0), lbl_font_size, Color("#00ff66"))
+					
+					# Line 2: Crates Count
+					var progress_str = "CRATES: %d/%d" % [crates_delivered, crates_needed]
+					_draw_clean_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 46.0), val_font_size, Color("#ffffff"))
+					
+					# Line 3: Position
+					var pos_str = "POSITION: 1st"
+					if is_instance_valid(chassis) and is_instance_valid(opponent):
+						if chassis.global_position.x < opponent.global_position.x:
+							pos_str = "POSITION: 2nd"
+					_draw_clean_text_center(font, pos_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 70.0), val_font_size, Color("#ffea79"))
+					
+					# Line 4: Distance remaining & flash arrow
+					var dist_str = "%d M" % int(max(0.0, dist_rem))
+					if dist_rem <= 0.0:
+						dist_str = "ARRIVED"
+						
+					var arrow_char = "▶"
+					if dist_rem < 0.0:
+						arrow_char = "◀"
+						
+					var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
+					_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 100.0), val_font_size, green_line)
+				else:
+					# Line 1: Title
+					var title_str = "DELIVERY TARGET"
+					_draw_clean_text_center(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 24.0), lbl_font_size, Color("#00ff66"))
+					
+					# Line 2: Crates Count
+					var progress_str = "CRATES: %d/%d" % [crates_delivered, crates_needed]
+					_draw_clean_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 52.0), val_font_size, Color("#ffffff"))
+					
+					# Line 3: Distance remaining & flash arrow
+					var dist_str = "%d M" % int(max(0.0, dist_rem))
+					if dist_rem <= 0.0:
+						dist_str = "ARRIVED"
+						
+					var arrow_char = "▶"
+					if dist_rem < 0.0:
+						arrow_char = "◀"
+						
+					var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
+					_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 82.0), val_font_size, green_line)
+		
+		elif road.get("racing_target_chunk") != -1:
+			var target_chunk = road.get("racing_target_chunk")
+			var target_x = (target_chunk + 0.5) * road.get("chunk_width")
+			if road.get("active_chunks").has(target_chunk):
+				var chunk_data = road.get("active_chunks")[target_chunk]
+				if "house" in chunk_data and is_instance_valid(chunk_data.house):
+					target_x = chunk_data.house.global_position.x
+					
+			var dist_rem = 0.0
+			if is_instance_valid(chassis):
+				dist_rem = (target_x - chassis.global_position.x) / 30.0
+				
+			if dist_rem > -50.0:
+				var screen_w = get_viewport_rect().size.x
+				var indicator_w = 220.0
+				var opponent = road.get("active_opponent")
+				var has_opponent = is_instance_valid(opponent)
+				var indicator_h = 125.0 if has_opponent else 100.0
+				var right_margin = 38.0
+				
+				var ibox_x = screen_w - global_position.x - indicator_w - right_margin
+				var ibox_y = 68.0 # Align vertically with Petrol bar box
+				
+				var ibox = Rect2(ibox_x, ibox_y, indicator_w, indicator_h)
+				
+				var pulse = 0.5 + 0.5 * sin(_elapsed * 6.0)
+				var pink_glow = Color("#ff007f", 0.12 + 0.08 * pulse)
+				var pink_line = Color("#ff007f", 0.8 + 0.2 * pulse)
+				
+				# Draw background container
+				draw_rect(ibox, Color(0.08, 0.08, 0.12, 0.85), true)
+				draw_rect(ibox, pink_line, false, 2.0)
+				draw_rect(ibox.grow(-3), pink_glow, true)
+				
+				var lbl_font_size = 14
+				var val_font_size = 18
+				
+				if has_opponent:
+					# Line 1: Title
+					var title_str = "RACING TARGET"
+					_draw_clean_text_center(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 22.0), lbl_font_size, Color("#ff007f"))
+					
+					# Line 2: Race details
+					var progress_str = "FINISH LINE"
+					_draw_clean_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 46.0), val_font_size, Color("#ffffff"))
+					
+					# Line 3: Position
+					var pos_str = "POSITION: 1st"
+					if is_instance_valid(chassis) and is_instance_valid(opponent):
+						if chassis.global_position.x < opponent.global_position.x:
+							pos_str = "POSITION: 2nd"
+					_draw_clean_text_center(font, pos_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 70.0), val_font_size, Color("#ffea79"))
+					
+					# Line 4: Distance remaining & flash arrow
+					var dist_str = "%d M" % int(max(0.0, dist_rem))
+					if dist_rem <= 0.0:
+						dist_str = "ARRIVED"
+						
+					var arrow_char = "▶"
+					if dist_rem < 0.0:
+						arrow_char = "◀"
+						
+					var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
+					_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 100.0), val_font_size, pink_line)
+				else:
+					# Line 1: Title
+					var title_str = "RACING TARGET"
+					_draw_clean_text_center(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 24.0), lbl_font_size, Color("#ff007f"))
+					
+					# Line 2: Race details
+					var progress_str = "FINISH LINE"
+					_draw_clean_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 52.0), val_font_size, Color("#ffffff"))
+					
+					# Line 3: Distance remaining & flash arrow
+					var dist_str = "%d M" % int(max(0.0, dist_rem))
+					if dist_rem <= 0.0:
+						dist_str = "ARRIVED"
+						
+					var arrow_char = "▶"
+					if dist_rem < 0.0:
+						arrow_char = "◀"
+						
+					var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
+					_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 82.0), val_font_size, pink_line)
 
 # ── Drawing Engines ──────────────────────────────────────────────────────
 

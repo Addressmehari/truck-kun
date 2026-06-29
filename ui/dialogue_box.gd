@@ -192,6 +192,210 @@ func _ready() -> void:
 		dist_lbl.add_theme_constant_override("outline_size", 4)
 		row2.add_child(dist_lbl)
 
+	elif metadata.get("type") == "racing_contract":
+		# Setup custom content for racing
+		label_text.visible = false
+		
+		# Create a custom VBoxContainer for details
+		var detail_vbox = VBoxContainer.new()
+		detail_vbox.alignment = VBoxContainer.ALIGNMENT_CENTER
+		detail_vbox.add_theme_constant_override("separation", 20)
+		vbox.add_child(detail_vbox)
+		vbox.move_child(detail_vbox, 0)
+		
+		# 1. Title
+		var title_lbl = Label.new()
+		title_lbl.text = "Street Race"
+		title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title_lbl.add_theme_font_override("font", custom_font)
+		title_lbl.add_theme_font_size_override("font_size", 28)
+		title_lbl.add_theme_color_override("font_color", Color("#ff007f")) # Neon pink title
+		title_lbl.add_theme_constant_override("outline_size", 6)
+		detail_vbox.add_child(title_lbl)
+		
+		# 2. Row 1: Race VS Flag and Coin reward
+		var row1 = HBoxContainer.new()
+		row1.alignment = HBoxContainer.ALIGNMENT_CENTER
+		row1.add_theme_constant_override("separation", 50)
+		detail_vbox.add_child(row1)
+		
+		# Race Icon Control (Checkered Flag)
+		var race_hbox = HBoxContainer.new()
+		race_hbox.add_theme_constant_override("separation", 10)
+		row1.add_child(race_hbox)
+		
+		var flag_icon = Control.new()
+		flag_icon.custom_minimum_size = Vector2(32, 32)
+		flag_icon.draw.connect(func():
+			var size_box = 8.0
+			for r in range(4):
+				for c_idx in range(4):
+					var col = Color.WHITE if (r + c_idx) % 2 == 0 else Color.BLACK
+					flag_icon.draw_rect(Rect2(c_idx * size_box, r * size_box, size_box, size_box), col, true)
+			flag_icon.draw_line(Vector2(0, 0), Vector2(0, 32), Color.GRAY, 2.0)
+		)
+		race_hbox.add_child(flag_icon)
+		
+		var race_lbl = Label.new()
+		race_lbl.text = "VS Opponent"
+		race_lbl.add_theme_font_override("font", custom_font)
+		race_lbl.add_theme_font_size_override("font_size", 22)
+		race_lbl.add_theme_color_override("font_color", Color.WHITE)
+		race_lbl.add_theme_constant_override("outline_size", 4)
+		race_hbox.add_child(race_lbl)
+		
+		# Coin part (Icon + text)
+		var coin_hbox = HBoxContainer.new()
+		coin_hbox.add_theme_constant_override("separation", 10)
+		row1.add_child(coin_hbox)
+		
+		# Coin Icon Control
+		var coin_icon = Control.new()
+		coin_icon.custom_minimum_size = Vector2(32, 32)
+		coin_icon.draw.connect(func():
+			var center = Vector2(16, 16)
+			coin_icon.draw_circle(center, 14.0, Color("#ffea79", 0.25))
+			coin_icon.draw_circle(center, 13.0, Color("#ffb900"))
+			coin_icon.draw_circle(center, 8.0, Color("#ffea79"))
+			coin_icon.draw_circle(center, 3.0, Color("#ffb900"))
+		)
+		coin_hbox.add_child(coin_icon)
+		
+		var coin_lbl = Label.new()
+		coin_lbl.text = "%d$" % metadata.get("reward", 1200)
+		coin_lbl.add_theme_font_override("font", custom_font)
+		coin_lbl.add_theme_font_size_override("font_size", 22)
+		coin_lbl.add_theme_color_override("font_color", Color("#ffea79"))
+		coin_lbl.add_theme_constant_override("outline_size", 4)
+		coin_hbox.add_child(coin_lbl)
+		
+		# 3. Row 2: Location and Distance
+		var row2 = HBoxContainer.new()
+		row2.alignment = HBoxContainer.ALIGNMENT_CENTER
+		row2.add_theme_constant_override("separation", 10)
+		detail_vbox.add_child(row2)
+		
+		# Location Pin Icon Control
+		var pin_icon = Control.new()
+		pin_icon.custom_minimum_size = Vector2(24, 32)
+		pin_icon.draw.connect(func():
+			var center = Vector2(12, 10)
+			# Pink pin body
+			pin_icon.draw_circle(center, 8.0, Color("#ff007f"))
+			var tri = PackedVector2Array([
+				center + Vector2(-8, 2),
+				center + Vector2(8, 2),
+				center + Vector2(0, 18)
+			])
+			pin_icon.draw_colored_polygon(tri, Color("#ff007f"))
+			pin_icon.draw_circle(center, 3.0, Color.WHITE)
+		)
+		row2.add_child(pin_icon)
+		
+		var dist_lbl = Label.new()
+		dist_lbl.text = "%d meters" % metadata.get("distance", 1800)
+		dist_lbl.add_theme_font_override("font", custom_font)
+		dist_lbl.add_theme_font_size_override("font_size", 22)
+		dist_lbl.add_theme_color_override("font_color", Color.WHITE)
+		dist_lbl.add_theme_constant_override("outline_size", 4)
+		row2.add_child(dist_lbl)
+
+	elif metadata.get("type") == "race_complete":
+		# Setup custom content for completing a race (both delivery and street race)
+		label_text.visible = false
+		
+		# Create a custom VBoxContainer for details
+		var detail_vbox = VBoxContainer.new()
+		detail_vbox.alignment = VBoxContainer.ALIGNMENT_CENTER
+		detail_vbox.add_theme_constant_override("separation", 20)
+		vbox.add_child(detail_vbox)
+		vbox.move_child(detail_vbox, 0)
+		
+		# 1. Title
+		var title_lbl = Label.new()
+		title_lbl.text = "Race Finished"
+		title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title_lbl.add_theme_font_override("font", custom_font)
+		title_lbl.add_theme_font_size_override("font_size", 28)
+		
+		var won = metadata.get("player_won", true)
+		if won:
+			title_lbl.add_theme_color_override("font_color", Color("#00ff66")) # Neon Green for victory
+		else:
+			title_lbl.add_theme_color_override("font_color", Color("#ff2a6d")) # Neon Pink/Red for defeat
+			
+		title_lbl.add_theme_constant_override("outline_size", 6)
+		detail_vbox.add_child(title_lbl)
+		
+		# 2. Row 1: Position and Coin reward
+		var row1 = HBoxContainer.new()
+		row1.alignment = HBoxContainer.ALIGNMENT_CENTER
+		row1.add_theme_constant_override("separation", 50)
+		detail_vbox.add_child(row1)
+		
+		# Position (checkered flag + text)
+		var pos_hbox = HBoxContainer.new()
+		pos_hbox.add_theme_constant_override("separation", 10)
+		row1.add_child(pos_hbox)
+		
+		var flag_icon = Control.new()
+		flag_icon.custom_minimum_size = Vector2(32, 32)
+		flag_icon.draw.connect(func():
+			var size_box = 8.0
+			for r in range(4):
+				for c_idx in range(4):
+					var col = Color.WHITE if (r + c_idx) % 2 == 0 else Color.BLACK
+					flag_icon.draw_rect(Rect2(c_idx * size_box, r * size_box, size_box, size_box), col, true)
+			flag_icon.draw_line(Vector2(0, 0), Vector2(0, 32), Color.GRAY, 2.0)
+		)
+		pos_hbox.add_child(flag_icon)
+		
+		var pos_lbl = Label.new()
+		pos_lbl.text = "1st Place" if won else "2nd Place"
+		pos_lbl.add_theme_font_override("font", custom_font)
+		pos_lbl.add_theme_font_size_override("font_size", 22)
+		pos_lbl.add_theme_color_override("font_color", Color.WHITE)
+		pos_lbl.add_theme_constant_override("outline_size", 4)
+		pos_hbox.add_child(pos_lbl)
+		
+		# Coin part (Icon + text)
+		var coin_hbox = HBoxContainer.new()
+		coin_hbox.add_theme_constant_override("separation", 10)
+		row1.add_child(coin_hbox)
+		
+		# Coin Icon Control
+		var coin_icon = Control.new()
+		coin_icon.custom_minimum_size = Vector2(32, 32)
+		coin_icon.draw.connect(func():
+			var center = Vector2(16, 16)
+			coin_icon.draw_circle(center, 14.0, Color("#ffea79", 0.25))
+			coin_icon.draw_circle(center, 13.0, Color("#ffb900"))
+			coin_icon.draw_circle(center, 8.0, Color("#ffea79"))
+			coin_icon.draw_circle(center, 3.0, Color("#ffb900"))
+		)
+		coin_hbox.add_child(coin_icon)
+		
+		var coin_lbl = Label.new()
+		coin_lbl.text = "+%d$" % metadata.get("reward", 0)
+		coin_lbl.add_theme_font_override("font", custom_font)
+		coin_lbl.add_theme_font_size_override("font_size", 22)
+		coin_lbl.add_theme_color_override("font_color", Color("#ffea79"))
+		coin_lbl.add_theme_constant_override("outline_size", 4)
+		coin_hbox.add_child(coin_lbl)
+		
+		# 3. Row 2: Message/Description
+		var row2 = HBoxContainer.new()
+		row2.alignment = HBoxContainer.ALIGNMENT_CENTER
+		detail_vbox.add_child(row2)
+		
+		var desc_lbl = Label.new()
+		desc_lbl.text = "Victory! Earned full payout." if won else "Defeat! Earned 15% compensation."
+		desc_lbl.add_theme_font_override("font", custom_font)
+		desc_lbl.add_theme_font_size_override("font_size", 18)
+		desc_lbl.add_theme_color_override("font_color", Color("#a0a0b0"))
+		desc_lbl.add_theme_constant_override("outline_size", 3)
+		row2.add_child(desc_lbl)
+
 	# 4. Buttons Container
 	buttons_container = HBoxContainer.new()
 	buttons_container.alignment = HBoxContainer.ALIGNMENT_CENTER
@@ -303,6 +507,13 @@ func _draw() -> void:
 	if metadata.get("type") == "delivery_contract":
 		glow_color = Color("#ffb900") # Neon gold for contracts
 		inner_glow = Color("#ff2a6d", 0.4) # Hot pink inner accent
+	elif metadata.get("type") == "racing_contract":
+		glow_color = Color("#ff007f") # Hot pink for races
+		inner_glow = Color("#00f0ff", 0.4) # Cyan inner accent
+	elif metadata.get("type") == "race_complete":
+		var won = metadata.get("player_won", true)
+		glow_color = Color("#00ff66") if won else Color("#ff2a6d") # Green if won, Pink/Red if lost
+		inner_glow = Color("#00f0ff", 0.4)
 		
 	var box_rect = Rect2(Vector2.ZERO, box_size)
 	

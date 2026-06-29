@@ -146,6 +146,14 @@ var delivery_crates_delivered: int = 0
 var delivery_reward: int = 0
 var used_house_chunks: Array[int] = []
 
+# Racing Contract State
+var racing_target_chunk: int = -1
+var racing_reward: int = 0
+var is_racing_active: bool = false
+var active_opponent: RigidBody2D = null
+var opponent_finished: bool = false
+var active_opponent_name: String = "Opponent"
+
 
 
 @export_group("Biomes System")
@@ -377,6 +385,7 @@ func get_ground_material(fill_col: Color, line_col: Color) -> ShaderMaterial:
 	return ground_material
 
 func _ready() -> void:
+	collision_layer = 3
 	update_seed_offsets()
 	if Engine.is_editor_hint():
 		apply_active_biome()
@@ -867,6 +876,16 @@ func spawn_house_node(chunk_index: int) -> Node2D:
 	var house = Area2D.new()
 	house.set_script(house_script)
 	
+	# Determine house type
+	if chunk_index == delivery_target_chunk:
+		house.set("house_type", "delivery")
+	elif chunk_index == racing_target_chunk:
+		house.set("house_type", "racing")
+	else:
+		var type_rng = RandomNumberGenerator.new()
+		type_rng.seed = hash(chunk_index + road_seed * 4321)
+		house.set("house_type", "racing" if type_rng.randf() < 0.5 else "delivery")
+
 	# Randomize horizontal offset within the chunk using seeded RNG
 	var chunk_rng = RandomNumberGenerator.new()
 	chunk_rng.seed = hash(chunk_index + road_seed * 1109)
@@ -882,6 +901,8 @@ func spawn_house_node(chunk_index: int) -> Node2D:
 func should_spawn_house_procedurally(chunk_idx: int) -> bool:
 	if delivery_target_chunk != -1:
 		return chunk_idx == delivery_target_chunk
+	if racing_target_chunk != -1:
+		return chunk_idx == racing_target_chunk
 
 	if chunk_idx <= 1:
 		return false
@@ -931,6 +952,8 @@ func spawn_house_at_player() -> void:
 		return
 	var house = Area2D.new()
 	house.set_script(house_script)
+	house.set("house_type", "racing" if randf() < 0.5 else "delivery")
+	
 	var road_y = get_road_height(spawn_x)
 	house.position = Vector2(spawn_x, road_y)
 	house.z_index = -2
@@ -1044,6 +1067,8 @@ func create_chunk(i: int) -> void:
 			house_node.set("has_accepted", true)
 		if i == delivery_target_chunk:
 			house_node.call("setup_delivery_target", delivery_crate_count, delivery_reward)
+		elif i == racing_target_chunk:
+			house_node.call("setup_racing_target", racing_reward)
 		
 	active_chunks[i] = {
 		"collision": col_poly,
@@ -1184,3 +1209,155 @@ func get_next_house_chunk(from_chunk: int) -> int:
 		check_chunk += 1
 	# Fallback if none found
 	return from_chunk + 18
+
+
+func start_racing_event() -> void:
+	opponent_finished = false
+	start_race_sequence()
+
+func end_racing_event() -> void:
+	if is_instance_valid(active_opponent):
+		var tween = active_opponent.create_tween()
+		tween.tween_property(active_opponent, "modulate:a", 0.0, 1.2)
+		tween.tween_callback(active_opponent.queue_free)
+		active_opponent = null
+
+func start_delivery_race() -> void:
+	opponent_finished = false
+	start_race_sequence()
+
+func start_race_sequence() -> void:
+	
+	# 1. Locate truck and Lock player controls immediately
+	var truck = get_node_or_null("/root/main/truck")
+	if truck:
+		truck.set("controls_locked", true)
+		
+		# Cancel all current momentum to freeze the truck exactly in place
+		var chassis = truck.get("chassis")
+		if is_instance_valid(chassis):
+			chassis.linear_velocity = Vector2.ZERO
+			chassis.angular_velocity = 0.0
+		var container_body = truck.get("container_body")
+		if is_instance_valid(container_body):
+			container_body.linear_velocity = Vector2.ZERO
+			container_body.angular_velocity = 0.0
+		var boat = truck.get("boat")
+		if is_instance_valid(boat):
+			boat.linear_velocity = Vector2.ZERO
+			boat.angular_velocity = 0.0
+		for tyre_name in ["tyre_1", "tyre_2", "tyre_3"]:
+			var tyre = truck.get(tyre_name)
+			if is_instance_valid(tyre):
+				tyre.linear_velocity = Vector2.ZERO
+				tyre.angular_velocity = 0.0
+		
+	# 2. Spawn opponent car exactly at player position
+	if is_instance_valid(active_opponent):
+		active_opponent.queue_free()
+		active_opponent = null
+		
+	var opponent_script = load("res://road/opponent_car.gd")
+	if not opponent_script:
+		push_error("[Road] Failed to load res://road/opponent_car.gd")
+		return
+		
+	active_opponent = RigidBody2D.new()
+	active_opponent.set_script(opponent_script)
+	active_opponent.name = "OpponentCar"
+	
+	# Determine vehicle type from name (Kyrie -> sports_car, Hopps -> truck)
+	var opponent_vehicle_type = "sports_car" if active_opponent_name.to_lower() == "kyrie" else "truck"
+	active_opponent.set("vehicle_type", opponent_vehicle_type)
+	
+	var spawn_pos = Vector2.ZERO
+	if truck:
+		var active_body = truck.get("boat") if truck.get("is_water_mode_active") else truck.get("chassis")
+		if is_instance_valid(active_body):
+			spawn_pos = active_body.global_position
+	else:
+		spawn_pos = Vector2(get_target_x(), get_road_height(get_target_x()) - 40.0)
+		
+	active_opponent.position = spawn_pos
+	active_opponent.global_position = spawn_pos
+	
+	get_parent().add_child(active_opponent)
+	active_opponent.set("opponent_name", active_opponent_name)
+	print("[Road] Spawned opponent car at player position: ", spawn_pos, " name: ", active_opponent_name)
+	
+	# 3. Create Countdown Overlay in a high-priority CanvasLayer to draw on top of everything
+	var main_node = get_parent()
+	var count_layer = CanvasLayer.new()
+	count_layer.name = "CountdownLayer"
+	count_layer.layer = 100
+	main_node.add_child(count_layer)
+	
+	var countdown_label = Label.new()
+	countdown_label.name = "RaceCountdown"
+	
+	# Typography
+	var custom_font = null
+	var font_path = "res://retro_font.ttf"
+	if ResourceLoader.exists(font_path):
+		custom_font = load(font_path)
+	if custom_font:
+		countdown_label.add_theme_font_override("font", custom_font)
+	
+	countdown_label.add_theme_font_size_override("font_size", 96)
+	countdown_label.add_theme_color_override("font_color", Color("#ffea79")) # Neon yellow
+	countdown_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	countdown_label.add_theme_constant_override("outline_size", 12)
+	countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	countdown_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	# Positioning: Full screen center
+	countdown_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	countdown_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	countdown_label.grow_vertical = Control.GROW_DIRECTION_BOTH
+	
+	count_layer.add_child(countdown_label)
+	
+	# Animate helper function
+	var play_bounce = func(txt: String, color_hex: String):
+		var screen_size = get_viewport().get_visible_rect().size
+		countdown_label.size = screen_size
+		countdown_label.pivot_offset = screen_size / 2.0
+		countdown_label.text = txt
+		countdown_label.add_theme_color_override("font_color", Color(color_hex))
+		countdown_label.scale = Vector2(0.3, 0.3)
+		var t = get_tree().create_tween().set_parallel(true)
+		t.tween_property(countdown_label, "scale", Vector2(1.2, 1.2), 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		t.chain().tween_property(countdown_label, "scale", Vector2(1.0, 1.0), 0.15)
+		
+	play_bounce.call("3", "#ff2a6d") # Hot Pink for 3
+	
+	var t1 = get_tree().create_timer(1.0)
+	t1.timeout.connect(func():
+		if not is_instance_valid(countdown_label): return
+		play_bounce.call("2", "#ffb900") # Gold for 2
+		
+		var t2 = get_tree().create_timer(1.0)
+		t2.timeout.connect(func():
+			if not is_instance_valid(countdown_label): return
+			play_bounce.call("1", "#00f0ff") # Cyan for 1
+			
+			var t3 = get_tree().create_timer(1.0)
+			t3.timeout.connect(func():
+				if not is_instance_valid(countdown_label): return
+				play_bounce.call("GO!", "#00e676") # Green for GO!
+				
+				# UNLOCK controls and START race
+				if is_instance_valid(truck):
+					truck.set("controls_locked", false)
+				if is_instance_valid(active_opponent):
+					active_opponent.call("start_race")
+					
+				var t4 = get_tree().create_timer(1.0)
+				t4.timeout.connect(func():
+					if is_instance_valid(count_layer):
+						count_layer.queue_free()
+				)
+			)
+		)
+	)
+
