@@ -29,6 +29,9 @@ var opponent_name: String = "Opponent":
 var name_label: Label
 var vehicle_type: String = "truck"
 
+var sports_car_arches: Array[PackedVector2Array] = []
+var truck_arches: Array[PackedVector2Array] = []
+
 func _ready() -> void:
 	# Configure RigidBody2D properties to match player truck parameters
 	# Initialize unique specs based on vehicle type
@@ -59,6 +62,27 @@ func _ready() -> void:
 	phys_mat.friction = 0.15
 	phys_mat.bounce = 0.05
 	physics_material_override = phys_mat
+
+	# Precalculate wheel arches to optimize draw loop performance
+	for arch_x in [50.0, -50.0]:
+		var arch_center = Vector2(arch_x, -2.0)
+		var arch_radius = 24.5
+		var arch_points = PackedVector2Array()
+		var arch_steps = 16
+		for i in range(arch_steps + 1):
+			var angle = PI + (PI * i / arch_steps)
+			arch_points.append(arch_center + Vector2(cos(angle), sin(angle)) * arch_radius)
+		sports_car_arches.append(arch_points)
+
+	for arch_x in [35.0, -33.0, -93.0]:
+		var arch_center = Vector2(arch_x, -2.0)
+		var arch_radius = 24.5
+		var arch_points = PackedVector2Array()
+		var arch_steps = 16
+		for i in range(arch_steps + 1):
+			var angle = PI + (PI * i / arch_steps)
+			arch_points.append(arch_center + Vector2(cos(angle), sin(angle)) * arch_radius)
+		truck_arches.append(arch_points)
 
 	# Floating nameplate
 	name_label = Label.new()
@@ -228,9 +252,11 @@ func _ready() -> void:
 	if truck:
 		player_chassis = truck.get_node_or_null("chassis")
 
+func _process(delta: float) -> void:
+	queue_redraw()
+
 func _physics_process(delta: float) -> void:
 	elapsed += delta
-	queue_redraw()
 	
 	if is_instance_valid(name_label):
 		name_label.rotation = -global_rotation
@@ -425,16 +451,9 @@ func _draw() -> void:
 		# Headlight glow
 		draw_line(Vector2(67, -10), Vector2(70, -10), Color.YELLOW, 3.0)
 		
-		# Carbon wheel arches for sports car (rear & front)
-		for arch_x in [50.0, -50.0]:
-			var arch_center = Vector2(arch_x, -2.0)
-			var arch_radius = 24.5
-			var arch_points = PackedVector2Array()
-			var arch_steps = 16
-			for i in range(arch_steps + 1):
-				var angle = PI + (PI * i / arch_steps)
-				arch_points.append(arch_center + Vector2(cos(angle), sin(angle)) * arch_radius)
-			draw_polyline(arch_points, plate_color, 4.5)
+		# Carbon wheel arches for sports car (rear & front) - precalculated
+		for arch in sports_car_arches:
+			draw_polyline(arch, plate_color, 4.5)
 			
 		# Driver outline inside cabin
 		draw_circle(Vector2(-10, -20), 4.5, Color.WHITE) # Helmet
@@ -518,16 +537,9 @@ func _draw() -> void:
 		draw_rect(Rect2(-114, 0, 3, 14), plate_color, true)
 		draw_circle(Vector2(-112.5, 11), 1.0, neon_pink) # neon pink reflector
 	
-		# 6. Carbon wheel arches for all 3 wheels
-		for arch_x in [35.0, -33.0, -93.0]:
-			var arch_center = Vector2(arch_x, -2.0)
-			var arch_radius = 24.5
-			var arch_points = PackedVector2Array()
-			var arch_steps = 16
-			for i in range(arch_steps + 1):
-				var angle = PI + (PI * i / arch_steps)
-				arch_points.append(arch_center + Vector2(cos(angle), sin(angle)) * arch_radius)
-			draw_polyline(arch_points, plate_color, 4.5)
+		# Carbon wheel arches for all 3 wheels - precalculated
+		for arch in truck_arches:
+			draw_polyline(arch, plate_color, 4.5)
 	
 		# 7. Driver outline inside cabin
 		draw_circle(Vector2(26, -53), 4.5, Color.WHITE) # Helmet
