@@ -146,6 +146,11 @@ var delivery_crates_delivered: int = 0
 var delivery_reward: int = 0
 var used_house_chunks: Array[int] = []
 
+# Racing Contract State
+var racing_target_chunk: int = -1
+var racing_reward: int = 0
+var is_racing_active: bool = false
+
 
 
 @export_group("Biomes System")
@@ -867,6 +872,16 @@ func spawn_house_node(chunk_index: int) -> Node2D:
 	var house = Area2D.new()
 	house.set_script(house_script)
 	
+	# Determine house type
+	if chunk_index == delivery_target_chunk:
+		house.set("house_type", "delivery")
+	elif chunk_index == racing_target_chunk:
+		house.set("house_type", "racing")
+	else:
+		var type_rng = RandomNumberGenerator.new()
+		type_rng.seed = hash(chunk_index + road_seed * 4321)
+		house.set("house_type", "racing" if type_rng.randf() < 0.5 else "delivery")
+
 	# Randomize horizontal offset within the chunk using seeded RNG
 	var chunk_rng = RandomNumberGenerator.new()
 	chunk_rng.seed = hash(chunk_index + road_seed * 1109)
@@ -882,6 +897,8 @@ func spawn_house_node(chunk_index: int) -> Node2D:
 func should_spawn_house_procedurally(chunk_idx: int) -> bool:
 	if delivery_target_chunk != -1:
 		return chunk_idx == delivery_target_chunk
+	if racing_target_chunk != -1:
+		return chunk_idx == racing_target_chunk
 
 	if chunk_idx <= 1:
 		return false
@@ -931,6 +948,8 @@ func spawn_house_at_player() -> void:
 		return
 	var house = Area2D.new()
 	house.set_script(house_script)
+	house.set("house_type", "racing" if randf() < 0.5 else "delivery")
+	
 	var road_y = get_road_height(spawn_x)
 	house.position = Vector2(spawn_x, road_y)
 	house.z_index = -2
@@ -1044,6 +1063,8 @@ func create_chunk(i: int) -> void:
 			house_node.set("has_accepted", true)
 		if i == delivery_target_chunk:
 			house_node.call("setup_delivery_target", delivery_crate_count, delivery_reward)
+		elif i == racing_target_chunk:
+			house_node.call("setup_racing_target", racing_reward)
 		
 	active_chunks[i] = {
 		"collision": col_poly,
