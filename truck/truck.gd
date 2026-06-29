@@ -376,6 +376,12 @@ func _input(event: InputEvent) -> void:
 				var road = get_node_or_null("/root/main/Road")
 				if road and road.has_method("spawn_crusher_on_next_chunk"):
 					road.call("spawn_crusher_on_next_chunk")
+			elif cheat_buffer.ends_with("house"):
+				cheat_buffer = "" # clear buffer
+				print("Cheat activated: house!")
+				var road = get_node_or_null("/root/main/Road")
+				if road and road.has_method("spawn_house_at_player"):
+					road.call("spawn_house_at_player")
 
 
 func _on_gear_button_pressed(gear_type: Gear) -> void:

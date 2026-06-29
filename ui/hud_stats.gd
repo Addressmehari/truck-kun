@@ -247,6 +247,66 @@ func _draw() -> void:
 		var milestone_x = dist_x + (dist_val_w / 2.0)
 		_draw_clean_text(font, "NEW BEST!", Vector2(milestone_x - 36, -8.0 - rise), 26, Color("#ffffff", fade))
 
+	# ── DELIVERY TARGET HUD INDICATOR (RIGHT SIDE) ─────────────────────
+	var road = get_node_or_null("/root/main/Road")
+	if road and road.get("delivery_target_chunk") != -1:
+		var target_chunk = road.get("delivery_target_chunk")
+		var target_x = (target_chunk + 0.5) * road.get("chunk_width")
+		if road.get("active_chunks").has(target_chunk):
+			var chunk_data = road.get("active_chunks")[target_chunk]
+			if "house" in chunk_data and is_instance_valid(chunk_data.house):
+				target_x = chunk_data.house.global_position.x
+				
+		var dist_rem = 0.0
+		if is_instance_valid(chassis):
+			dist_rem = (target_x - chassis.global_position.x) / 30.0
+			
+		if dist_rem > -50.0:
+			var crates_needed = road.get("delivery_crate_count")
+			var crates_delivered = road.get("delivery_crates_delivered")
+			
+			var screen_w = get_viewport_rect().size.x
+			var indicator_w = 220.0
+			var indicator_h = 100.0
+			var right_margin = 38.0
+			
+			var ibox_x = screen_w - global_position.x - indicator_w - right_margin
+			var ibox_y = 68.0 # Align vertically with Petrol bar box
+			
+			var ibox = Rect2(ibox_x, ibox_y, indicator_w, indicator_h)
+			
+			var pulse = 0.5 + 0.5 * sin(_elapsed * 6.0)
+			var green_glow = Color("#00ff66", 0.12 + 0.08 * pulse)
+			var green_line = Color("#00ff66", 0.8 + 0.2 * pulse)
+			
+			# Draw background container
+			draw_rect(ibox, Color(0.08, 0.08, 0.12, 0.85), true)
+			draw_rect(ibox, green_line, false, 2.0)
+			draw_rect(ibox.grow(-3), green_glow, true)
+			
+			var lbl_font_size = 14
+			var val_font_size = 18
+			
+			# Line 1: Title
+			var title_str = "DELIVERY TARGET"
+			_draw_clean_text_center(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 24.0), lbl_font_size, Color("#00ff66"))
+			
+			# Line 2: Crates Count
+			var progress_str = "CRATES: %d/%d" % [crates_delivered, crates_needed]
+			_draw_clean_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 52.0), val_font_size, Color("#ffffff"))
+			
+			# Line 3: Distance remaining & flash arrow
+			var dist_str = "%d M" % int(max(0.0, dist_rem))
+			if dist_rem <= 0.0:
+				dist_str = "ARRIVED"
+				
+			var arrow_char = "▶"
+			if dist_rem < 0.0:
+				arrow_char = "◀"
+				
+			var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
+			_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 82.0), val_font_size, green_line)
+
 # ── Drawing Engines ──────────────────────────────────────────────────────
 
 func _draw_slanted_petrol_bar(start_x: float, bar_y: float) -> void:
@@ -353,3 +413,23 @@ func _draw_vector_sparkles(origin: Vector2, coin_t: float) -> void:
 		
 		draw_line(spark_pos - Vector2(star_size, 0), spark_pos + Vector2(star_size, 0), c, 1.2)
 		draw_line(spark_pos - Vector2(0, star_size), spark_pos + Vector2(0, star_size), c, 1.2)
+
+func _draw_clean_text_center(font: Font, text: String, center_pos: Vector2, font_size: int, color: Color) -> void:
+	var text_size = font.get_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+	var pos = center_pos - Vector2(text_size.x / 2.0, -font_size / 2.0)
+	
+	# Shadow
+	draw_string(font, pos + Vector2(2.0, 2.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0.04, 0.04, 0.08, 0.85))
+	
+	# Neon glow backlight
+	var neon_glow = Color(0.0, 0.94, 1.0, 0.35)
+	if color.r > 0.8 and color.g < 0.3:
+		neon_glow = Color(1.0, 0.16, 0.43, 0.35) # Neon pink
+	elif color.g > 0.8 and color.r < 0.3:
+		neon_glow = Color(0.0, 1.0, 0.4, 0.35) # Neon green
+	elif color.r > 0.8 and color.g > 0.8:
+		neon_glow = Color(1.0, 0.85, 0.0, 0.3) # Gold glow
+	draw_string(font, pos + Vector2(-1.0, -1.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, neon_glow)
+	
+	# Foreground text
+	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)

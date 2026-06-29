@@ -139,6 +139,15 @@ var has_convoy_ended := false
 var crusher_flat_start_x := 0.0
 var crusher_flat_end_x := 0.0
 
+# Delivery Contract State
+var delivery_target_chunk: int = -1
+var delivery_crate_count: int = 0
+var delivery_crates_delivered: int = 0
+var delivery_reward: int = 0
+var used_house_chunks: Array[int] = []
+
+
+
 @export_group("Biomes System")
 @export var biomes: Array[BiomeConfig] = []
 @export var active_biome_index := 0:
@@ -851,6 +860,89 @@ func spawn_tunnel_node(chunk_index: int, tunnel_data: Dictionary) -> Node2D:
 	add_child(tunnel)
 	return tunnel
 
+func spawn_house_node(chunk_index: int) -> Node2D:
+	var house_script = load("res://road/house.gd")
+	if not house_script:
+		return null
+	var house = Area2D.new()
+	house.set_script(house_script)
+	
+	# Randomize horizontal offset within the chunk using seeded RNG
+	var chunk_rng = RandomNumberGenerator.new()
+	chunk_rng.seed = hash(chunk_index + road_seed * 1109)
+	var offset_ratio = chunk_rng.randf_range(0.25, 0.75)
+	var spawn_x = chunk_index * chunk_width + offset_ratio * chunk_width
+	
+	var road_y = get_road_height(spawn_x)
+	house.position = Vector2(spawn_x, road_y)
+	house.z_index = -2
+	add_child(house)
+	return house
+
+func should_spawn_house_procedurally(chunk_idx: int) -> bool:
+	if delivery_target_chunk != -1:
+		return chunk_idx == delivery_target_chunk
+
+	if chunk_idx <= 1:
+		return false
+		
+	# Avoid tunnels
+	var tunnel_data = get_tunnel_at_chunk(chunk_idx)
+	if not tunnel_data.is_empty():
+		return false
+		
+	# Avoid water biome
+	var current_biome = get_current_biome()
+	if current_biome and current_biome.is_water:
+		return false
+		
+	# Spawn chance scales with chunk size
+	var spawn_chance = clamp(0.30 * (chunk_width / 3000.0), 0.05, 0.5)
+	
+	# Seeded RNG for this specific chunk
+	var chunk_rng = RandomNumberGenerator.new()
+	chunk_rng.seed = hash(chunk_idx + road_seed * 1109)
+	if chunk_rng.randf() > spawn_chance:
+		return false
+		
+	# Ensure min spacing of 5000px between houses
+	var min_spacing_chunks = int(ceil(5000.0 / chunk_width))
+	for prev_idx in range(chunk_idx - min_spacing_chunks, chunk_idx):
+		if prev_idx > 0:
+			var prev_tunnel = get_tunnel_at_chunk(prev_idx)
+			if not prev_tunnel.is_empty():
+				continue
+			var prev_rng = RandomNumberGenerator.new()
+			prev_rng.seed = hash(prev_idx + road_seed * 1109)
+			var prev_chance = clamp(0.30 * (chunk_width / 3000.0), 0.05, 0.5)
+			if prev_rng.randf() <= prev_chance:
+				return false
+				
+	return true
+
+
+func spawn_house_at_player() -> void:
+	var player_x = get_target_x()
+	var spawn_x = player_x + 250.0
+	var chunk_index = int(floor(spawn_x / chunk_width))
+	
+	var house_script = load("res://road/house.gd")
+	if not house_script:
+		return
+	var house = Area2D.new()
+	house.set_script(house_script)
+	var road_y = get_road_height(spawn_x)
+	house.position = Vector2(spawn_x, road_y)
+	house.z_index = -2
+	add_child(house)
+	
+	if active_chunks.has(chunk_index):
+		if "house" in active_chunks[chunk_index] and is_instance_valid(active_chunks[chunk_index].house):
+			active_chunks[chunk_index].house.queue_free()
+		active_chunks[chunk_index]["house"] = house
+	print("[Road] Cheat: Spawned house at X: ", spawn_x, " in chunk ", chunk_index)
+
+
 
 func create_chunk(i: int) -> void:
 	var current_biome = get_current_biome()
@@ -944,6 +1036,15 @@ func create_chunk(i: int) -> void:
 	if not tunnel_data.is_empty():
 		tunnel_node = spawn_tunnel_node(i, tunnel_data)
 		
+	# Spawn house on back layer based on seeded natural random distribution
+	var house_node = null
+	if should_spawn_house_procedurally(i):
+		house_node = spawn_house_node(i)
+		if used_house_chunks.has(i):
+			house_node.set("has_accepted", true)
+		if i == delivery_target_chunk:
+			house_node.call("setup_delivery_target", delivery_crate_count, delivery_reward)
+		
 	active_chunks[i] = {
 		"collision": col_poly,
 		"fill": fill,
@@ -951,7 +1052,8 @@ func create_chunk(i: int) -> void:
 		"line2": line2,
 		"grass": grass,
 		"grass2": grass2,
-		"tunnel": tunnel_node
+		"tunnel": tunnel_node,
+		"house": house_node
 	}
 
 func destroy_chunk(i: int) -> void:
@@ -971,6 +1073,8 @@ func destroy_chunk(i: int) -> void:
 			chunk.grass2.queue_free()
 		if "tunnel" in chunk and is_instance_valid(chunk.tunnel):
 			chunk.tunnel.queue_free()
+		if "house" in chunk and is_instance_valid(chunk.house):
+			chunk.house.queue_free()
 		active_chunks.erase(i)
 
 func spawn_crusher_on_next_chunk() -> void:
@@ -1068,3 +1172,15 @@ func spawn_crusher_on_next_chunk() -> void:
 			for i in range(num_crushers):
 				crusher_xs.append(first_crusher_x + i * spacing)
 			pb.call("setup", crusher_flat_start_x, crusher_flat_end_x, crusher_xs)
+
+func get_next_house_chunk(from_chunk: int) -> int:
+	var check_chunk = from_chunk + 1
+	var houses_found = 0
+	while check_chunk < from_chunk + 200: # Scan up to 200 chunks ahead
+		if should_spawn_house_procedurally(check_chunk):
+			houses_found += 1
+			if houses_found >= 3: # Target the 3rd house ahead (long distance)
+				return check_chunk
+		check_chunk += 1
+	# Fallback if none found
+	return from_chunk + 18
