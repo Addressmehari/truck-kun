@@ -63,6 +63,10 @@ func _physics_process(delta: float) -> void:
 	queue_redraw()
 
 func end_event() -> void:
+	# Clean up any active treadmills in the scene
+	for t in get_tree().get_nodes_in_group("treadmills"):
+		t.queue_free()
+		
 	# Slide up offscreen using offsets and queue free
 	var tween = create_tween().set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_BACK)
 	tween.tween_property(self, "offset_top", -140.0, 0.4)

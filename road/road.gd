@@ -1003,9 +1003,51 @@ func spawn_crusher_on_next_chunk() -> void:
 			# Stagger the timing phase of each crusher for cascading wave movement
 			crusher.time_elapsed = i * 0.7
 			crusher.initialized = true
-			
 			get_parent().add_child(crusher)
 			print("[Road] Crusher ", i + 1, "/", num_crushers, " spawned at X: ", spawn_x, " Y: ", road_y)
+			
+	# Roll 100% chance to spawn treadmill(s) for testing (change to 0.40 for final balance)
+	if randf() < 1.0:
+		# Decide belt direction/speed: 75% backward (-220 px/s), 25% forward (180 px/s)
+		var belt_spd = -220.0 if randf() < 0.75 else 180.0
+		var treadmill_script = load("res://obstacles/treadmill.gd")
+		if treadmill_script:
+			# 35% chance FULL COVERAGE, 65% chance GAP-BY-GAP
+			if randf() < 0.35:
+				var start_x = first_crusher_x - 100.0
+				var end_x = first_crusher_x + (num_crushers - 1) * spacing + 100.0
+				var t_width = end_x - start_x
+				var t_center_x = (start_x + end_x) / 2.0
+				var road_y = get_road_height(t_center_x)
+				
+				var treadmill = StaticBody2D.new()
+				treadmill.set_script(treadmill_script)
+				treadmill.set("width", t_width)
+				treadmill.set("belt_speed", belt_spd)
+				treadmill.position = Vector2(t_center_x, road_y)
+				treadmill.global_position = Vector2(t_center_x, road_y)
+				get_parent().add_child(treadmill)
+				print("[Road] Spawned Full-Length Treadmill from ", start_x, " to ", end_x, " Speed: ", belt_spd)
+			else:
+				for i in range(num_crushers - 1):
+					# 65% chance to spawn in this specific gap
+					if randf() < 0.65:
+						var c1_x = first_crusher_x + i * spacing
+						var c2_x = first_crusher_x + (i + 1) * spacing
+						var start_x = c1_x + 90.0
+						var end_x = c2_x - 90.0
+						var t_width = end_x - start_x
+						var t_center_x = (start_x + end_x) / 2.0
+						var road_y = get_road_height(t_center_x)
+						
+						var treadmill = StaticBody2D.new()
+						treadmill.set_script(treadmill_script)
+						treadmill.set("width", t_width)
+						treadmill.set("belt_speed", belt_spd)
+						treadmill.position = Vector2(t_center_x, road_y)
+						treadmill.global_position = Vector2(t_center_x, road_y)
+						get_parent().add_child(treadmill)
+						print("[Road] Spawned Gap Treadmill ", i + 1, " at X: ", t_center_x, " Width: ", t_width, " Speed: ", belt_spd)
 			
 	# Setup the CrusherProgressBar UI under the HUD
 	var hud = get_node_or_null("../truck/HUD")
