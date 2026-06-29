@@ -135,6 +135,10 @@ var convoy_start_x := 0.0
 var convoy_end_x := 0.0
 var has_convoy_ended := false
 
+# Crusher event variables for flat road transition
+var crusher_flat_start_x := 0.0
+var crusher_flat_end_x := 0.0
+
 @export_group("Biomes System")
 @export var biomes: Array[BiomeConfig] = []
 @export var active_biome_index := 0:
@@ -416,11 +420,33 @@ func get_convoy_multiplier(x: float) -> float:
 			
 	return 1.0
 
+# Calculate crusher road flattening factor smoothly based on coordinate distance
+func get_crusher_multiplier(x: float) -> float:
+	if crusher_flat_start_x == 0.0 or crusher_flat_end_x == 0.0:
+		return 1.0
+	
+	# Transition zone of 400.0 pixels on entry and exit
+	if x < crusher_flat_start_x - 400.0:
+		return 1.0
+	elif x < crusher_flat_start_x:
+		var t = (x - (crusher_flat_start_x - 400.0)) / 400.0
+		var smooth_t = t * t * (3.0 - 2.0 * t)
+		return lerp(1.0, 0.0, smooth_t)
+	elif x <= crusher_flat_end_x:
+		return 0.0
+	elif x < crusher_flat_end_x + 400.0:
+		var t = (x - crusher_flat_end_x) / 400.0
+		var smooth_t = t * t * (3.0 - 2.0 * t)
+		return lerp(0.0, 1.0, smooth_t)
+	else:
+		return 1.0
+
 # Base math function defining the height of the road without flattening
 func get_base_road_height(x: float) -> float:
 	if is_flat:
 		return flat_height
 
+	var base_h = 42.0
 	# Water biome: flat road with gentle time-based waving
 	var biome = get_current_biome()
 	if biome and biome.is_water:
@@ -429,24 +455,31 @@ func get_base_road_height(x: float) -> float:
 			time = Time.get_ticks_msec() / 1000.0
 		var wave = sin((x + seed_offset_1) * 0.005 - time * 2.0) * 12.0
 		var wave2 = cos((x + seed_offset_2) * 0.012 - time * 3.5) * 4.0
-		return flat_height + wave + wave2
+		base_h = flat_height + wave + wave2
+	else:
+		# Make a flat starting zone around the spawn area (x = 0)
+		if abs(x) < 400.0:
+			base_h = 42.0
+		else:
+			# Smoothly transition from flat to hills using a smooth S-curve
+			var raw_factor = clamp((abs(x) - 400.0) / 300.0, 0.0, 1.0)
+			var factor = raw_factor * raw_factor * (3.0 - 2.0 * raw_factor)
+			
+			# Combine waves to create interesting rolling hills and dips, offset by seed
+			var mult = hill_amplitude_multiplier * get_convoy_multiplier(x)
+			var long_hills = sin((x + seed_offset_1) * 0.0015) * 140.0 * mult # Large elevations
+			var medium_waves = cos((x + seed_offset_2) * 0.004) * 50.0 * mult # Medium slopes
+			var small_bumps = sin((x + seed_offset_3) * 0.012) * 12.0 * mult # Small bumpy texture
+			
+			var height = 42.0 + (long_hills + medium_waves + small_bumps)
+			base_h = lerp(42.0, height, factor)
+
+	# Apply crusher flat land flattening
+	var crusher_mult = get_crusher_multiplier(x)
+	if crusher_mult < 1.0:
+		return lerp(flat_height, base_h, crusher_mult)
 		
-	# Make a flat starting zone around the spawn area (x = 0)
-	if abs(x) < 400.0:
-		return 42.0
-		
-	# Smoothly transition from flat to hills using a smooth S-curve
-	var raw_factor = clamp((abs(x) - 400.0) / 300.0, 0.0, 1.0)
-	var factor = raw_factor * raw_factor * (3.0 - 2.0 * raw_factor)
-	
-	# Combine waves to create interesting rolling hills and dips, offset by seed
-	var mult = hill_amplitude_multiplier * get_convoy_multiplier(x)
-	var long_hills = sin((x + seed_offset_1) * 0.0015) * 140.0 * mult # Large elevations
-	var medium_waves = cos((x + seed_offset_2) * 0.004) * 50.0 * mult # Medium slopes
-	var small_bumps = sin((x + seed_offset_3) * 0.012) * 12.0 * mult # Small bumpy texture
-	
-	var height = 42.0 + (long_hills + medium_waves + small_bumps)
-	return lerp(42.0, height, factor)
+	return base_h
 
 func start_active_event(event_name: String) -> void:
 	if event_name == "Convoy":
@@ -940,28 +973,35 @@ func destroy_chunk(i: int) -> void:
 			chunk.tunnel.queue_free()
 		active_chunks.erase(i)
 
-var last_spawned_crusher_x := 0.0
-
 func spawn_crusher_on_next_chunk() -> void:
 	var player_x = get_target_x()
-	# Start searching for a spawn position ahead of the player and the last spawned crusher
-	var min_spawn_x = max(player_x + 600.0, last_spawned_crusher_x + 500.0)
 	
-	# Find a chunk index at or beyond min_spawn_x
-	var target_chunk_idx = int(ceil(min_spawn_x / chunk_width))
-	var spawn_x = (target_chunk_idx + 0.5) * chunk_width
+	# Place the sequence of 5 crushers starting ahead of the player
+	var first_crusher_x = player_x + 800.0
+	var spacing = 400.0
 	
-	last_spawned_crusher_x = spawn_x
+	# Define flat road zone boundaries to cover the entire sequence
+	crusher_flat_start_x = first_crusher_x - 300.0
+	crusher_flat_end_x = first_crusher_x + 4 * spacing + 300.0
 	
-	var road_y = get_road_height(spawn_x)
-	print("[Road] Cheat Spawner: player_x=", player_x, " min_spawn_x=", min_spawn_x, " spawn_x=", spawn_x, " road_y=", road_y)
+	# Regenerate the road chunks immediately to apply the flat terrain
+	regenerate_runtime_chunks()
 	
+	# Spawn 5 crushers spaced continuously
 	var crusher_scene = load("res://obstacles/crusher.tscn")
 	if crusher_scene:
-		var crusher = crusher_scene.instantiate()
-		crusher.position = Vector2(spawn_x, road_y - 40.0)
-		crusher.global_position = Vector2(spawn_x, road_y - 40.0)
-		crusher.start_y = road_y - 40.0
-		crusher.initialized = true
-		get_parent().add_child(crusher)
-		print("[Road] Crusher spawned and initialized at: ", crusher.global_position)
+		for i in range(5):
+			var spawn_x = first_crusher_x + i * spacing
+			var road_y = get_road_height(spawn_x)
+			
+			var crusher = crusher_scene.instantiate()
+			crusher.position = Vector2(spawn_x, road_y - 40.0)
+			crusher.global_position = Vector2(spawn_x, road_y - 40.0)
+			crusher.start_y = road_y - 40.0
+			
+			# Stagger the timing phase of each crusher for cascading wave movement
+			crusher.time_elapsed = i * 0.7
+			crusher.initialized = true
+			
+			get_parent().add_child(crusher)
+			print("[Road] Crusher ", i + 1, " spawned at X: ", spawn_x, " Y: ", road_y)
