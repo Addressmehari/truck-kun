@@ -2,19 +2,31 @@ extends Control
 
 var event_name: String = ""
 var event_icon: String = ""
-var duration: float = 30.0
-var time_left: float = 30.0
+var duration: float = 300.0 # Target distance in meters
+var start_x: float = 0.0
+var time_left: float = 300.0 # Remaining distance in meters
 var event_color: Color = Color(0.2, 0.6, 1.0, 0.9)
 var is_active := false
 var elapsed_time := 0.0
 
-func setup(ev_name: String, ev_icon: String, ev_color: Color, ev_duration: float = 30.0) -> void:
+# Cached reference for optimization
+var _chassis: Node2D = null
+
+func setup(ev_name: String, ev_icon: String, ev_color: Color, ev_duration: float = 300.0) -> void:
 	event_name = ev_name
 	event_icon = ev_icon
 	event_color = ev_color
 	duration = ev_duration
 	time_left = ev_duration
 	is_active = true
+	elapsed_time = 0.0
+	
+	# Cache chassis reference
+	_chassis = get_node_or_null("/root/main/truck/chassis")
+	if is_instance_valid(_chassis):
+		start_x = _chassis.global_position.x
+	else:
+		start_x = 0.0
 	
 	# Set layout anchors to top center
 	anchor_left = 0.5
@@ -50,8 +62,14 @@ func _process(delta: float) -> void:
 		
 	elapsed_time += delta
 	
-	# Smoothly decrease time_left
-	time_left -= delta
+	# Calculate remaining distance in meters (1 meter = 30 pixels)
+	if is_instance_valid(_chassis):
+		var current_x = _chassis.global_position.x
+		var traveled_m = max(0.0, (current_x - start_x) / 30.0)
+		time_left = max(0.0, duration - traveled_m)
+	else:
+		time_left = 0.0
+		
 	if time_left <= 0.0:
 		time_left = 0.0
 		is_active = false
@@ -102,15 +120,15 @@ func end_event() -> void:
 	tween.tween_callback(queue_free)
 
 func _draw() -> void:
-	# NO backing panel/outline box drawn here - clean floating HUD elements only
-	
-	# Draw text: Event icon + event name
+	# Draw text: Event icon + event name + remaining distance in meters
 	var font = get_theme_default_font()
 	var font_size = 28
 	
+	var remaining_m = int(ceil(time_left))
 	var text_label = event_name.to_upper()
 	if event_icon != "":
 		text_label = event_icon + "  " + text_label
+	text_label = text_label + "  |  " + str(remaining_m) + "M"
 		
 	var text_size = font.get_string_size(text_label, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
 	
@@ -130,8 +148,9 @@ func _draw() -> void:
 	var start_x := (size.x - (10.0 * cell_w + 9.0 * cell_gap)) / 2.0
 	var bar_y := 60.0
 	
-	# Convert remaining time to a discrete integer cell count (0 to 10)
-	var active_cells_count = int(ceil((time_left / duration) * 10.0))
+	# Convert remaining distance to a discrete integer cell count (0 to 10)
+	var ratio = clamp(1.0 - (time_left / duration), 0.0, 1.0)
+	var active_cells_count = int(floor(ratio * 10.0))
 	
 	# Slant factor (italic tilt for speed/style)
 	var slant := -6.0
@@ -173,21 +192,15 @@ func _draw() -> void:
 		elif i >= 3:
 			cell_color = Color(0.98, 0.85, 0.1) # Yellow warning zone
 		
-		# 2. Draw cell background container (dark frame slot)
-		var bg_c = Color(0.18, 0.2, 0.25, 0.55)
+		# 2. Draw cell background container (dimmed warning color slot / unlit LED)
+		var bg_c = cell_color * 0.22
+		bg_c.a = 0.55
 		draw_slanted_cell(cell_rect, bg_c, outline_color, outline_width, slant, bob)
 		
-		# 3. Draw active cell highlights (no smooth partial fills)
-		if i < active_cells_count - 1:
-			# Fully charged highlighted cell (bright zone color with bold dark outline)
+		# 3. Draw active cell highlights (increasing progress from left to right)
+		if i < active_cells_count:
+			# Fully charged highlighted cell
 			draw_slanted_cell(cell_rect, cell_color, outline_color, outline_width, slant, bob)
-		elif i == active_cells_count - 1:
-			# The active cell currently ticking down (pulses/blinks in full width)
-			var pulse = abs(sin(elapsed_time * 12.0)) * 0.55 + 0.45
-			var pulse_color = cell_color
-			pulse_color.a = pulse
-			
-			draw_slanted_cell(cell_rect, pulse_color, outline_color, outline_width, slant, bob)
 
 # Helper function to draw a slanted (italic) vector cell with a bold dark outline
 func draw_slanted_cell(rect: Rect2, color: Color, outline_color: Color, outline_width: float, slant: float, bob: float) -> void:

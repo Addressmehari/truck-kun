@@ -214,7 +214,8 @@ func close_popup() -> void:
 				hud.add_child(timer_bar)
 				
 				var ev = events[selected_index]
-				timer_bar.call("setup", ev["name"], ev["icon"], ev["color"], 30.0)
+				var event_dist = float(randi_range(500, 600))
+				timer_bar.call("setup", ev["name"], ev["icon"], ev["color"], event_dist)
 	queue_free()
 
 # Helper math to see which sector lands at the bottom pointer (PI/2)

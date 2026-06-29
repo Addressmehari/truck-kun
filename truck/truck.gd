@@ -362,7 +362,8 @@ func _input(event: InputEvent) -> void:
 					var hud = get_node_or_null("HUD")
 					if hud:
 						hud.add_child(timer_bar)
-						timer_bar.call("setup", "Convoy", "🚚", Color(0.15, 0.42, 0.85), 30.0)
+						var event_dist = float(randi_range(500, 600))
+						timer_bar.call("setup", "Convoy", "🚚", Color(0.15, 0.42, 0.85), event_dist)
 			
 			elif cheat_buffer.ends_with("crusher"):
 				cheat_buffer = "" # clear buffer
