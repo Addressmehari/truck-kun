@@ -939,3 +939,29 @@ func destroy_chunk(i: int) -> void:
 		if "tunnel" in chunk and is_instance_valid(chunk.tunnel):
 			chunk.tunnel.queue_free()
 		active_chunks.erase(i)
+
+var last_spawned_crusher_x := 0.0
+
+func spawn_crusher_on_next_chunk() -> void:
+	var player_x = get_target_x()
+	# Start searching for a spawn position ahead of the player and the last spawned crusher
+	var min_spawn_x = max(player_x + 600.0, last_spawned_crusher_x + 500.0)
+	
+	# Find a chunk index at or beyond min_spawn_x
+	var target_chunk_idx = int(ceil(min_spawn_x / chunk_width))
+	var spawn_x = (target_chunk_idx + 0.5) * chunk_width
+	
+	last_spawned_crusher_x = spawn_x
+	
+	var road_y = get_road_height(spawn_x)
+	print("[Road] Cheat Spawner: player_x=", player_x, " min_spawn_x=", min_spawn_x, " spawn_x=", spawn_x, " road_y=", road_y)
+	
+	var crusher_scene = load("res://obstacles/crusher.tscn")
+	if crusher_scene:
+		var crusher = crusher_scene.instantiate()
+		crusher.position = Vector2(spawn_x, road_y - 40.0)
+		crusher.global_position = Vector2(spawn_x, road_y - 40.0)
+		crusher.start_y = road_y - 40.0
+		crusher.initialized = true
+		get_parent().add_child(crusher)
+		print("[Road] Crusher spawned and initialized at: ", crusher.global_position)

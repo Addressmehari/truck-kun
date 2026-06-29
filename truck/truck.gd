@@ -363,6 +363,13 @@ func _input(event: InputEvent) -> void:
 					if hud:
 						hud.add_child(timer_bar)
 						timer_bar.call("setup", "Convoy", "🚚", Color(0.15, 0.42, 0.85), 30.0)
+			
+			elif cheat_buffer.ends_with("crusher"):
+				cheat_buffer = "" # clear buffer
+				print("Cheat activated: crusher!")
+				var road = get_node_or_null("/root/main/Road")
+				if road and road.has_method("spawn_crusher_on_next_chunk"):
+					road.call("spawn_crusher_on_next_chunk")
 
 
 func _on_gear_button_pressed(gear_type: Gear) -> void:
