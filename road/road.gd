@@ -1266,6 +1266,10 @@ func start_race_sequence() -> void:
 	active_opponent.set_script(opponent_script)
 	active_opponent.name = "OpponentCar"
 	
+	# Determine vehicle type from name (Kyrie -> sports_car, Hopps -> truck)
+	var opponent_vehicle_type = "sports_car" if active_opponent_name.to_lower() == "kyrie" else "truck"
+	active_opponent.set("vehicle_type", opponent_vehicle_type)
+	
 	var spawn_pos = Vector2.ZERO
 	if truck:
 		var active_body = truck.get("boat") if truck.get("is_water_mode_active") else truck.get("chassis")

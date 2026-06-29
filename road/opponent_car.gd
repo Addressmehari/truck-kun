@@ -27,12 +27,27 @@ var opponent_name: String = "Opponent":
 		if is_instance_valid(name_label):
 			name_label.text = val
 var name_label: Label
+var vehicle_type: String = "truck"
 
 func _ready() -> void:
 	# Configure RigidBody2D properties to match player truck parameters
-	mass = 1.5
-	center_of_mass_mode = RigidBody2D.CENTER_OF_MASS_MODE_CUSTOM
-	center_of_mass = Vector2(-25.0, -25.0) # Balanced center of mass
+	# Initialize unique specs based on vehicle type
+	if vehicle_type == "sports_car":
+		mass = 1.1 # Lighter sports chassis
+		torque_power = 48000.0 # High torque/acceleration
+		max_angular_velocity = 60.0 # Faster top speed
+		suspension_rest_dist = 6.0 # Low ground clearance
+		suspension_stiffness = 180.0 # Stiff handling
+		center_of_mass_mode = RigidBody2D.CENTER_OF_MASS_MODE_CUSTOM
+		center_of_mass = Vector2(0.0, 12.0) # Lowered center of mass (stable keel)
+	else:
+		mass = 1.6 # Heavy truck chassis
+		torque_power = 38000.0 # Standard torque
+		max_angular_velocity = 48.0 # Standard top speed
+		suspension_rest_dist = 11.0 # High ground clearance
+		suspension_stiffness = 140.0 # Softer spring
+		center_of_mass_mode = RigidBody2D.CENTER_OF_MASS_MODE_CUSTOM
+		center_of_mass = Vector2(-25.0, 18.0) # Lowered center of mass (stable keel)
 	can_sleep = false
 	z_index = -1
 	collision_layer = 2
@@ -68,91 +83,144 @@ func _ready() -> void:
 	name_label.size = Vector2(200, 24)
 	add_child(name_label)
 
-	# 1. Setup Combined Truck Collision Polygon (Cabin + Container)
+	# 1. Setup Collision Polygon based on vehicle type
 	var col_poly = CollisionPolygon2D.new()
-	col_poly.polygon = PackedVector2Array([
-		Vector2(-117, -2),
-		Vector2(-117, -80),
-		Vector2(-5, -80),
-		Vector2(1, -72),
-		Vector2(36, -72),
-		Vector2(60, -42),
-		Vector2(68, -42),
-		Vector2(68, -2)
-	])
+	if vehicle_type == "sports_car":
+		col_poly.polygon = PackedVector2Array([
+			Vector2(-75, -2),
+			Vector2(-75, -16),
+			Vector2(-40, -32),
+			Vector2(20, -32),
+			Vector2(55, -14),
+			Vector2(70, -14),
+			Vector2(70, -2)
+		])
+	else:
+		col_poly.polygon = PackedVector2Array([
+			Vector2(-117, -2),
+			Vector2(-117, -80),
+			Vector2(-5, -80),
+			Vector2(1, -72),
+			Vector2(36, -72),
+			Vector2(60, -42),
+			Vector2(68, -42),
+			Vector2(68, -2)
+		])
 	add_child(col_poly)
 
-	# 2. Instantiate 3 Tyres dynamically at player's offsets (35, -31, -91)
+	# 2. Instantiate Tyres dynamically
 	var tyre_scene = load("res://truck/tyre.tscn")
 	if tyre_scene:
-		# tyre_back (X = -91)
-		tyre_back = tyre_scene.instantiate()
-		tyre_back.name = "tyre_back"
-		tyre_back.position = Vector2(-91, 10)
-		tyre_back.mass = 2.0
-		tyre_back.torque_power = torque_power
-		tyre_back.max_angular_velocity = max_angular_velocity
-		tyre_back.contact_monitor = true
-		tyre_back.max_contacts_reported = 2
-		tyre_back.collision_layer = 2
-		tyre_back.collision_mask = 2
-		add_child(tyre_back)
+		if vehicle_type == "sports_car":
+			# tyre_back (X = -50)
+			tyre_back = tyre_scene.instantiate()
+			tyre_back.name = "tyre_back"
+			tyre_back.position = Vector2(-50, 10)
+			tyre_back.mass = 2.0
+			tyre_back.torque_power = torque_power
+			tyre_back.max_angular_velocity = max_angular_velocity
+			tyre_back.contact_monitor = true
+			tyre_back.max_contacts_reported = 2
+			tyre_back.collision_layer = 2
+			tyre_back.collision_mask = 2
+			add_child(tyre_back)
 
-		# Back Groove Joint
-		var gj_back = GrooveJoint2D.new()
-		gj_back.name = "gj_back"
-		gj_back.position = Vector2(-91, 0)
-		gj_back.length = 20.0
-		gj_back.initial_offset = 10.0
-		add_child(gj_back)
-		gj_back.node_a = gj_back.get_path_to(self)
-		gj_back.node_b = gj_back.get_path_to(tyre_back)
+			var gj_back = GrooveJoint2D.new()
+			gj_back.name = "gj_back"
+			gj_back.position = Vector2(-50, 0)
+			gj_back.length = 20.0
+			gj_back.initial_offset = 10.0
+			add_child(gj_back)
+			gj_back.node_a = gj_back.get_path_to(self)
+			gj_back.node_b = gj_back.get_path_to(tyre_back)
 
-		# tyre_mid (X = -31)
-		tyre_mid = tyre_scene.instantiate()
-		tyre_mid.name = "tyre_mid"
-		tyre_mid.position = Vector2(-31, 10)
-		tyre_mid.mass = 2.0
-		tyre_mid.torque_power = torque_power
-		tyre_mid.max_angular_velocity = max_angular_velocity
-		tyre_mid.contact_monitor = true
-		tyre_mid.max_contacts_reported = 2
-		tyre_mid.collision_layer = 2
-		tyre_mid.collision_mask = 2
-		add_child(tyre_mid)
+			# tyre_front (X = 50)
+			tyre_front = tyre_scene.instantiate()
+			tyre_front.name = "tyre_front"
+			tyre_front.position = Vector2(50, 10)
+			tyre_front.mass = 2.0
+			tyre_front.torque_power = torque_power
+			tyre_front.max_angular_velocity = max_angular_velocity
+			tyre_front.contact_monitor = true
+			tyre_front.max_contacts_reported = 2
+			tyre_front.collision_layer = 2
+			tyre_front.collision_mask = 2
+			add_child(tyre_front)
 
-		# Middle Groove Joint
-		var gj_mid = GrooveJoint2D.new()
-		gj_mid.name = "gj_mid"
-		gj_mid.position = Vector2(-31, 0)
-		gj_mid.length = 20.0
-		gj_mid.initial_offset = 10.0
-		add_child(gj_mid)
-		gj_mid.node_a = gj_mid.get_path_to(self)
-		gj_mid.node_b = gj_mid.get_path_to(tyre_mid)
+			var gj_front = GrooveJoint2D.new()
+			gj_front.name = "gj_front"
+			gj_front.position = Vector2(50, 0)
+			gj_front.length = 20.0
+			gj_front.initial_offset = 10.0
+			add_child(gj_front)
+			gj_front.node_a = gj_front.get_path_to(self)
+			gj_front.node_b = gj_front.get_path_to(tyre_front)
+		else:
+			# tyre_back (X = -91)
+			tyre_back = tyre_scene.instantiate()
+			tyre_back.name = "tyre_back"
+			tyre_back.position = Vector2(-91, 10)
+			tyre_back.mass = 2.0
+			tyre_back.torque_power = torque_power
+			tyre_back.max_angular_velocity = max_angular_velocity
+			tyre_back.contact_monitor = true
+			tyre_back.max_contacts_reported = 2
+			tyre_back.collision_layer = 2
+			tyre_back.collision_mask = 2
+			add_child(tyre_back)
 
-		# tyre_front (X = 35)
-		tyre_front = tyre_scene.instantiate()
-		tyre_front.name = "tyre_front"
-		tyre_front.position = Vector2(35, 10)
-		tyre_front.mass = 2.0
-		tyre_front.torque_power = torque_power
-		tyre_front.max_angular_velocity = max_angular_velocity
-		tyre_front.contact_monitor = true
-		tyre_front.max_contacts_reported = 2
-		tyre_front.collision_layer = 2
-		tyre_front.collision_mask = 2
-		add_child(tyre_front)
+			var gj_back = GrooveJoint2D.new()
+			gj_back.name = "gj_back"
+			gj_back.position = Vector2(-91, 0)
+			gj_back.length = 20.0
+			gj_back.initial_offset = 10.0
+			add_child(gj_back)
+			gj_back.node_a = gj_back.get_path_to(self)
+			gj_back.node_b = gj_back.get_path_to(tyre_back)
 
-		# Front Groove Joint
-		var gj_front = GrooveJoint2D.new()
-		gj_front.name = "gj_front"
-		gj_front.position = Vector2(35, 0)
-		gj_front.length = 20.0
-		gj_front.initial_offset = 10.0
-		add_child(gj_front)
-		gj_front.node_a = gj_front.get_path_to(self)
-		gj_front.node_b = gj_front.get_path_to(tyre_front)
+			# tyre_mid (X = -31)
+			tyre_mid = tyre_scene.instantiate()
+			tyre_mid.name = "tyre_mid"
+			tyre_mid.position = Vector2(-31, 10)
+			tyre_mid.mass = 2.0
+			tyre_mid.torque_power = torque_power
+			tyre_mid.max_angular_velocity = max_angular_velocity
+			tyre_mid.contact_monitor = true
+			tyre_mid.max_contacts_reported = 2
+			tyre_mid.collision_layer = 2
+			tyre_mid.collision_mask = 2
+			add_child(tyre_mid)
+
+			var gj_mid = GrooveJoint2D.new()
+			gj_mid.name = "gj_mid"
+			gj_mid.position = Vector2(-31, 0)
+			gj_mid.length = 20.0
+			gj_mid.initial_offset = 10.0
+			add_child(gj_mid)
+			gj_mid.node_a = gj_mid.get_path_to(self)
+			gj_mid.node_b = gj_mid.get_path_to(tyre_mid)
+
+			# tyre_front (X = 35)
+			tyre_front = tyre_scene.instantiate()
+			tyre_front.name = "tyre_front"
+			tyre_front.position = Vector2(35, 10)
+			tyre_front.mass = 2.0
+			tyre_front.torque_power = torque_power
+			tyre_front.max_angular_velocity = max_angular_velocity
+			tyre_front.contact_monitor = true
+			tyre_front.max_contacts_reported = 2
+			tyre_front.collision_layer = 2
+			tyre_front.collision_mask = 2
+			add_child(tyre_front)
+
+			var gj_front = GrooveJoint2D.new()
+			gj_front.name = "gj_front"
+			gj_front.position = Vector2(35, 0)
+			gj_front.length = 20.0
+			gj_front.initial_offset = 10.0
+			add_child(gj_front)
+			gj_front.node_a = gj_front.get_path_to(self)
+			gj_front.node_b = gj_front.get_path_to(tyre_front)
 
 	# Grab global references
 	road = get_node_or_null("/root/main/Road")
@@ -166,22 +234,31 @@ func _physics_process(delta: float) -> void:
 	
 	if is_instance_valid(name_label):
 		name_label.rotation = -global_rotation
-		name_label.global_position = global_position + Vector2(-100, -110)
+		var y_offset = -65.0 if vehicle_type == "sports_car" else -110.0
+		name_label.global_position = global_position + Vector2(-100, y_offset)
 	
-	# Process suspension forces for all 3 tyres
+	# Process suspension forces
 	if is_instance_valid(tyre_back):
-		_process_custom_suspension(tyre_back, Vector2(-91, -8), delta)
+		var back_offset = Vector2(-50, -8) if vehicle_type == "sports_car" else Vector2(-91, -8)
+		_process_custom_suspension(tyre_back, back_offset, delta)
 	if is_instance_valid(tyre_mid):
 		_process_custom_suspension(tyre_mid, Vector2(-31, -8), delta)
 	if is_instance_valid(tyre_front):
-		_process_custom_suspension(tyre_front, Vector2(35, -8), delta)
+		var front_offset = Vector2(50, -8) if vehicle_type == "sports_car" else Vector2(35, -8)
+		_process_custom_suspension(tyre_front, front_offset, delta)
 		
 	# Synchronize wheel spin (locked differential simulation)
-	if is_instance_valid(tyre_back) and is_instance_valid(tyre_mid) and is_instance_valid(tyre_front):
-		var avg_spin = (tyre_back.angular_velocity + tyre_mid.angular_velocity + tyre_front.angular_velocity) / 3.0
-		tyre_back.angular_velocity = avg_spin
-		tyre_mid.angular_velocity = avg_spin
-		tyre_front.angular_velocity = avg_spin
+	if vehicle_type == "sports_car":
+		if is_instance_valid(tyre_back) and is_instance_valid(tyre_front):
+			var avg_spin = (tyre_back.angular_velocity + tyre_front.angular_velocity) / 2.0
+			tyre_back.angular_velocity = avg_spin
+			tyre_front.angular_velocity = avg_spin
+	else:
+		if is_instance_valid(tyre_back) and is_instance_valid(tyre_mid) and is_instance_valid(tyre_front):
+			var avg_spin = (tyre_back.angular_velocity + tyre_mid.angular_velocity + tyre_front.angular_velocity) / 3.0
+			tyre_back.angular_velocity = avg_spin
+			tyre_mid.angular_velocity = avg_spin
+			tyre_front.angular_velocity = avg_spin
 
 	if not is_active:
 		# Lock wheels/park before race start
@@ -241,12 +318,20 @@ func _physics_process(delta: float) -> void:
 		tyre_front.drive(delta, move_input, is_braking, false, false)
 		tyre_front.angular_velocity = clamp(tyre_front.angular_velocity, -current_max_vel, current_max_vel)
 
-	# 2. Mid-air leveling (stabilize cabin and cargo)
+	# 2. Leveling & Anti-Flip Stabilization
 	if not is_grounded:
 		var target_angle = linear_velocity.angle()
 		target_angle = clamp(target_angle, -0.6, 0.6)
 		var angle_error = target_angle - rotation
 		apply_torque(angle_error * air_tilt_power)
+	else:
+		# If on the ground but tilting significantly relative to the road, apply an upright torque
+		var road_angle = 0.0
+		if road and road.has_method("get_road_angle"):
+			road_angle = road.call("get_road_angle", global_position.x)
+		var tilt_diff = rotation - road_angle
+		if abs(tilt_diff) > 0.5: # ~28 degrees tilt limit
+			apply_torque(-sign(tilt_diff) * 40000.0)
 
 func _process_custom_suspension(tyre: RigidBody2D, anchor_local: Vector2, delta: float) -> void:
 	if not is_instance_valid(tyre): return
@@ -283,98 +368,171 @@ func _draw() -> void:
 	var neon_cyan = Color("#00f0ff") # Electric cyan highlight
 	var metal_color = Color("#6c7280")
 
-	# 1. Exposed suspension springs (drawn behind body)
-	if is_instance_valid(tyre_back):
-		_draw_spring(Vector2(-91, -8), tyre_back.position, 5.0, 4, neon_pink)
-	if is_instance_valid(tyre_mid):
-		_draw_spring(Vector2(-31, -8), tyre_mid.position, 5.0, 4, neon_pink)
-	if is_instance_valid(tyre_front):
-		_draw_spring(Vector2(35, -8), tyre_front.position, 5.0, 4, neon_pink)
-
-	# 2. Draw Exhaust Pipe
-	draw_rect(Rect2(4, -80, 4, 45), metal_color, true)
-	draw_circle(Vector2(6, -80), 2.0, metal_color)
-	if is_active and Engine.get_physics_frames() % 6 < 3:
-		# Backfire sparks at top of chimney
-		draw_line(Vector2(6, -82), Vector2(6 - randf() * 8.0, -88 - randf() * 6), neon_pink, 2.0)
-		draw_line(Vector2(6, -82), Vector2(8 + randf() * 4.0, -85 - randf() * 3), neon_cyan, 1.2)
-
-	# 3. Draw Cabin Body (matching player's shape)
-	var cab_poly = PackedVector2Array([
-		Vector2(1, 0),
-		Vector2(1, -72),
-		Vector2(36, -72),
-		Vector2(60, -42),
-		Vector2(68, -42),
-		Vector2(68, 0)
-	])
-	draw_polygon(cab_poly, [chassis_color])
-	draw_polyline(cab_poly, neon_pink, 1.8)
-
-	# Draw side window & frame
-	var window_poly = PackedVector2Array([
-		Vector2(18, -66),
-		Vector2(35, -66),
-		Vector2(54, -45),
-		Vector2(18, -45)
-	])
-	draw_polygon(window_poly, [window_color])
-	draw_polyline(window_poly, neon_cyan, 1.5)
-
-	# Headlight and front grille slots
-	for i in range(4):
-		var y_off = -32 + (i * 5)
-		draw_line(Vector2(61, y_off), Vector2(68, y_off), plate_color, 2.0)
+	if vehicle_type == "sports_car":
+		# 1. Exposed suspension springs (drawn behind body)
+		if is_instance_valid(tyre_back):
+			_draw_spring(Vector2(-50, -8), tyre_back.position, 5.0, 4, neon_pink)
+		if is_instance_valid(tyre_front):
+			_draw_spring(Vector2(50, -8), tyre_front.position, 5.0, 4, neon_pink)
+			
+		# 2. Draw Exhaust Pipe & Flames
+		var exhaust_x = -75.0
+		var exhaust_y = -6.0
+		draw_rect(Rect2(exhaust_x - 8, exhaust_y - 2, 8, 4), metal_color, true)
+		if is_active and Engine.get_physics_frames() % 6 < 3:
+			# Backfire sparks at rear exhaust
+			draw_line(Vector2(exhaust_x - 8, exhaust_y), Vector2(exhaust_x - 18 - randf() * 10.0, exhaust_y + 2 - randf() * 4), neon_pink, 2.5)
+			draw_line(Vector2(exhaust_x - 8, exhaust_y), Vector2(exhaust_x - 14 + randf() * 6.0, exhaust_y - 2 + randf() * 4), neon_cyan, 1.5)
+			
+		# 3. Draw sleek sports car chassis
+		var car_poly = PackedVector2Array([
+			Vector2(-75, 0),
+			Vector2(-75, -16),
+			Vector2(-40, -32),
+			Vector2(20, -32),
+			Vector2(55, -14),
+			Vector2(70, -14),
+			Vector2(70, 0)
+		])
+		draw_polygon(car_poly, [chassis_color])
+		draw_polyline(car_poly, neon_pink, 1.8)
+		
+		# Cockpit glass (translucent cyan glass)
+		var glass_poly = PackedVector2Array([
+			Vector2(-25, -28),
+			Vector2(10, -28),
+			Vector2(32, -14),
+			Vector2(-25, -14)
+		])
+		draw_polygon(glass_poly, [window_color])
+		draw_polyline(glass_poly, neon_cyan, 1.5)
+		
+		# Rear spoiler wing
+		var spoiler_support = PackedVector2Array([
+			Vector2(-70, -16),
+			Vector2(-68, -26),
+			Vector2(-60, -26),
+			Vector2(-62, -16)
+		])
+		draw_polygon(spoiler_support, [plate_color])
+		draw_line(Vector2(-76, -26), Vector2(-54, -26), neon_cyan, 3.0) # Spoiler wing
+		
+		# Underglow neon effect
+		var underglow_rect = Rect2(-65, 2, 130, 4)
+		var underglow_color = Color("#00f0ff", 0.4 + 0.1 * sin(elapsed * 8.0))
+		draw_rect(underglow_rect, underglow_color, true)
+		
+		# Headlight glow
+		draw_line(Vector2(67, -10), Vector2(70, -10), Color.YELLOW, 3.0)
+		
+		# Carbon wheel arches for sports car (rear & front)
+		for arch_x in [50.0, -50.0]:
+			var arch_center = Vector2(arch_x, -2.0)
+			var arch_radius = 24.5
+			var arch_points = PackedVector2Array()
+			var arch_steps = 16
+			for i in range(arch_steps + 1):
+				var angle = PI + (PI * i / arch_steps)
+				arch_points.append(arch_center + Vector2(cos(angle), sin(angle)) * arch_radius)
+			draw_polyline(arch_points, plate_color, 4.5)
+			
+		# Driver outline inside cabin
+		draw_circle(Vector2(-10, -20), 4.5, Color.WHITE) # Helmet
+		draw_rect(Rect2(Vector2(-14, -15), Vector2(9, 3)), Color.WHITE, true)
+		draw_rect(Rect2(Vector2(-9, -21), Vector2(4, 3)), neon_cyan, true) # Visor
+	else:
+		# 1. Exposed suspension springs (drawn behind body)
+		if is_instance_valid(tyre_back):
+			_draw_spring(Vector2(-91, -8), tyre_back.position, 5.0, 4, neon_pink)
+		if is_instance_valid(tyre_mid):
+			_draw_spring(Vector2(-31, -8), tyre_mid.position, 5.0, 4, neon_pink)
+		if is_instance_valid(tyre_front):
+			_draw_spring(Vector2(35, -8), tyre_front.position, 5.0, 4, neon_pink)
 	
-	# Bumper
-	draw_rect(Rect2(Vector2(63, -12), Vector2(5, 12)), plate_color, true)
-
-	# 4. Draw Container (matching player's shape)
-	var container_left = -117.0
-	var container_right = -5.0
-	var container_top = -80.0
-	var container_bottom = -1.0
+		# 2. Draw Exhaust Pipe
+		draw_rect(Rect2(4, -80, 4, 45), metal_color, true)
+		draw_circle(Vector2(6, -80), 2.0, metal_color)
+		if is_active and Engine.get_physics_frames() % 6 < 3:
+			# Backfire sparks at top of chimney
+			draw_line(Vector2(6, -82), Vector2(6 - randf() * 8.0, -88 - randf() * 6), neon_pink, 2.0)
+			draw_line(Vector2(6, -82), Vector2(8 + randf() * 4.0, -85 - randf() * 3), neon_cyan, 1.2)
 	
-	draw_rect(Rect2(container_left, container_top, 112.0, 79.0), Color("#272730"), true) # Container fill
+		# 3. Draw Cabin Body (matching player's shape)
+		var cab_poly = PackedVector2Array([
+			Vector2(1, 0),
+			Vector2(1, -72),
+			Vector2(36, -72),
+			Vector2(60, -42),
+			Vector2(68, -42),
+			Vector2(68, 0)
+		])
+		draw_polygon(cab_poly, [chassis_color])
+		draw_polyline(cab_poly, neon_pink, 1.8)
 	
-	# Draw Corrugated Steel ridges (Neon pink highlights)
-	var rib_w = 6.0
-	var rib_gap = 5.0
-	var current_x = container_left + 6.0
-	while current_x + rib_w < container_right:
-		draw_rect(Rect2(current_x, container_top + 3.0, rib_w, 73.0), plate_color, true)
-		draw_rect(Rect2(current_x + 2.0, container_top + 3.0, rib_w - 2.0, 73.0), Color("#3e3e4a"), true)
-		current_x += rib_w + rib_gap
-
-	# Warning Hazard Stripes (Neon Pink & Dark Black)
-	draw_rect(Rect2(container_left + 3.0, container_bottom - 11.0, 106.0, 8.0), neon_pink, true)
-	var stripe_x = container_left + 6.0
-	while stripe_x < container_right - 6.0:
-		draw_line(Vector2(stripe_x, container_bottom - 11.0), Vector2(stripe_x + 6.0, container_bottom - 3.0), plate_color, 3.0)
-		stripe_x += 12.0
-
-	# Container outer frame outline
-	draw_rect(Rect2(container_left, container_top, 112.0, 79.0), plate_color, false, 2.5)
-
-	# 5. Mudflap behind rear wheel
-	draw_rect(Rect2(-114, 0, 3, 14), plate_color, true)
-	draw_circle(Vector2(-112.5, 11), 1.0, neon_pink) # neon pink reflector
-
-	# 6. Carbon wheel arches for all 3 wheels
-	for arch_x in [35.0, -33.0, -93.0]:
-		var arch_center = Vector2(arch_x, -2.0)
-		var arch_radius = 24.5
-		var arch_points = PackedVector2Array()
-		var arch_steps = 16
-		for i in range(arch_steps + 1):
-			var angle = PI + (PI * i / arch_steps)
-			arch_points.append(arch_center + Vector2(cos(angle), sin(angle)) * arch_radius)
-		draw_polyline(arch_points, plate_color, 4.5)
-
-	# 7. Driver outline inside cabin
-	draw_circle(Vector2(26, -53), 4.5, Color.WHITE) # Helmet
-	draw_rect(Rect2(Vector2(22, -48), Vector2(9, 3)), Color.WHITE, true)
-	draw_rect(Rect2(Vector2(27, -54), Vector2(4, 3)), neon_cyan, true) # neon visor
+		# Draw side window & frame
+		var window_poly = PackedVector2Array([
+			Vector2(18, -66),
+			Vector2(35, -66),
+			Vector2(54, -45),
+			Vector2(18, -45)
+		])
+		draw_polygon(window_poly, [window_color])
+		draw_polyline(window_poly, neon_cyan, 1.5)
+	
+		# Headlight and front grille slots
+		for i in range(4):
+			var y_off = -32 + (i * 5)
+			draw_line(Vector2(61, y_off), Vector2(68, y_off), plate_color, 2.0)
+		
+		# Bumper
+		draw_rect(Rect2(Vector2(63, -12), Vector2(5, 12)), plate_color, true)
+	
+		# 4. Draw Container (matching player's shape)
+		var container_left = -117.0
+		var container_right = -5.0
+		var container_top = -80.0
+		var container_bottom = -1.0
+		
+		draw_rect(Rect2(container_left, container_top, 112.0, 79.0), Color("#272730"), true) # Container fill
+		
+		# Draw Corrugated Steel ridges (Neon pink highlights)
+		var rib_w = 6.0
+		var rib_gap = 5.0
+		var current_x = container_left + 6.0
+		while current_x + rib_w < container_right:
+			draw_rect(Rect2(current_x, container_top + 3.0, rib_w, 73.0), plate_color, true)
+			draw_rect(Rect2(current_x + 2.0, container_top + 3.0, rib_w - 2.0, 73.0), Color("#3e3e4a"), true)
+			current_x += rib_w + rib_gap
+	
+		# Warning Hazard Stripes (Neon Pink & Dark Black)
+		draw_rect(Rect2(container_left + 3.0, container_bottom - 11.0, 106.0, 8.0), neon_pink, true)
+		var stripe_x = container_left + 6.0
+		while stripe_x < container_right - 6.0:
+			draw_line(Vector2(stripe_x, container_bottom - 11.0), Vector2(stripe_x + 6.0, container_bottom - 3.0), plate_color, 3.0)
+			stripe_x += 12.0
+	
+		# Container outer frame outline
+		draw_rect(Rect2(container_left, container_top, 112.0, 79.0), plate_color, false, 2.5)
+	
+		# 5. Mudflap behind rear wheel
+		draw_rect(Rect2(-114, 0, 3, 14), plate_color, true)
+		draw_circle(Vector2(-112.5, 11), 1.0, neon_pink) # neon pink reflector
+	
+		# 6. Carbon wheel arches for all 3 wheels
+		for arch_x in [35.0, -33.0, -93.0]:
+			var arch_center = Vector2(arch_x, -2.0)
+			var arch_radius = 24.5
+			var arch_points = PackedVector2Array()
+			var arch_steps = 16
+			for i in range(arch_steps + 1):
+				var angle = PI + (PI * i / arch_steps)
+				arch_points.append(arch_center + Vector2(cos(angle), sin(angle)) * arch_radius)
+			draw_polyline(arch_points, plate_color, 4.5)
+	
+		# 7. Driver outline inside cabin
+		draw_circle(Vector2(26, -53), 4.5, Color.WHITE) # Helmet
+		draw_rect(Rect2(Vector2(22, -48), Vector2(9, 3)), Color.WHITE, true)
+		draw_rect(Rect2(Vector2(27, -54), Vector2(4, 3)), neon_cyan, true) # neon visor
 
 func _draw_spring(from_pos: Vector2, to_pos: Vector2, width: float, coils: int, color: Color) -> void:
 	var dir = (to_pos - from_pos).normalized()

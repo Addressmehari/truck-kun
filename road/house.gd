@@ -135,7 +135,7 @@ func open_dialogue() -> void:
 	# Configure dialogue text and options based on current state
 	if not has_declined:
 		if opponent_name == "":
-			opponent_name = OPPONENT_NAMES.pick_random()
+			opponent_name = "Kyrie" if randf() < 0.5 else "Hopps"
 			
 		var road = get_node_or_null("/root/main/Road")
 		var distance_m = 1800
