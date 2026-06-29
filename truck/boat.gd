@@ -19,8 +19,13 @@ func _ready() -> void:
 	if Engine.is_editor_hint():
 		return
 		
+	# Enable collision mask for Layer 1 so we collide with crushers/obstacles
+	collision_mask = 1
+		
 	# Get road reference
 	road = get_node_or_null("/root/main/Road")
+	if is_instance_valid(road):
+		add_collision_exception_with(road)
 
 	# Setup Wake/Propeller spray particles
 	wake_particles = CPUParticles2D.new()

@@ -1,0 +1,74 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://obstacles/crusher.gd" id="1_crusher_gd"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_crusher"]
+size = Vector2(100, 80)
+
+[node name="crusher" type="AnimatableBody2D"]
+script = ExtResource("1_crusher_gd")
+
+[node name="Shaft" type="ColorRect" parent="."]
+offset_left = -8.0
+offset_top = -380.0
+offset_right = 8.0
+offset_bottom = -40.0
+color = Color(0.18, 0.20, 0.24, 1)
+
+[node name="ShaftHighlight" type="ColorRect" parent="Shaft"]
+layout_mode = 0
+offset_right = 2.0
+offset_bottom = 340.0
+color = Color(1, 1, 1, 0.1)
+
+[node name="Block" type="ColorRect" parent="."]
+offset_left = -50.0
+offset_top = -40.0
+offset_right = 50.0
+offset_bottom = 40.0
+color = Color(0.12, 0.13, 0.16, 1)
+
+[node name="HazardBorder" type="ColorRect" parent="Block"]
+layout_mode = 0
+offset_top = 70.0
+offset_right = 100.0
+offset_bottom = 80.0
+color = Color(0.92, 0.72, 0.05, 1)
+
+[node name="HazardStripe1" type="ColorRect" parent="Block"]
+layout_mode = 0
+offset_left = 15.0
+offset_top = 10.0
+offset_right = 25.0
+offset_bottom = 70.0
+rotation = 0.523599
+color = Color(0.92, 0.72, 0.05, 0.15)
+
+[node name="HazardStripe2" type="ColorRect" parent="Block"]
+layout_mode = 0
+offset_left = 45.0
+offset_top = 10.0
+offset_right = 55.0
+offset_bottom = 70.0
+rotation = 0.523599
+color = Color(0.92, 0.72, 0.05, 0.15)
+
+[node name="HazardStripe3" type="ColorRect" parent="Block"]
+layout_mode = 0
+offset_left = 75.0
+offset_top = 10.0
+offset_right = 85.0
+offset_bottom = 70.0
+rotation = 0.523599
+color = Color(0.92, 0.72, 0.05, 0.15)
+
+[node name="IndicatorLight" type="ColorRect" parent="Block"]
+layout_mode = 0
+offset_left = 47.0
+offset_top = 25.0
+offset_right = 53.0
+offset_bottom = 45.0
+color = Color(0.85, 0.15, 0.15, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_crusher")

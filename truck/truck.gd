@@ -362,7 +362,20 @@ func _input(event: InputEvent) -> void:
 					var hud = get_node_or_null("HUD")
 					if hud:
 						hud.add_child(timer_bar)
-						timer_bar.call("setup", "Convoy", "🚚", Color(0.15, 0.42, 0.85), 30.0)
+						# Roll target distance using Gaussian distribution: mean=550.0, deviation=30.0, clamp[500, 600]
+						var u1 = randf()
+						if u1 < 0.0001: u1 = 0.0001
+						var u2 = randf()
+						var norm = sqrt(-2.0 * log(u1)) * cos(TAU * u2)
+						var event_dist = clamp(550.0 + norm * 30.0, 500.0, 600.0)
+						timer_bar.call("setup", "Convoy", "🚚", Color(0.15, 0.42, 0.85), event_dist)
+			
+			elif cheat_buffer.ends_with("crusher"):
+				cheat_buffer = "" # clear buffer
+				print("Cheat activated: crusher!")
+				var road = get_node_or_null("/root/main/Road")
+				if road and road.has_method("spawn_crusher_on_next_chunk"):
+					road.call("spawn_crusher_on_next_chunk")
 
 
 func _on_gear_button_pressed(gear_type: Gear) -> void:
