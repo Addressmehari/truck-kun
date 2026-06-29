@@ -7,8 +7,16 @@ var is_active := false
 var elapsed_time := 0.0
 
 # Cached references for optimization
-var _chassis: Node2D = null
 var _road: Node2D = null
+
+func _get_active_player_body() -> Node2D:
+	var truck = get_node_or_null("/root/main/truck")
+	if is_instance_valid(truck):
+		if truck.get("is_water_mode_active") and is_instance_valid(truck.get("boat")):
+			return truck.get("boat")
+		elif is_instance_valid(truck.get("chassis")):
+			return truck.get("chassis")
+	return null
 
 func setup(p_start_x: float, p_end_x: float, p_crusher_xs: Array) -> void:
 	start_x = p_start_x
@@ -17,8 +25,7 @@ func setup(p_start_x: float, p_end_x: float, p_crusher_xs: Array) -> void:
 	is_active = true
 	elapsed_time = 0.0
 	
-	# Cache node references once during setup
-	_chassis = get_node_or_null("/root/main/truck/chassis")
+	# Cache road reference once during setup
 	_road = get_node_or_null("/root/main/Road")
 	
 	# Set layout anchors to top center (matching EventTimerBar)
@@ -48,8 +55,9 @@ func _physics_process(delta: float) -> void:
 		
 	elapsed_time += delta
 	
-	if is_instance_valid(_chassis):
-		var current_x = _chassis.global_position.x
+	var active_body = _get_active_player_body()
+	if is_instance_valid(active_body):
+		var current_x = active_body.global_position.x
 		if current_x >= end_x:
 			is_active = false
 			# Restore road chunks to normal (re-hillify) using cached reference
@@ -76,8 +84,9 @@ func end_event() -> void:
 func _draw() -> void:
 	# Get player X for current progress calculation
 	var current_x = start_x
-	if is_instance_valid(_chassis):
-		current_x = _chassis.global_position.x
+	var active_body = _get_active_player_body()
+	if is_instance_valid(active_body):
+		current_x = active_body.global_position.x
 	
 	# Draw title: "⚠️  CRUSHER GAUNTLET  ⚠️"
 	var font = get_theme_default_font()

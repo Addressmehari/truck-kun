@@ -9,8 +9,14 @@ var event_color: Color = Color(0.2, 0.6, 1.0, 0.9)
 var is_active := false
 var elapsed_time := 0.0
 
-# Cached reference for optimization
-var _chassis: Node2D = null
+func _get_active_player_body() -> Node2D:
+	var truck = get_node_or_null("/root/main/truck")
+	if is_instance_valid(truck):
+		if truck.get("is_water_mode_active") and is_instance_valid(truck.get("boat")):
+			return truck.get("boat")
+		elif is_instance_valid(truck.get("chassis")):
+			return truck.get("chassis")
+	return null
 
 func setup(ev_name: String, ev_icon: String, ev_color: Color, ev_duration: float = 300.0) -> void:
 	event_name = ev_name
@@ -21,10 +27,10 @@ func setup(ev_name: String, ev_icon: String, ev_color: Color, ev_duration: float
 	is_active = true
 	elapsed_time = 0.0
 	
-	# Cache chassis reference
-	_chassis = get_node_or_null("/root/main/truck/chassis")
-	if is_instance_valid(_chassis):
-		start_x = _chassis.global_position.x
+	# Cache active player body reference
+	var active_body = _get_active_player_body()
+	if is_instance_valid(active_body):
+		start_x = active_body.global_position.x
 	else:
 		start_x = 0.0
 	
@@ -63,8 +69,9 @@ func _process(delta: float) -> void:
 	elapsed_time += delta
 	
 	# Calculate remaining distance in meters (1 meter = 30 pixels)
-	if is_instance_valid(_chassis):
-		var current_x = _chassis.global_position.x
+	var active_body = _get_active_player_body()
+	if is_instance_valid(active_body):
+		var current_x = active_body.global_position.x
 		var traveled_m = max(0.0, (current_x - start_x) / 30.0)
 		time_left = max(0.0, duration - traveled_m)
 	else:

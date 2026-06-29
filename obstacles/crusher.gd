@@ -1,7 +1,7 @@
 extends AnimatableBody2D
 
 # Crusher types
-enum CrusherType { CLASSIC, SAWBLADE, CHAINSAW }
+enum CrusherType { CLASSIC, SAWBLADE }
 @export var crusher_type: CrusherType = CrusherType.CLASSIC
 
 @export var up_wait_time := 1.5
@@ -21,14 +21,12 @@ func _ready() -> void:
 	# Add to group so we can manage or find crushers easily if needed
 	add_to_group("crushers")
 	
-	# Randomize type: 70% CLASSIC (the box ones), 20% SAWBLADE, 10% CHAINSAW
+	# Randomize type: 80% CLASSIC (the box ones), 20% SAWBLADE
 	var r = randf()
-	if r < 0.70:
+	if r < 0.80:
 		crusher_type = CrusherType.CLASSIC
-	elif r < 0.90:
-		crusher_type = CrusherType.SAWBLADE
 	else:
-		crusher_type = CrusherType.CHAINSAW
+		crusher_type = CrusherType.SAWBLADE
 	
 	# Hide or show flat rectangular block based on type
 	var block = get_node_or_null("Block")
@@ -57,12 +55,6 @@ func _ready() -> void:
 			var circle = CircleShape2D.new()
 			circle.radius = 45.0
 			col_shape.shape = circle
-			col_shape.position = Vector2.ZERO
-		elif crusher_type == CrusherType.CHAINSAW:
-			# Capsule-like rectangle collision shape for chainsaw bar
-			var rect = RectangleShape2D.new()
-			rect.size = Vector2(100.0, 65.0)
-			col_shape.shape = rect
 			col_shape.position = Vector2.ZERO
 
 func initialize_crusher_position(spawn_x: float, road_y: float) -> void:
@@ -154,54 +146,3 @@ func _draw() -> void:
 		draw_circle(center, 4.0 + pulse, Color(hazard_glow.r, hazard_glow.g, hazard_glow.b, 0.35))
 		draw_circle(center, 3.2, hazard_glow)
 		draw_circle(center, 1.2, Color.WHITE)
-		
-	elif crusher_type == CrusherType.CHAINSAW:
-		# Draw the vertical guide bar and moving chainsaw chain
-		var bar_color = Color(0.22, 0.24, 0.28) # Metallic grey
-		var highlight_color = Color(0.92, 0.72, 0.05) # Yellow stripes
-		var chain_color = Color(0.75, 0.77, 0.8) # Shiny teeth
-		var groove_color = Color(0.1, 0.11, 0.13) # Inside track
-		
-		var A := 46.0 # Horizontal radius
-		var B := 24.0 # Vertical radius
-		
-		# 1. Guide bar main body
-		var bar_points = PackedVector2Array()
-		for idx in range(32):
-			var phi = idx * (TAU / 32.0)
-			bar_points.append(center + Vector2(cos(phi) * A, sin(phi) * B))
-		draw_colored_polygon(bar_points, bar_color)
-		draw_polyline(bar_points, Color(0.08, 0.08, 0.12), 2.5)
-		
-		# 2. Dark inner chain groove/track
-		var groove_points = PackedVector2Array()
-		for idx in range(32):
-			var phi = idx * (TAU / 32.0)
-			groove_points.append(center + Vector2(cos(phi) * (A - 6.0), sin(phi) * (B - 4.0)))
-		draw_colored_polygon(groove_points, groove_color)
-		
-		# 3. Center yellow caution graphic on the guide bar
-		draw_line(center - Vector2(25, 0), center + Vector2(25, 0), highlight_color, 4.0)
-		draw_circle(center, 5.0, Color.WHITE)
-		draw_circle(center, 2.0, Color.BLACK)
-		
-		# 4. Moving chainsaw teeth
-		var N := 12
-		var track_offset = time_elapsed * 12.0 # Fast chain movement speed
-		for k in range(N):
-			var theta = track_offset + k * (TAU / float(N))
-			var p_cos = cos(theta)
-			var p_sin = sin(theta)
-			var pos = center + Vector2(p_cos * A, p_sin * B)
-			
-			var tangent = Vector2(-p_sin * A, p_cos * B).normalized()
-			var normal = Vector2(p_cos, p_sin).normalized()
-			
-			# Construct tooth points
-			var tip = pos + tangent * 5.0 + normal * 8.0
-			var back = pos - tangent * 7.0 + normal * 1.5
-			var base = pos - tangent * 2.0
-			
-			draw_colored_polygon(PackedVector2Array([base, tip, back]), chain_color)
-			draw_polyline(PackedVector2Array([back, tip]), Color.WHITE, 1.5) # Sharp cutting edge
-			draw_polyline(PackedVector2Array([base, back]), Color(0.35, 0.37, 0.4), 1.0)
