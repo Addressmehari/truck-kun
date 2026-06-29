@@ -45,6 +45,7 @@ extends Node2D
 
 # ─── Internal runtime state ──────────────────────────────────────────────────
 var chassis: RigidBody2D
+var controls_locked: bool = false
 var container_body: RigidBody2D
 var tyre_1: RigidBody2D
 var tyre_2: RigidBody2D
@@ -195,8 +196,11 @@ func _physics_process(delta: float) -> void:
 	# Simplified driving mechanics:
 	# "D" key (and W, UP, RIGHT) drives forward
 	# "A" key (and S, DOWN, LEFT) drives backward
-	var forward_pressed = Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_RIGHT)
-	var backward_pressed = Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT)
+	var forward_pressed = false
+	var backward_pressed = false
+	if not controls_locked:
+		forward_pressed = Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_RIGHT)
+		backward_pressed = Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT)
 	
 	# Apply dynamic reward velocity boost after convoy event completes
 	if boost_timer > 0.0:
@@ -232,14 +236,17 @@ func _physics_process(delta: float) -> void:
 	var move_input = 0.0
 	var is_braking = false
 	
-	if forward_pressed and not backward_pressed:
-		if current_gear != Gear.PARK:
-			move_input = autopilot_throttle if is_autopilot else 1.0
-	elif backward_pressed and not forward_pressed:
-		if current_gear != Gear.PARK:
-			move_input = -1.0
-	elif forward_pressed and backward_pressed:
+	if controls_locked:
 		is_braking = true
+	else:
+		if forward_pressed and not backward_pressed:
+			if current_gear != Gear.PARK:
+				move_input = autopilot_throttle if is_autopilot else 1.0
+		elif backward_pressed and not forward_pressed:
+			if current_gear != Gear.PARK:
+				move_input = -1.0
+		elif forward_pressed and backward_pressed:
+			is_braking = true
 
 	# Long press "O" to park when speed is less than 20 (on speedometer)
 	var speed_kmh = active_body.linear_velocity.length() * 0.08 if is_instance_valid(active_body) else 0.0
@@ -274,14 +281,15 @@ func _physics_process(delta: float) -> void:
 		
 	# Read user input for air tilting (A/D or Left/Right)
 	var tilt_input = 0.0
-	if is_autopilot:
-		if is_instance_valid(active_body):
-			tilt_input = clamp(active_body.rotation * 4.0, -1.0, 1.0)
-	else:
-		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-			tilt_input -= 1.0
-		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-			tilt_input += 1.0
+	if not controls_locked:
+		if is_autopilot:
+			if is_instance_valid(active_body):
+				tilt_input = clamp(active_body.rotation * 4.0, -1.0, 1.0)
+		else:
+			if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+				tilt_input -= 1.0
+			if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+				tilt_input += 1.0
 
 	# Detect counter-direction braking (quick stop feel)
 	var avg_vel = 0.0

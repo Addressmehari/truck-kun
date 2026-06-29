@@ -31,6 +31,7 @@ func _ready() -> void:
 	z_index = -1
 	collision_layer = 2
 	collision_mask = 2
+	modulate.a = 0.8 # Reduce opacity of the opponent truck slightly
 	
 	# Low friction physics material for smooth sliding
 	var phys_mat = PhysicsMaterial.new()
@@ -163,6 +164,20 @@ func _physics_process(delta: float) -> void:
 	var move_input = 1.0 # Forward pedal
 	var is_braking = false
 
+	# Detect if finish line is crossed
+	var target_x = -1.0
+	if road and road.get("delivery_target_chunk") != -1:
+		var target_chunk = road.get("delivery_target_chunk")
+		target_x = (target_chunk + 0.5) * road.get("chunk_width")
+	
+	var has_finished = target_x > 0.0 and global_position.x >= target_x
+	if has_finished:
+		move_input = 0.0
+		is_braking = true
+		if road and not road.get("opponent_finished"):
+			road.set("opponent_finished", true)
+			print("[OpponentCar] Opponent crossed finish line first!")
+
 	# Detect if grounded
 	var back_grounded = is_instance_valid(tyre_back) and tyre_back.get_colliding_bodies().size() > 0
 	var mid_grounded = is_instance_valid(tyre_mid) and tyre_mid.get_colliding_bodies().size() > 0
@@ -201,7 +216,7 @@ func _process_custom_suspension(tyre: RigidBody2D, anchor_local: Vector2, delta:
 	var anchor_global = to_global(anchor_local)
 	var tyre_global = tyre.global_position
 	
-	var up_dir = -global_transform.y
+	var up_dir = - global_transform.y
 	var offset = tyre_global - anchor_global
 	
 	var r_chassis = anchor_global - global_position
@@ -212,8 +227,8 @@ func _process_custom_suspension(tyre: RigidBody2D, anchor_local: Vector2, delta:
 	var vert_vel = rel_vel.dot(-up_dir)
 	var vert_error = vert_dist - suspension_rest_dist
 	
-	var vert_force_mag = -(vert_error * suspension_stiffness) - (vert_vel * suspension_damping)
-	var vert_force = -up_dir * vert_force_mag
+	var vert_force_mag = - (vert_error * suspension_stiffness) - (vert_vel * suspension_damping)
+	var vert_force = - up_dir * vert_force_mag
 	
 	tyre.apply_central_force(vert_force)
 	apply_force(-vert_force, r_chassis)
@@ -225,10 +240,10 @@ func start_race() -> void:
 func _draw() -> void:
 	# Stylized Cyberpunk Grey & Neon Pink styling
 	var chassis_color = Color("#1e1e24") # Dark graphite
-	var plate_color = Color("#0c0c0e")   # Deep charcoal trim
+	var plate_color = Color("#0c0c0e") # Deep charcoal trim
 	var window_color = Color(0.15, 0.65, 0.8, 0.5) # Translucent cyan glass
-	var neon_pink = Color("#ff007f")     # Electric pink accents
-	var neon_cyan = Color("#00f0ff")     # Electric cyan highlight
+	var neon_pink = Color("#ff007f") # Electric pink accents
+	var neon_cyan = Color("#00f0ff") # Electric cyan highlight
 	var metal_color = Color("#6c7280")
 
 	# 1. Exposed suspension springs (drawn behind body)

@@ -211,6 +211,10 @@ func open_dialogue() -> void:
 						if "house" in chunk_data and is_instance_valid(chunk_data.house):
 							chunk_data.house.call("setup_delivery_target", crate_count, reward_amount)
 							
+					# Start the delivery race sequence with the opponent truck and countdown
+					if road.has_method("start_delivery_race"):
+						road.call("start_delivery_race")
+							
 				spawn_crates(crate_count)
 				dialogue_box.call("close_dialogue")
 				
@@ -343,28 +347,38 @@ func _on_delivery_area_body_entered(body: Node2D) -> void:
 			complete_delivery()
 
 func complete_delivery() -> void:
-	print("[House] Delivery complete! Rewarding player with $", delivery_reward)
+	var road = get_node_or_null("/root/main/Road")
+	var player_won = true
+	if road:
+		if road.get("opponent_finished"):
+			player_won = false
+			
+	var actual_payout = delivery_reward
+	if not player_won:
+		actual_payout = int(delivery_reward * 0.15) # 15% reward
+		
+	print("[House] Delivery complete! Player won: ", player_won, " Payout: $", actual_payout)
 	
 	var hud_stats = get_node_or_null("/root/main/truck/HUD/HudStats")
 	if hud_stats:
-		hud_stats.call("add_coin", delivery_reward)
+		hud_stats.call("add_coin", actual_payout)
 		
 	is_delivery_target = false
 	if is_instance_valid(delivery_area):
 		delivery_area.queue_free()
 		
-	var road = get_node_or_null("/root/main/Road")
 	if road:
+		road.call("end_racing_event") # Cleanly fade and free opponent
 		road.set("delivery_target_chunk", -1)
 		road.set("delivery_crates_delivered", 0)
 		var current_chunk = int(floor(global_position.x / road.get("chunk_width")))
 		if not road.get("used_house_chunks").has(current_chunk):
 			road.get("used_house_chunks").append(current_chunk)
 		
-	show_completion_dialogue()
+	show_completion_dialogue(player_won, actual_payout)
 	queue_redraw()
 
-func show_completion_dialogue() -> void:
+func show_completion_dialogue(player_won: bool, payout: int) -> void:
 	var hud = get_node_or_null("/root/main/truck/HUD")
 	if not hud:
 		return
@@ -379,10 +393,14 @@ func show_completion_dialogue() -> void:
 	dialogue_box.name = "DialogueBox"
 	dialogue_box.set_script(dialogue_script)
 	
+	var title = "[ RACE FINISHED: 1st ]" if player_won else "[ RACE FINISHED: 2nd ]"
+	var desc = "You won the race!\nEarned full reward:\nReward: $%d" % payout if player_won else "Opponent arrived first!\nEarned 15% compensation:\nReward: $%d" % payout
+	var completion_text = "%s\n\n%s" % [title, desc]
+	
 	var on_ok = func():
 		dialogue_box.call("close_dialogue")
 		
-	dialogue_box.call("setup", "[ CONTRACT COMPLETE ]\n\nAll crates delivered!\nEarned: $%d" % delivery_reward, [
+	dialogue_box.call("setup", completion_text, [
 		{
 			"text": "Awesome!",
 			"callback": on_ok
@@ -428,12 +446,15 @@ func _on_racing_area_body_entered(body: Node2D) -> void:
 		complete_race(false)
 
 func complete_race(player_won: bool) -> void:
-	print("[House] Race complete! Player won: ", player_won)
+	var actual_payout = racing_reward
+	if not player_won:
+		actual_payout = int(racing_reward * 0.15) # 15% reward
+		
+	print("[House] Race complete! Player won: ", player_won, " Payout: $", actual_payout)
 	
-	if player_won:
-		var hud_stats = get_node_or_null("/root/main/truck/HUD/HudStats")
-		if hud_stats:
-			hud_stats.call("add_coin", racing_reward)
+	var hud_stats = get_node_or_null("/root/main/truck/HUD/HudStats")
+	if hud_stats:
+		hud_stats.call("add_coin", actual_payout)
 		
 	is_racing_target = false
 	if is_instance_valid(racing_area):
@@ -448,10 +469,10 @@ func complete_race(player_won: bool) -> void:
 		if not road.get("used_house_chunks").has(current_chunk):
 			road.get("used_house_chunks").append(current_chunk)
 		
-	show_race_completion_dialogue(player_won)
+	show_race_completion_dialogue(player_won, actual_payout)
 	queue_redraw()
 
-func show_race_completion_dialogue(player_won: bool) -> void:
+func show_race_completion_dialogue(player_won: bool, payout: int) -> void:
 	var hud = get_node_or_null("/root/main/truck/HUD")
 	if not hud:
 		return
@@ -471,9 +492,9 @@ func show_race_completion_dialogue(player_won: bool) -> void:
 		
 	var dialogue_text = ""
 	if player_won:
-		dialogue_text = "[ RACE VICTORY ]\n\nYou won the race!\nEarned: $%d" % racing_reward
+		dialogue_text = "[ RACE FINISHED: 1st ]\n\nYou won the race!\nEarned full reward:\nReward: $%d" % payout
 	else:
-		dialogue_text = "[ RACE DEFEAT ]\n\nThe opponent crossed the finish line first!\nBetter luck next time!"
+		dialogue_text = "[ RACE FINISHED: 2nd ]\n\nOpponent arrived first!\nEarned 15% compensation:\nReward: $%d" % payout
 		
 	dialogue_box.call("setup", dialogue_text, [
 		{
