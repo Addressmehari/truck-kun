@@ -1454,11 +1454,42 @@ func relink_towed_car() -> void:
 		joint.rest_length = 65.0
 		joint.stiffness = 50.0
 		joint.damping = 4.0
-		joint.global_position = attach_body.global_position + local_attach_offset.rotated(attach_body.global_rotation)
+		
+		var attach_point = attach_body.global_position + local_attach_offset.rotated(attach_body.global_rotation)
+		joint.global_position = attach_point
 		main.add_child(joint)
 		joint.node_a = joint.get_path_to(attach_body)
 		joint.node_b = joint.get_path_to(towed)
 		
+		var is_duck = false
+		if towed.get_script():
+			is_duck = "towed_duck" in towed.get_script().resource_path
+		var hook_offset_b = Vector2(38, -12) if is_duck else Vector2(55, -5)
+		
+		# --- Position the towed vehicle at the perfect relaxed rope distance to avoid spring yank ---
+		var player_rot = attach_body.global_rotation
+		var forward_dir = Vector2.RIGHT.rotated(player_rot)
+		
+		var target_hook_pos = attach_point - forward_dir * joint.rest_length
+		var target_towed_pos = target_hook_pos - hook_offset_b.rotated(player_rot)
+		
+		towed.global_position = target_towed_pos
+		towed.global_rotation = player_rot
+		towed.linear_velocity = attach_body.linear_velocity
+		towed.angular_velocity = attach_body.angular_velocity
+		
+		# Also reset its tyres' velocities and positions if they exist
+		var t_back = towed.get("tyre_back")
+		var t_front = towed.get("tyre_front")
+		if is_instance_valid(t_back):
+			t_back.global_position = towed.global_position + Vector2(-35, 10).rotated(player_rot)
+			t_back.linear_velocity = attach_body.linear_velocity
+			t_back.angular_velocity = attach_body.angular_velocity
+		if is_instance_valid(t_front):
+			t_front.global_position = towed.global_position + Vector2(35, 10).rotated(player_rot)
+			t_front.linear_velocity = attach_body.linear_velocity
+			t_front.angular_velocity = attach_body.angular_velocity
+			
 		var rope_script = load("res://road/tow_rope.gd")
 		if rope_script:
 			var rope = Node2D.new()
@@ -1467,10 +1498,6 @@ func relink_towed_car() -> void:
 			rope.set("body_a", attach_body)
 			rope.set("body_b", towed)
 			rope.set("offset_a", local_attach_offset)
-			var is_duck = false
-			if towed.get_script():
-				is_duck = "towed_duck" in towed.get_script().resource_path
-			var hook_offset_b = Vector2(38, -12) if is_duck else Vector2(55, -5)
 			rope.set("offset_b", hook_offset_b)
 			main.add_child(rope)
 
