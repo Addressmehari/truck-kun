@@ -3,7 +3,7 @@ extends RigidBody2D
 
 # 6 slots inside the container
 var inventory = [
-	{"type": "glass", "color": Color(0.4, 0.75, 0.9, 0.55), "width": 40.0, "height": 40.0, "health": 100.0},
+	null,
 	null,
 	null,
 	null,
