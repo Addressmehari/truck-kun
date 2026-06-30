@@ -116,6 +116,7 @@ extends StaticBody2D
 @export var enable_blocks := true:
 	set(val):
 		enable_blocks = val
+		block_cache.clear()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -124,6 +125,7 @@ extends StaticBody2D
 @export var block_height := 250.0:
 	set(val):
 		block_height = val
+		block_cache.clear()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -132,6 +134,7 @@ extends StaticBody2D
 @export var block_flat_before := 500.0:
 	set(val):
 		block_flat_before = val
+		block_cache.clear()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -144,6 +147,7 @@ var seed_offset_3 := 0.0
 
 # Dictionary to track runtime active chunks: { chunk_index: { "collision": Col, "fill": Fill, "line": Line } }
 var active_chunks := {}
+var block_cache := {}
 var wave_physics_tick := 0
 
 const TUNNEL_MIN_SPACING := 6000.0
@@ -363,6 +367,7 @@ func _get_line_2d() -> Line2D:
 	return get_node_or_null("Line2D")
 
 func update_seed_offsets() -> void:
+	block_cache.clear()
 	var rng = RandomNumberGenerator.new()
 	rng.seed = road_seed
 	seed_offset_1 = rng.randf_range(-10000.0, 10000.0)
@@ -558,9 +563,72 @@ func get_active_block_before(x: float) -> Dictionary:
 				return block
 	return {}
 
+func has_tunnel_at_chunk_static(chunk_index: int) -> bool:
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return false
+		
+	var spawn_buffer_chunks = int(ceil(1500.0 / chunk_width))
+	if abs(chunk_index) <= spawn_buffer_chunks:
+		return false
+		
+	var spacing_chunks = int(ceil(TUNNEL_MIN_SPACING / chunk_width))
+	if abs(chunk_index) % spacing_chunks != 0:
+		return false
+		
+	return true
+
+func should_spawn_house_static(chunk_idx: int) -> bool:
+	if chunk_idx <= 1:
+		return false
+	if has_tunnel_at_chunk_static(chunk_idx):
+		return false
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return false
+		
+	var spawn_chance = clamp(0.30 * (chunk_width / 3000.0), 0.05, 0.5)
+	var chunk_rng = RandomNumberGenerator.new()
+	chunk_rng.seed = hash(chunk_idx + road_seed * 1109)
+	if chunk_rng.randf() > spawn_chance:
+		return false
+		
+	var min_spacing_chunks = int(ceil(5000.0 / chunk_width))
+	for prev_idx in range(chunk_idx - min_spacing_chunks, chunk_idx):
+		if prev_idx > 0:
+			if has_tunnel_at_chunk_static(prev_idx):
+				continue
+			var prev_rng = RandomNumberGenerator.new()
+			prev_rng.seed = hash(prev_idx + road_seed * 1109)
+			var prev_chance = clamp(0.30 * (chunk_width / 3000.0), 0.05, 0.5)
+			if prev_rng.randf() <= prev_chance:
+				return false
+	return true
+
+func is_near_tunnel(x: float) -> bool:
+	var check_dist = 2000.0
+	var min_chunk = int(floor((x - check_dist) / chunk_width))
+	var max_chunk = int(floor((x + check_dist) / chunk_width))
+	for check_idx in range(min_chunk, max_chunk + 1):
+		if has_tunnel_at_chunk_static(check_idx):
+			return true
+	return false
+
+func is_near_house(x: float) -> bool:
+	var check_dist = 1500.0
+	var min_chunk = int(floor((x - check_dist) / chunk_width))
+	var max_chunk = int(floor((x + check_dist) / chunk_width))
+	for check_idx in range(min_chunk, max_chunk + 1):
+		if should_spawn_house_static(check_idx):
+			return true
+	return false
+
 func get_block_at_interval(idx: int) -> Dictionary:
-	if not enable_blocks:
+	if not enable_blocks or idx < 0:
 		return {}
+		
+	if block_cache.has(idx):
+		return block_cache[idx]
 		
 	var rng = RandomNumberGenerator.new()
 	rng.seed = hash(str(road_seed) + "_block_" + str(idx))
@@ -568,25 +636,35 @@ func get_block_at_interval(idx: int) -> Dictionary:
 	var interval_size = 20000.0 # 1000 meters * 20 px/m
 	var start_x = idx * interval_size
 	
-	# Avoid spawn area (first 4000.0 units)
+	var min_x = start_x + 2000.0
+	var max_x = start_x + interval_size - 2000.0
 	if idx == 0:
-		var min_x = 4000.0
-		var max_x = interval_size - 2000.0
-		if min_x >= max_x:
-			return {}
-		var spawn_x = rng.randf_range(min_x, max_x)
-		return {
-			"x": spawn_x,
-			"height": block_height
-		}
-	else:
-		var min_x = start_x + 2000.0
-		var max_x = start_x + interval_size - 2000.0
-		var spawn_x = rng.randf_range(min_x, max_x)
-		return {
-			"x": spawn_x,
-			"height": block_height
-		}
+		min_x = 4000.0
+		
+	if min_x >= max_x:
+		return {}
+		
+	var spawn_x = 0.0
+	var found = false
+	
+	# Attempt to find a valid location that does not conflict with houses or tunnels
+	for attempt in range(15):
+		var candidate_x = rng.randf_range(min_x, max_x)
+		if not is_near_tunnel(candidate_x) and not is_near_house(candidate_x):
+			spawn_x = candidate_x
+			found = true
+			break
+			
+	# If no clean spot was found after 15 attempts, fallback to a safe candidate
+	if not found:
+		spawn_x = rng.randf_range(min_x, max_x)
+		
+	var block_data = {
+		"x": spawn_x,
+		"height": block_height
+	}
+	block_cache[idx] = block_data
+	return block_data
 
 func get_block_height_offset(x: float) -> float:
 	if not enable_blocks:
@@ -1022,6 +1100,8 @@ func get_elevator_data_for_chunk(chunk_idx: int) -> Dictionary:
 				var y_before = get_road_height(block_x - 0.01)
 				var y_after = get_road_height(block_x)
 				var cliff_height = y_before - y_after
+				if cliff_height <= 10.0:
+					return {}
 				return {
 					"x": elev_x,
 					"travel_height": cliff_height
