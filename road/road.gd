@@ -44,6 +44,7 @@ extends StaticBody2D
 @export var is_flat := true:
 	set(val):
 		is_flat = val
+		clear_road_geometry_caches()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -52,6 +53,7 @@ extends StaticBody2D
 @export var flat_height := 42.0:
 	set(val):
 		flat_height = val
+		clear_road_geometry_caches()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -60,6 +62,7 @@ extends StaticBody2D
 @export var hill_amplitude_multiplier := 1.0:
 	set(val):
 		hill_amplitude_multiplier = val
+		clear_road_geometry_caches()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -69,6 +72,7 @@ extends StaticBody2D
 	set(val):
 		road_seed = val
 		update_seed_offsets()
+		clear_road_geometry_caches()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -116,7 +120,7 @@ extends StaticBody2D
 @export var enable_blocks := true:
 	set(val):
 		enable_blocks = val
-		block_cache.clear()
+		clear_road_geometry_caches()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -125,7 +129,7 @@ extends StaticBody2D
 @export var block_height := 250.0:
 	set(val):
 		block_height = val
-		block_cache.clear()
+		clear_road_geometry_caches()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -134,7 +138,7 @@ extends StaticBody2D
 @export var block_flat_before := 500.0:
 	set(val):
 		block_flat_before = val
-		block_cache.clear()
+		clear_road_geometry_caches()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -148,7 +152,14 @@ var seed_offset_3 := 0.0
 # Dictionary to track runtime active chunks: { chunk_index: { "collision": Col, "fill": Fill, "line": Line } }
 var active_chunks := {}
 var block_cache := {}
+var cumulative_offset_cache := {}
+var tunnel_cache := {}
 var wave_physics_tick := 0
+
+func clear_road_geometry_caches() -> void:
+	block_cache.clear()
+	cumulative_offset_cache.clear()
+	tunnel_cache.clear()
 
 const TUNNEL_MIN_SPACING := 6000.0
 
@@ -258,6 +269,7 @@ func initialize_default_biomes() -> void:
 	biomes.append(b3)
 
 func apply_active_biome() -> void:
+	clear_road_geometry_caches()
 	var biome = get_current_biome()
 	if not biome:
 		return
@@ -367,7 +379,7 @@ func _get_line_2d() -> Line2D:
 	return get_node_or_null("Line2D")
 
 func update_seed_offsets() -> void:
-	block_cache.clear()
+	clear_road_geometry_caches()
 	var rng = RandomNumberGenerator.new()
 	rng.seed = road_seed
 	seed_offset_1 = rng.randf_range(-10000.0, 10000.0)
@@ -666,6 +678,22 @@ func get_block_at_interval(idx: int) -> Dictionary:
 	block_cache[idx] = block_data
 	return block_data
 
+func get_cumulative_offset_at_interval(interval_idx: int) -> float:
+	if interval_idx < 0:
+		return 0.0
+	if cumulative_offset_cache.has(interval_idx):
+		return cumulative_offset_cache[interval_idx]
+		
+	var prev_offset = get_cumulative_offset_at_interval(interval_idx - 1)
+	var current_block_contrib = 0.0
+	var block = get_block_at_interval(interval_idx)
+	if not block.is_empty():
+		current_block_contrib = -block["height"]
+		
+	var offset = prev_offset + current_block_contrib
+	cumulative_offset_cache[interval_idx] = offset
+	return offset
+
 func get_block_height_offset(x: float) -> float:
 	if not enable_blocks:
 		return 0.0
@@ -677,15 +705,16 @@ func get_block_height_offset(x: float) -> float:
 	if x < 0.0:
 		return 0.0
 		
-	var offset = 0.0
 	var interval_size = 20000.0
-	var max_interval = int(floor(x / interval_size))
+	var current_interval = int(floor(x / interval_size))
 	
-	for idx in range(max_interval + 1):
-		var block = get_block_at_interval(idx)
-		if not block.is_empty():
-			if x >= block["x"]:
-				offset -= block["height"]
+	var offset = get_cumulative_offset_at_interval(current_interval - 1)
+	
+	var block = get_block_at_interval(current_interval)
+	if not block.is_empty():
+		if x >= block["x"]:
+			offset -= block["height"]
+			
 	return offset
 
 func get_block_in_range(x1: float, x2: float) -> Dictionary:
@@ -712,6 +741,7 @@ func start_active_event(event_name: String) -> void:
 		is_convoy_active = true
 		has_convoy_ended = false
 		convoy_start_x = get_target_x()
+		clear_road_geometry_caches()
 		regenerate_runtime_chunks()
 
 func end_active_event(event_name: String) -> void:
@@ -719,6 +749,7 @@ func end_active_event(event_name: String) -> void:
 		is_convoy_active = false
 		has_convoy_ended = true
 		convoy_end_x = get_target_x()
+		clear_road_geometry_caches()
 		regenerate_runtime_chunks()
 
 func is_event_active() -> bool:
@@ -749,6 +780,9 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 	if biome and biome.is_water:
 		return {}
 		
+	if tunnel_cache.has(chunk_index):
+		return tunnel_cache[chunk_index]
+		
 	# Avoid tunnels too close to spawn (within 1500 units)
 	var spawn_buffer_chunks = int(ceil(1500.0 / chunk_width))
 	if abs(chunk_index) <= spawn_buffer_chunks:
@@ -769,12 +803,14 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 		var tunnel_x = (chunk_index + 0.5) * chunk_width
 		var base_y = get_base_road_height(tunnel_x)
 		
-		return {
+		var tunnel_data = {
 			"x": tunnel_x,
 			"y": base_y,
 			"width": 1000.0,
 			"height": 320.0
 		}
+		tunnel_cache[chunk_index] = tunnel_data
+		return tunnel_data
 	return {}
 
 # Math function defining the height of the road at any X coordinate, flattened inside tunnels and paddings, smoothed in transitions

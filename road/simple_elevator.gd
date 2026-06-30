@@ -17,6 +17,8 @@ extends AnimatableBody2D
 var start_y := 0.0
 var target_y := 0.0
 var is_active := false
+var is_waiting_to_fall := false
+var fall_timer := 0.0
 
 @onready var area = $Area2D
 @onready var color_rect = $ColorRect
@@ -84,12 +86,16 @@ func update_elevator_state() -> void:
 			has_container = true
 			
 	var active = has_boat or (has_chassis and has_container)
-	if is_active != active:
-		is_active = active
-		if is_active:
+	if active:
+		is_waiting_to_fall = false
+		if not is_active:
+			is_active = true
 			print("[Elevator] Truck fully stood on elevator, raising!")
-		else:
-			print("[Elevator] Truck left elevator, lowering!")
+	else:
+		if is_active and not is_waiting_to_fall:
+			is_waiting_to_fall = true
+			fall_timer = 4.0
+			print("[Elevator] Truck left elevator, waiting 4s before lowering...")
 
 func _on_body_entered(body: Node2D) -> void:
 	if Engine.is_editor_hint():
@@ -104,6 +110,13 @@ func _on_body_exited(body: Node2D) -> void:
 func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
+		
+	if is_waiting_to_fall:
+		fall_timer -= delta
+		if fall_timer <= 0.0:
+			is_active = false
+			is_waiting_to_fall = false
+			print("[Elevator] Wait time completed, lowering!")
 		
 	# Target Y coordinate: if active, move up by travel_height. Note: Y goes up is negative in Godot!
 	var target = start_y - travel_height if is_active else start_y
