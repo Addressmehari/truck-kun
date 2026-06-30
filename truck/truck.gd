@@ -662,13 +662,29 @@ func set_water_mode(enabled: bool) -> void:
 			lin_vel = chassis.linear_velocity
 			ang_vel = chassis.angular_velocity
 			
-		# Completely destroy truck nodes
+		# Disable collision immediately on chassis, container_body, tyres
 		if is_instance_valid(chassis):
+			chassis.collision_layer = 0
+			chassis.collision_mask = 0
+			var t1 = chassis.get_node_or_null("tyre-1")
+			if is_instance_valid(t1):
+				t1.collision_layer = 0
+				t1.collision_mask = 0
 			chassis.queue_free()
 		chassis = null
 		tyre_1 = null
 		
 		if is_instance_valid(container_body):
+			container_body.collision_layer = 0
+			container_body.collision_mask = 0
+			var t2 = container_body.get_node_or_null("tyre-2")
+			if is_instance_valid(t2):
+				t2.collision_layer = 0
+				t2.collision_mask = 0
+			var t3 = container_body.get_node_or_null("tyre-3")
+			if is_instance_valid(t3):
+				t3.collision_layer = 0
+				t3.collision_mask = 0
 			container_body.queue_free()
 		container_body = null
 		tyre_2 = null
@@ -677,6 +693,14 @@ func set_water_mode(enabled: bool) -> void:
 		var joint = get_node_or_null("PinJoint2D")
 		if joint:
 			joint.queue_free()
+			
+		# Align boat Y coordinate to the water surface
+		var road = get_node_or_null("/root/main/Road")
+		if road and road.has_method("get_road_height"):
+			var road_y = road.call("get_road_height", pos.x)
+			pos.y = road_y - 10.0
+			
+		rot = clamp(rot, -0.4, 0.4)
 			
 		# Spawn new boat scene
 		var boat_scene = load("res://truck/boat.tscn")
@@ -704,9 +728,19 @@ func set_water_mode(enabled: bool) -> void:
 			lin_vel = boat.linear_velocity
 			ang_vel = boat.angular_velocity
 			
-			# Completely destroy boat scene
+			# Disable collision immediately on transition to prevent overlapping forces
+			boat.collision_layer = 0
+			boat.collision_mask = 0
 			boat.queue_free()
 		boat = null
+		
+		# Align truck height to the new land road height to prevent spawning inside it or falling
+		var road = get_node_or_null("/root/main/Road")
+		if road and road.has_method("get_road_height"):
+			var road_y = road.call("get_road_height", pos.x)
+			pos.y = road_y - 40.0
+			
+		rot = clamp(rot, -0.4, 0.4)
 		
 		# Spawn new truck chassis scene
 		var chassis_scene = load("res://truck/chassis.tscn")
@@ -737,11 +771,11 @@ func set_water_mode(enabled: bool) -> void:
 			tyre_2 = container_body.get_node_or_null("tyre-2")
 			tyre_3 = container_body.get_node_or_null("tyre-3")
 			
-		# Spawn new PinJoint2D
+		# Spawn new PinJoint2D at the correct world space pivot position
 		var joint = PinJoint2D.new()
 		joint.name = "PinJoint2D"
-		joint.position = Vector2(0, -28)
 		add_child(joint)
+		joint.global_position = pos + Vector2(1, -28).rotated(rot)
 		
 		joint.node_a = joint.get_path_to(chassis)
 		joint.node_b = joint.get_path_to(container_body)
@@ -749,6 +783,11 @@ func set_water_mode(enabled: bool) -> void:
 		
 		# Propagate suspension values to newly spawned chassis and container
 		_apply_exports()
+		
+	# Re-link towed vehicle if towing is active
+	var road_ref = get_node_or_null("/root/main/Road")
+	if road_ref and road_ref.has_method("relink_towed_car"):
+		road_ref.call("relink_towed_car")
 
 	# --- Update HUD, Camera, CoinSpawner references ---
 	var active_body = boat if enabled else chassis
@@ -777,3 +816,4 @@ func set_water_mode(enabled: bool) -> void:
 	if indicator:
 		indicator.chassis = active_body
 		indicator.container_body = container_body
+

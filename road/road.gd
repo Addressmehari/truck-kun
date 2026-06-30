@@ -1393,6 +1393,68 @@ func cleanup_towed_car() -> void:
 			rope.queue_free()
 
 
+func relink_towed_car() -> void:
+	var main = get_node_or_null("/root/main")
+	if not main:
+		return
+	var towed = main.get_node_or_null("TowedCar")
+	if not is_instance_valid(towed):
+		return
+		
+	var truck = get_node_or_null("/root/main/truck")
+	var attach_body: Node2D = null
+	var local_attach_offset = Vector2.ZERO
+	
+	if truck:
+		if truck.get("is_water_mode_active") and is_instance_valid(truck.get("boat")):
+			attach_body = truck.get("boat")
+			local_attach_offset = Vector2(-75, 10)
+		elif is_instance_valid(truck.get("container_body")):
+			attach_body = truck.get("container_body")
+			local_attach_offset = Vector2(-118, 10)
+		elif is_instance_valid(truck.get("chassis")):
+			attach_body = truck.get("chassis")
+			local_attach_offset = Vector2(-50, 10)
+		else:
+			attach_body = truck
+
+	var old_joint = main.get_node_or_null("TowingJoint")
+	if is_instance_valid(old_joint):
+		old_joint.queue_free()
+	var old_rope = main.get_node_or_null("TowingRope")
+	if is_instance_valid(old_rope):
+		old_rope.queue_free()
+		
+	if attach_body:
+		var joint = DampedSpringJoint2D.new()
+		joint.name = "TowingJoint"
+		joint.disable_collision = true
+		joint.length = 80.0
+		joint.rest_length = 65.0
+		joint.stiffness = 50.0
+		joint.damping = 4.0
+		joint.global_position = attach_body.global_position + local_attach_offset.rotated(attach_body.global_rotation)
+		main.add_child(joint)
+		joint.node_a = joint.get_path_to(attach_body)
+		joint.node_b = joint.get_path_to(towed)
+		
+		var rope_script = load("res://road/tow_rope.gd")
+		if rope_script:
+			var rope = Node2D.new()
+			rope.set_script(rope_script)
+			rope.name = "TowingRope"
+			rope.set("body_a", attach_body)
+			rope.set("body_b", towed)
+			rope.set("offset_a", local_attach_offset)
+			var is_duck = false
+			if towed.get_script():
+				is_duck = "towed_duck" in towed.get_script().resource_path
+			var hook_offset_b = Vector2(38, -12) if is_duck else Vector2(55, -5)
+			rope.set("offset_b", hook_offset_b)
+			main.add_child(rope)
+
+
+
 
 func create_chunk(i: int) -> void:
 	var current_biome = get_current_biome()
