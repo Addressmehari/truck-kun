@@ -671,9 +671,13 @@ func get_block_at_interval(idx: int) -> Dictionary:
 	if not found:
 		spawn_x = rng.randf_range(min_x, max_x)
 		
+	var raw_h_before = get_raw_base_road_height(spawn_x - block_flat_before)
+	var raw_h_after = get_raw_base_road_height(spawn_x)
+	var adjusted_height = block_height + max(0.0, raw_h_after - raw_h_before)
+		
 	var block_data = {
 		"x": spawn_x,
-		"height": block_height
+		"height": adjusted_height
 	}
 	block_cache[idx] = block_data
 	return block_data
