@@ -999,6 +999,46 @@ func update_chunks(player_x: float) -> void:
 		if i < start_chunk or i > end_chunk:
 			destroy_chunk(i)
 
+func get_elevator_data_for_chunk(chunk_idx: int) -> Dictionary:
+	if not enable_blocks:
+		return {}
+		
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return {}
+		
+	var start_x = chunk_idx * chunk_width
+	var end_x = (chunk_idx + 1) * chunk_width
+	
+	var start_interval = int(floor((start_x - 2000.0) / 20000.0))
+	var end_interval = int(floor((end_x + 2000.0) / 20000.0))
+	
+	for idx in range(max(0, start_interval), end_interval + 1):
+		var block = get_block_at_interval(idx)
+		if not block.is_empty():
+			var block_x = block["x"]
+			var elev_x = block_x - 120.0 # Center of elevator
+			if elev_x >= start_x and elev_x < end_x:
+				var y_before = get_road_height(block_x - 0.01)
+				var y_after = get_road_height(block_x)
+				var cliff_height = y_before - y_after
+				return {
+					"x": elev_x,
+					"travel_height": cliff_height
+				}
+	return {}
+
+func spawn_elevator_node(elevator_data: Dictionary) -> Node2D:
+	var elev_scene = load("res://road/simple_elevator.tscn")
+	if not elev_scene:
+		return null
+	var elev = elev_scene.instantiate() as Node2D
+	var road_y = get_road_height(elevator_data["x"])
+	elev.position = Vector2(elevator_data["x"], road_y)
+	elev.set("travel_height", elevator_data["travel_height"])
+	add_child(elev)
+	return elev
+
 func spawn_tunnel_node(chunk_index: int, tunnel_data: Dictionary) -> Node2D:
 	var tunnel_scene = load("res://road/tunnel.tscn")
 	if not tunnel_scene:
@@ -1348,6 +1388,12 @@ func create_chunk(i: int) -> void:
 		elif i == towing_target_chunk:
 			house_node.call("setup_towing_target", towing_reward)
 		
+	# Spawn elevator if present
+	var elevator_node = null
+	var elevator_data = get_elevator_data_for_chunk(i)
+	if not elevator_data.is_empty():
+		elevator_node = spawn_elevator_node(elevator_data)
+		
 	active_chunks[i] = {
 		"collision": col_poly,
 		"fill": fill,
@@ -1356,7 +1402,8 @@ func create_chunk(i: int) -> void:
 		"grass": grass,
 		"grass2": grass2,
 		"tunnel": tunnel_node,
-		"house": house_node
+		"house": house_node,
+		"elevator": elevator_node
 	}
 
 func destroy_chunk(i: int) -> void:
@@ -1378,6 +1425,8 @@ func destroy_chunk(i: int) -> void:
 			chunk.tunnel.queue_free()
 		if "house" in chunk and is_instance_valid(chunk.house):
 			chunk.house.queue_free()
+		if "elevator" in chunk and is_instance_valid(chunk.elevator):
+			chunk.elevator.queue_free()
 		active_chunks.erase(i)
 
 func spawn_crusher_on_next_chunk() -> void:
