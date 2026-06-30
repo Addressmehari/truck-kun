@@ -154,6 +154,11 @@ var active_opponent: RigidBody2D = null
 var opponent_finished: bool = false
 var active_opponent_name: String = "Opponent"
 
+# Towing Contract State
+var towing_target_chunk: int = -1
+var towing_reward: int = 0
+var is_towing_active: bool = false
+
 
 
 @export_group("Biomes System")
@@ -881,10 +886,18 @@ func spawn_house_node(chunk_index: int) -> Node2D:
 		house.set("house_type", "delivery")
 	elif chunk_index == racing_target_chunk:
 		house.set("house_type", "racing")
+	elif chunk_index == towing_target_chunk:
+		house.set("house_type", "towing")
 	else:
 		var type_rng = RandomNumberGenerator.new()
 		type_rng.seed = hash(chunk_index + road_seed * 4321)
-		house.set("house_type", "racing" if type_rng.randf() < 0.5 else "delivery")
+		var type_val = type_rng.randf()
+		if type_val < 0.33:
+			house.set("house_type", "racing")
+		elif type_val < 0.66:
+			house.set("house_type", "delivery")
+		else:
+			house.set("house_type", "towing")
 
 	# Randomize horizontal offset within the chunk using seeded RNG
 	var chunk_rng = RandomNumberGenerator.new()
@@ -903,6 +916,8 @@ func should_spawn_house_procedurally(chunk_idx: int) -> bool:
 		return chunk_idx == delivery_target_chunk
 	if racing_target_chunk != -1:
 		return chunk_idx == racing_target_chunk
+	if towing_target_chunk != -1:
+		return chunk_idx == towing_target_chunk
 
 	if chunk_idx <= 1:
 		return false
@@ -952,7 +967,13 @@ func spawn_house_at_player() -> void:
 		return
 	var house = Area2D.new()
 	house.set_script(house_script)
-	house.set("house_type", "racing" if randf() < 0.5 else "delivery")
+	var type_val = randf()
+	if type_val < 0.33:
+		house.set("house_type", "racing")
+	elif type_val < 0.66:
+		house.set("house_type", "delivery")
+	else:
+		house.set("house_type", "towing")
 	
 	var road_y = get_road_height(spawn_x)
 	house.position = Vector2(spawn_x, road_y)
@@ -964,6 +985,118 @@ func spawn_house_at_player() -> void:
 			active_chunks[chunk_index].house.queue_free()
 		active_chunks[chunk_index]["house"] = house
 	print("[Road] Cheat: Spawned house at X: ", spawn_x, " in chunk ", chunk_index)
+
+
+func spawn_tow_house_at_player() -> void:
+	var player_x = get_target_x()
+	var spawn_x = player_x + 250.0
+	var chunk_index = int(floor(spawn_x / chunk_width))
+	
+	var house_script = load("res://road/house.gd")
+	if not house_script:
+		return
+	var house = Area2D.new()
+	house.set_script(house_script)
+	house.set("house_type", "towing")
+	
+	var road_y = get_road_height(spawn_x)
+	house.position = Vector2(spawn_x, road_y)
+	house.z_index = -2
+	add_child(house)
+	
+	if active_chunks.has(chunk_index):
+		if "house" in active_chunks[chunk_index] and is_instance_valid(active_chunks[chunk_index].house):
+			active_chunks[chunk_index].house.queue_free()
+		active_chunks[chunk_index]["house"] = house
+	print("[Road] Cheat: Spawned towing house at X: ", spawn_x, " in chunk ", chunk_index)
+
+
+func spawn_and_link_towed_car(house_pos: Vector2) -> void:
+	var use_duck = randf() < 0.5
+	var script_path = "res://road/towed_duck.gd" if use_duck else "res://road/towed_car.gd"
+	var towed_script = load(script_path)
+	if not towed_script:
+		return
+		
+	cleanup_towed_car()
+	
+	var towed = RigidBody2D.new()
+	towed.set_script(towed_script)
+	towed.name = "TowedCar"
+	
+	# Determine target node to attach to and offsets
+	var truck = get_node_or_null("/root/main/truck")
+	var attach_body: Node2D = null
+	var local_attach_offset = Vector2.ZERO
+	
+	if truck:
+		if truck.get("is_water_mode_active") and is_instance_valid(truck.get("boat")):
+			attach_body = truck.get("boat")
+			local_attach_offset = Vector2(-75, 10)
+		elif is_instance_valid(truck.get("container_body")):
+			attach_body = truck.get("container_body")
+			local_attach_offset = Vector2(-118, 10)
+		elif is_instance_valid(truck.get("chassis")):
+			attach_body = truck.get("chassis")
+			local_attach_offset = Vector2(-50, 10)
+		else:
+			attach_body = truck
+			
+	# Spawn relative to the truck's rear attachment point if valid, otherwise fallback
+	var spawn_pos = house_pos + Vector2(-120, -10)
+	if attach_body:
+		spawn_pos = attach_body.global_position + (local_attach_offset + Vector2(-120, 0)).rotated(attach_body.global_rotation)
+	towed.global_position = spawn_pos
+	
+	var main = get_node_or_null("/root/main")
+	if main:
+		main.add_child(towed)
+		
+	# Link physics bodies with a spring joint
+	if attach_body:
+		var joint = DampedSpringJoint2D.new()
+		joint.name = "TowingJoint"
+		joint.disable_collision = true
+		
+		joint.length = 80.0
+		joint.rest_length = 65.0
+		joint.stiffness = 50.0
+		joint.damping = 4.0
+		
+		joint.global_position = attach_body.global_position + local_attach_offset.rotated(attach_body.global_rotation)
+		main.add_child(joint)
+		
+		# Now that joint is in the scene tree, get_path_to resolves correctly
+		joint.node_a = joint.get_path_to(attach_body)
+		joint.node_b = joint.get_path_to(towed)
+		
+		# Spawn visual tow rope
+		var rope_script = load("res://road/tow_rope.gd")
+		if rope_script:
+			var rope = Node2D.new()
+			rope.set_script(rope_script)
+			rope.name = "TowingRope"
+			rope.set("body_a", attach_body)
+			rope.set("body_b", towed)
+			rope.set("offset_a", local_attach_offset)
+			
+			var hook_offset_b = Vector2(38, -12) if use_duck else Vector2(55, -5)
+			rope.set("offset_b", hook_offset_b)
+			main.add_child(rope)
+
+
+func cleanup_towed_car() -> void:
+	var main = get_node_or_null("/root/main")
+	if main:
+		var towed = main.get_node_or_null("TowedCar")
+		if is_instance_valid(towed):
+			towed.queue_free()
+		var joint = main.get_node_or_null("TowingJoint")
+		if is_instance_valid(joint):
+			joint.queue_free()
+		var rope = main.get_node_or_null("TowingRope")
+		if is_instance_valid(rope):
+			rope.queue_free()
 
 
 
@@ -1069,6 +1202,8 @@ func create_chunk(i: int) -> void:
 			house_node.call("setup_delivery_target", delivery_crate_count, delivery_reward)
 		elif i == racing_target_chunk:
 			house_node.call("setup_racing_target", racing_reward)
+		elif i == towing_target_chunk:
+			house_node.call("setup_towing_target", towing_reward)
 		
 	active_chunks[i] = {
 		"collision": col_poly,
@@ -1360,4 +1495,3 @@ func start_race_sequence() -> void:
 			)
 		)
 	)
-

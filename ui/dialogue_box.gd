@@ -300,6 +300,193 @@ func _ready() -> void:
 		dist_lbl.add_theme_constant_override("outline_size", 4)
 		row2.add_child(dist_lbl)
 
+	elif metadata.get("type") == "towing_contract":
+		# Setup custom content for towing
+		label_text.visible = false
+		
+		# Create a custom VBoxContainer for details
+		var detail_vbox = VBoxContainer.new()
+		detail_vbox.alignment = VBoxContainer.ALIGNMENT_CENTER
+		detail_vbox.add_theme_constant_override("separation", 20)
+		vbox.add_child(detail_vbox)
+		vbox.move_child(detail_vbox, 0)
+		
+		# 1. Title
+		var title_lbl = Label.new()
+		title_lbl.text = "Tow Vehicle"
+		title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title_lbl.add_theme_font_override("font", custom_font)
+		title_lbl.add_theme_font_size_override("font_size", 28)
+		title_lbl.add_theme_color_override("font_color", Color("#ffd200")) # Glowing amber title
+		title_lbl.add_theme_constant_override("outline_size", 6)
+		detail_vbox.add_child(title_lbl)
+		
+		# 2. Row 1: Hook and Coin
+		var row1 = HBoxContainer.new()
+		row1.alignment = HBoxContainer.ALIGNMENT_CENTER
+		row1.add_theme_constant_override("separation", 50)
+		detail_vbox.add_child(row1)
+		
+		# Hook part (Icon + text)
+		var hook_hbox = HBoxContainer.new()
+		hook_hbox.add_theme_constant_override("separation", 10)
+		row1.add_child(hook_hbox)
+		
+		# Hook Icon Control
+		var hook_icon = Control.new()
+		hook_icon.custom_minimum_size = Vector2(32, 32)
+		hook_icon.draw.connect(func():
+			# Draw a metal crane hook
+			hook_icon.draw_line(Vector2(16, 2), Vector2(16, 10), Color("#7a8296"), 3.0)
+			hook_icon.draw_rect(Rect2(10, 8, 12, 10), Color("#3b3f4d"), true)
+			var hook_color = Color("#ffd200")
+			hook_icon.draw_arc(Vector2(16, 21), 7.0, 0, PI * 0.95, 12, hook_color, 3.0, true)
+			# Tip
+			hook_icon.draw_circle(Vector2(16 - 7, 21), 1.5, hook_color)
+		)
+		hook_hbox.add_child(hook_icon)
+		
+		var hook_lbl = Label.new()
+		hook_lbl.text = "Tow Job"
+		hook_lbl.add_theme_font_override("font", custom_font)
+		hook_lbl.add_theme_font_size_override("font_size", 22)
+		hook_lbl.add_theme_color_override("font_color", Color.WHITE)
+		hook_lbl.add_theme_constant_override("outline_size", 4)
+		hook_hbox.add_child(hook_lbl)
+		
+		# Coin part (Icon + text)
+		var coin_hbox = HBoxContainer.new()
+		coin_hbox.add_theme_constant_override("separation", 10)
+		row1.add_child(coin_hbox)
+		
+		# Coin Icon Control
+		var coin_icon = Control.new()
+		coin_icon.custom_minimum_size = Vector2(32, 32)
+		coin_icon.draw.connect(func():
+			var center = Vector2(16, 16)
+			coin_icon.draw_circle(center, 14.0, Color("#ffea79", 0.25))
+			coin_icon.draw_circle(center, 13.0, Color("#ffb900"))
+			coin_icon.draw_circle(center, 8.0, Color("#ffea79"))
+			coin_icon.draw_circle(center, 3.0, Color("#ffb900"))
+		)
+		coin_hbox.add_child(coin_icon)
+		
+		var coin_lbl = Label.new()
+		coin_lbl.text = "%d$" % metadata.get("reward", 1200)
+		coin_lbl.add_theme_font_override("font", custom_font)
+		coin_lbl.add_theme_font_size_override("font_size", 22)
+		coin_lbl.add_theme_color_override("font_color", Color("#ffea79"))
+		coin_lbl.add_theme_constant_override("outline_size", 4)
+		coin_hbox.add_child(coin_lbl)
+		
+		# 3. Row 2: Location and Distance
+		var row2 = HBoxContainer.new()
+		row2.alignment = HBoxContainer.ALIGNMENT_CENTER
+		row2.add_theme_constant_override("separation", 10)
+		detail_vbox.add_child(row2)
+		
+		# Location Pin Icon Control
+		var pin_icon = Control.new()
+		pin_icon.custom_minimum_size = Vector2(24, 32)
+		pin_icon.draw.connect(func():
+			var center = Vector2(12, 10)
+			pin_icon.draw_circle(center, 8.0, Color("#ffd200"))
+			var tri = PackedVector2Array([
+				center + Vector2(-8, 2),
+				center + Vector2(8, 2),
+				center + Vector2(0, 18)
+			])
+			pin_icon.draw_colored_polygon(tri, Color("#ffd200"))
+			pin_icon.draw_circle(center, 3.0, Color.WHITE)
+		)
+		row2.add_child(pin_icon)
+		
+		var dist_lbl = Label.new()
+		dist_lbl.text = "%d meters" % metadata.get("distance", 1800)
+		dist_lbl.add_theme_font_override("font", custom_font)
+		dist_lbl.add_theme_font_size_override("font_size", 22)
+		dist_lbl.add_theme_color_override("font_color", Color.WHITE)
+		dist_lbl.add_theme_constant_override("outline_size", 4)
+		row2.add_child(dist_lbl)
+
+	elif metadata.get("type") == "towing_complete":
+		label_text.visible = false
+		
+		# Create a custom VBoxContainer for details
+		var detail_vbox = VBoxContainer.new()
+		detail_vbox.alignment = VBoxContainer.ALIGNMENT_CENTER
+		detail_vbox.add_theme_constant_override("separation", 20)
+		vbox.add_child(detail_vbox)
+		vbox.move_child(detail_vbox, 0)
+		
+		# 1. Title
+		var title_lbl = Label.new()
+		title_lbl.text = "Tow Job Completed"
+		title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title_lbl.add_theme_font_override("font", custom_font)
+		title_lbl.add_theme_font_size_override("font_size", 28)
+		title_lbl.add_theme_color_override("font_color", Color("#ffd200")) # Glowing amber title
+		title_lbl.add_theme_constant_override("outline_size", 6)
+		detail_vbox.add_child(title_lbl)
+		
+		# 2. Row 1: Hook and Coin
+		var row1 = HBoxContainer.new()
+		row1.alignment = HBoxContainer.ALIGNMENT_CENTER
+		row1.add_theme_constant_override("separation", 50)
+		detail_vbox.add_child(row1)
+		
+		# Hook part (Icon + text)
+		var hook_hbox = HBoxContainer.new()
+		hook_hbox.add_theme_constant_override("separation", 10)
+		row1.add_child(hook_hbox)
+		
+		# Hook Icon Control
+		var hook_icon = Control.new()
+		hook_icon.custom_minimum_size = Vector2(32, 32)
+		hook_icon.draw.connect(func():
+			# Draw a metal crane hook
+			hook_icon.draw_line(Vector2(16, 2), Vector2(16, 10), Color("#7a8296"), 3.0)
+			hook_icon.draw_rect(Rect2(10, 8, 12, 10), Color("#3b3f4d"), true)
+			var hook_color = Color("#ffd200")
+			hook_icon.draw_arc(Vector2(16, 21), 7.0, 0, PI * 0.95, 12, hook_color, 3.0, true)
+			# Tip
+			hook_icon.draw_circle(Vector2(16 - 7, 21), 1.5, hook_color)
+		)
+		hook_hbox.add_child(hook_icon)
+		
+		var hook_lbl = Label.new()
+		hook_lbl.text = "Completed"
+		hook_lbl.add_theme_font_override("font", custom_font)
+		hook_lbl.add_theme_font_size_override("font_size", 22)
+		hook_lbl.add_theme_color_override("font_color", Color.WHITE)
+		hook_lbl.add_theme_constant_override("outline_size", 4)
+		hook_hbox.add_child(hook_lbl)
+		
+		# Coin part (Icon + text)
+		var coin_hbox = HBoxContainer.new()
+		coin_hbox.add_theme_constant_override("separation", 10)
+		row1.add_child(coin_hbox)
+		
+		# Coin Icon Control
+		var coin_icon = Control.new()
+		coin_icon.custom_minimum_size = Vector2(32, 32)
+		coin_icon.draw.connect(func():
+			var center = Vector2(16, 16)
+			coin_icon.draw_circle(center, 14.0, Color("#ffea79", 0.25))
+			coin_icon.draw_circle(center, 13.0, Color("#ffb900"))
+			coin_icon.draw_circle(center, 8.0, Color("#ffea79"))
+			coin_icon.draw_circle(center, 3.0, Color("#ffb900"))
+		)
+		coin_hbox.add_child(coin_icon)
+		
+		var coin_lbl = Label.new()
+		coin_lbl.text = "+%d$" % metadata.get("reward", 0)
+		coin_lbl.add_theme_font_override("font", custom_font)
+		coin_lbl.add_theme_font_size_override("font_size", 22)
+		coin_lbl.add_theme_color_override("font_color", Color("#ffea79"))
+		coin_lbl.add_theme_constant_override("outline_size", 4)
+		coin_hbox.add_child(coin_lbl)
+
 	elif metadata.get("type") == "race_complete":
 		# Setup custom content for completing a race (both delivery and street race)
 		label_text.visible = false
@@ -510,6 +697,12 @@ func _draw() -> void:
 	elif metadata.get("type") == "racing_contract":
 		glow_color = Color("#ff007f") # Hot pink for races
 		inner_glow = Color("#00f0ff", 0.4) # Cyan inner accent
+	elif metadata.get("type") == "towing_contract":
+		glow_color = Color("#ffd200") # Neon orange/yellow for towing
+		inner_glow = Color("#00f0ff", 0.4) # Cyan inner accent
+	elif metadata.get("type") == "towing_complete":
+		glow_color = Color("#ffd200") # Glowing amber for towing completion
+		inner_glow = Color("#00f0ff", 0.4)
 	elif metadata.get("type") == "race_complete":
 		var won = metadata.get("player_won", true)
 		glow_color = Color("#00ff66") if won else Color("#ff2a6d") # Green if won, Pink/Red if lost

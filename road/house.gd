@@ -21,14 +21,13 @@ var is_racing_target := false
 var racing_area: Area2D
 var racing_reward := 0
 
+# Towing Destination State
+var is_towing_target := false
+var towing_area: Area2D
+var towing_reward := 0
+
 # Font reference
 var custom_font: Font
-
-var OPPONENT_NAMES = [
-	"Neon Viper", "Speedy McQueen", "Turbo Drift", "Apex Predator",
-	"Shadow Racer", "Nitro Boost", "Tire Shredder", "Drift Kun",
-	"Road Rage", "Shift King"
-]
 var opponent_name: String = ""
 
 
@@ -88,10 +87,16 @@ func _ready() -> void:
 	if house_type == "":
 		var rng_type = RandomNumberGenerator.new()
 		rng_type.seed = hash(int(position.x) + 4321)
-		house_type = "racing" if rng_type.randf() < 0.5 else "delivery"
+		var val = rng_type.randf()
+		if val < 0.33:
+			house_type = "racing"
+		elif val < 0.66:
+			house_type = "delivery"
+		else:
+			house_type = "towing"
 
-	# Reposition smoke or disable it for racing garage
-	if house_type == "racing":
+	# Reposition smoke or disable it for racing garage and towing station
+	if house_type == "racing" or house_type == "towing":
 		smoke_particles.emitting = false
 		smoke_particles.visible = false
 	
@@ -100,6 +105,8 @@ func _ready() -> void:
 	rng.seed = hash(int(position.x) + 4321)
 	if house_type == "racing":
 		reward_amount = rng.randi_range(200, 350)
+	elif house_type == "towing":
+		reward_amount = rng.randi_range(250, 400)
 	else:
 		crate_count = rng.randi_range(2, 5)
 		reward_amount = crate_count * rng.randi_range(60, 100)
@@ -192,6 +199,56 @@ func open_dialogue() -> void:
 					"callback": on_decline
 				}
 			], contract_meta)
+		elif house_type == "towing":
+			var offer_text = "[ TOWING CONTRACT ]\n\nDistance: %d meters\nReward: $%d\n\nAccept towing contract?" % [distance_m, reward_amount]
+			
+			var contract_meta = {
+				"type": "towing_contract",
+				"reward": reward_amount,
+				"distance": distance_m,
+				"opponent_name": opponent_name
+			}
+			
+			var on_accept = func():
+				print("[House] Towing Contract Accepted: $%d reward" % reward_amount)
+				has_accepted = true
+				
+				# Setup towing target in road script
+				if road:
+					var current_chunk = int(floor(global_position.x / road.get("chunk_width")))
+					if not road.get("used_house_chunks").has(current_chunk):
+						road.get("used_house_chunks").append(current_chunk)
+					var target_chunk = road.call("get_next_house_chunk", current_chunk)
+					road.set("towing_target_chunk", target_chunk)
+					road.set("towing_reward", reward_amount)
+					road.set("is_towing_active", true)
+					
+					# Spawn the towed car at the current house position
+					if road.has_method("spawn_and_link_towed_car"):
+						road.call("spawn_and_link_towed_car", global_position)
+					
+					# If target chunk is already active, initialize it immediately
+					if road.get("active_chunks").has(target_chunk):
+						var chunk_data = road.get("active_chunks")[target_chunk]
+						if "house" in chunk_data and is_instance_valid(chunk_data.house):
+							chunk_data.house.call("setup_towing_target", reward_amount)
+							
+				dialogue_box.call("close_dialogue")
+				
+			var on_decline = func():
+				has_declined = true
+				dialogue_box.call("close_dialogue")
+				
+			dialogue_box.call("setup", offer_text, [
+				{
+					"text": "Accept",
+					"callback": on_accept
+				},
+				{
+					"text": "Decline",
+					"callback": on_decline
+				}
+			], contract_meta)
 		else:
 			var offer_text = "[ DELIVERY CONTRACT ]\n\nCrates: %d\nReward: $%d\n\nAccept contract?" % [crate_count, reward_amount]
 			
@@ -250,7 +307,7 @@ func open_dialogue() -> void:
 		var on_close = func():
 			dialogue_box.call("close_dialogue")
 			
-		var closing_text = "No more races." if house_type == "racing" else "No more orders."
+		var closing_text = "No more races." if house_type == "racing" else ("No tow jobs." if house_type == "towing" else "No more orders.")
 		dialogue_box.call("setup", closing_text, [
 			{
 				"text": "Close",
@@ -261,7 +318,7 @@ func open_dialogue() -> void:
 	hud.add_child(dialogue_box)
 
 func _process(_delta: float) -> void:
-	if is_delivery_target or is_racing_target:
+	if is_delivery_target or is_racing_target or is_towing_target:
 		queue_redraw()
 
 func spawn_crates(count: int) -> void:
@@ -526,21 +583,115 @@ func show_race_completion_dialogue(player_won: bool, payout: int) -> void:
 	})
 	hud.add_child(dialogue_box)
 
+func setup_towing_target(reward: int) -> void:
+	is_towing_target = true
+	has_accepted = true # Destination house cannot offer contracts
+	towing_reward = reward
+	
+	# Create Area2D detector
+	towing_area = Area2D.new()
+	towing_area.name = "TowingArea"
+	towing_area.collision_mask = 3
+	
+	var col = CollisionShape2D.new()
+	var rect = RectangleShape2D.new()
+	rect.size = Vector2(200, 100) # Towing drop-off zone
+	col.shape = rect
+	col.position = Vector2(0, -40)
+	towing_area.add_child(col)
+	
+	add_child(towing_area)
+	
+	# Connect signal
+	towing_area.body_entered.connect(_on_towing_area_body_entered)
+	
+	queue_redraw()
+
+func _on_towing_area_body_entered(body: Node2D) -> void:
+	if not is_towing_target:
+		return
+		
+	# Check if the body entering is the TowedCar
+	var main = get_node_or_null("/root/main")
+	var towed_car = main.get_node_or_null("TowedCar") if main else null
+	
+	if is_instance_valid(towed_car) and (body == towed_car or body.get_parent() == towed_car):
+		complete_towing()
+		return
+		
+	# Check if the body entering is the player truck, and the TowedCar is close enough (within 350px)
+	var truck = get_node_or_null("/root/main/truck")
+	if truck and (body == truck.get("chassis") or body == truck.get("boat") or body == truck):
+		if is_instance_valid(towed_car) and global_position.distance_to(towed_car.global_position) < 350.0:
+			complete_towing()
+
+func complete_towing() -> void:
+	print("[House] Towing complete! Payout: $", towing_reward)
+	
+	var hud_stats = get_node_or_null("/root/main/truck/HUD/HudStats")
+	if hud_stats:
+		hud_stats.call("add_coin", towing_reward)
+		
+	is_towing_target = false
+	if is_instance_valid(towing_area):
+		towing_area.queue_free()
+		
+	var road = get_node_or_null("/root/main/Road")
+	if road:
+		road.set("towing_target_chunk", -1)
+		road.set("is_towing_active", false)
+		if road.has_method("cleanup_towed_car"):
+			road.call("cleanup_towed_car")
+		var current_chunk = int(floor(global_position.x / road.get("chunk_width")))
+		if not road.get("used_house_chunks").has(current_chunk):
+			road.get("used_house_chunks").append(current_chunk)
+		
+	show_towing_completion_dialogue(towing_reward)
+	queue_redraw()
+
+func show_towing_completion_dialogue(payout: int) -> void:
+	var hud = get_node_or_null("/root/main/truck/HUD")
+	if not hud:
+		return
+	if hud.has_node("DialogueBox"):
+		hud.get_node("DialogueBox").queue_free()
+		
+	var dialogue_script = load("res://ui/dialogue_box.gd")
+	if not dialogue_script:
+		return
+		
+	var dialogue_box = Control.new()
+	dialogue_box.name = "DialogueBox"
+	dialogue_box.set_script(dialogue_script)
+	
+	var on_ok = func():
+		dialogue_box.call("close_dialogue")
+		
+	dialogue_box.call("setup", "[ TOW COMPLETED ]\n\nSuccessfully towed the vehicle!\nReward: $%d" % payout, [
+		{
+			"text": "Awesome!",
+			"callback": on_ok
+		}
+	], {
+		"type": "towing_complete",
+		"reward": payout
+	})
+	hud.add_child(dialogue_box)
+
 func _draw() -> void:
 	if house_type == "racing":
 		# Design the racing garage house using premium vector graphics
-		
 		# Colors
-		var wall_color = Color("#20222a")           # Dark industrial slate grey
-		var beam_color = Color("#3b3f4d")           # Dark timber / iron beams
-		var shutter_color = Color("#7a8296")        # Metallic shutter door base
-		var shutter_line_color = Color("#4b505f")   # Darker shutter groove color
-		var neon_cyan = Color("#00f0ff")            # Electric blue trim
-		var neon_pink = Color("#ff007f")            # Laser pink sign glow
-		var hazard_yellow = Color("#ffd200")        # Classic industrial warning yellow
-		var hazard_black = Color("#15161a")         # Contrast dark black
-		var tire_rubber = Color("#141416")          # Dark tire rubber
-		var rim_magenta = Color("#e51b5c")          # Neon magenta alloy wheel
+		var wall_color = Color("#20222a") # Dark industrial slate grey
+		var beam_color = Color("#3b3f4d") # Dark timber / iron beams
+		var shutter_color = Color("#7a8296") # Metallic shutter door base
+		var shutter_line_color = Color("#4b505f") # Darker shutter groove color
+		var neon_cyan = Color("#00f0ff") # Electric blue trim
+		var neon_pink = Color("#ff007f") # Laser pink sign glow
+		var hazard_yellow = Color("#ffd200") # Classic industrial warning yellow
+		var hazard_black = Color("#15161a") # Contrast dark black
+		var tire_rubber = Color("#141416") # Dark tire rubber
+		var rim_magenta = Color("#e51b5c") # Neon magenta alloy wheel
 		
 		# 1. Main Wall Body (130 wide, 90 tall)
 		var wall_rect = Rect2(-65, -90, 130, 90)
@@ -582,7 +733,7 @@ func _draw() -> void:
 		var font_to_use = custom_font if custom_font else ThemeDB.fallback_font
 		if font_to_use:
 			var txt_sz = font_to_use.get_string_size("RACE", HORIZONTAL_ALIGNMENT_CENTER, -1, 10)
-			draw_string(font_to_use, Vector2(-txt_sz.x/2.0, -70), "RACE", HORIZONTAL_ALIGNMENT_CENTER, -1, 10, neon_pink)
+			draw_string(font_to_use, Vector2(-txt_sz.x / 2.0, -70), "RACE", HORIZONTAL_ALIGNMENT_CENTER, -1, 10, neon_pink)
 			
 		# 6. Big Tyre on Top of the Roof (centered at Y=-128)
 		var tire_center = Vector2(0, -128)
@@ -601,17 +752,111 @@ func _draw() -> void:
 		# Center cap
 		draw_circle(tire_center, 7.0, tire_rubber)
 		
+	elif house_type == "towing":
+		# Design the towing station house using premium vector graphics
+		# Colors
+		var wall_color = Color("#2c302e") # Industrial dark green-grey / asphalt
+		var trim_color = Color("#ff9f00") # Safety amber/orange
+		var roof_color = Color("#5a6268") # Corrugated galvanized steel
+		var bay_bg = Color("#1e2120") # Dark interior bay
+		var beam_color = Color("#3e4441") # Dark steel structural beams
+		var neon_amber = Color("#ffaa00") # Flashing light amber glow
+		var hazard_yellow = Color("#ffd200") # Yellow warning accents
+		var hazard_black = Color("#15161a") # Contrast dark black
+		var car_rust = Color("#8a5a44") # Rusty chassis brown-red
+		
+		# 1. Main Wall Body (140 wide, 85 tall)
+		var wall_rect = Rect2(-70, -85, 140, 85)
+		draw_rect(wall_rect, wall_color, true)
+		
+		# 2. Safety Hazard stripes on the foundation/trim (bottom line)
+		var stripe_w = 6.0
+		var ground_y = 0.0
+		draw_rect(Rect2(-70, -8, 140, 8), hazard_yellow, true)
+		for x_offset in range(-70, 70, 16):
+			var pts = PackedVector2Array([
+				Vector2(x_offset, 0),
+				Vector2(x_offset + 8, 0),
+				Vector2(x_offset - 4, -8),
+				Vector2(x_offset - 12, -8)
+			])
+			draw_polygon(pts, PackedColorArray([hazard_black]))
+			
+		# 3. Main Work/Service Bay (on the left side)
+		var bay_rect = Rect2(-55, -60, 60, 52)
+		draw_rect(bay_rect, bay_bg, true)
+		# Draw horizontal steel shutter slats partially rolled up
+		for y_offset in range(6, 24, 6):
+			draw_line(Vector2(-55, -60 + y_offset), Vector2(5, -60 + y_offset), Color("#4b505f"), 2.0)
+		draw_rect(bay_rect, beam_color, false, 3.0)
+		
+		# 4. Service Office/Window (on the right side)
+		var office_rect = Rect2(15, -55, 45, 45)
+		draw_rect(office_rect, beam_color.lightened(0.1), true)
+		# Cozy yellow lighting from office window
+		var win_rect = Rect2(20, -50, 35, 25)
+		draw_rect(win_rect, Color("#ffea79"), true)
+		draw_line(Vector2(37.5, -50), Vector2(37.5, -25), beam_color, 1.5)
+		draw_line(Vector2(20, -37.5), Vector2(55, -37.5), beam_color, 1.5)
+		
+		# 5. Sloped Corrugated Roof
+		# A slanted industrial roof higher on the left
+		var roof_pts = PackedVector2Array([
+			Vector2(-78, -85),
+			Vector2(78, -85),
+			Vector2(72, -96),
+			Vector2(-72, -96)
+		])
+		draw_polygon(roof_pts, PackedColorArray([roof_color]))
+		draw_polyline(roof_pts, beam_color, 2.0)
+		
+		# 6. Flashing Warning Beacon on roof (center of office side at X=37.5)
+		var beacon_pos = Vector2(37.5, -96)
+		# Beacon base
+		draw_rect(Rect2(31.5, -100, 12, 4), Color("#333333"), true)
+		# Amber glass
+		draw_circle(beacon_pos + Vector2(0, -7), 5.0, neon_amber)
+		# Light glow/pulses
+		var pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
+		draw_circle(beacon_pos + Vector2(0, -7), 18.0 * pulse, Color("#ff9f00", 0.18 * pulse))
+		
+		# 7. Big Tow Hook Sign above the service bay (X=-25, Y=-72)
+		var sign_center = Vector2(-25, -72)
+		draw_circle(sign_center, 12.0, Color.BLACK)
+		draw_circle(sign_center, 12.0, trim_color, false, 2.0)
+		# Tow hook graphic inside the sign
+		draw_line(sign_center + Vector2(0, -6), sign_center + Vector2(0, 0), Color.WHITE, 2.0)
+		draw_arc(sign_center + Vector2(-3, 3), 5.0, -PI / 2.0, PI * 0.8, 12, Color.WHITE, 2.0, true)
+		
+		# 8. Rusted Wrecked Car outside (X=-95 to -65, Y=0)
+		var wreck_x = -95.0
+		# Back wheel
+		draw_circle(Vector2(wreck_x + 8, -6), 6.0, Color("#15161a"))
+		# Front wheel
+		draw_circle(Vector2(wreck_x + 24, -6), 6.0, Color("#15161a"))
+		# Rusted Car Body
+		var car_body = PackedVector2Array([
+			Vector2(wreck_x, -6),
+			Vector2(wreck_x + 32, -6),
+			Vector2(wreck_x + 30, -16),
+			Vector2(wreck_x + 22, -16),
+			Vector2(wreck_x + 16, -24),
+			Vector2(wreck_x + 8, -24),
+			Vector2(wreck_x + 4, -16),
+			Vector2(wreck_x, -16)
+		])
+		draw_polygon(car_body, PackedColorArray([car_rust]))
+		draw_polyline(car_body, car_rust.darkened(0.4), 1.5)
 	else:
 		# Design the traditional house using premium vector graphics
-		
 		# Color Palette
-		var wall_color = Color(0.88, 0.84, 0.78)         # Warm plaster beige
-		var dark_beam_color = Color(0.35, 0.23, 0.15)    # Tudor dark timber beam brown
-		var roof_color = Color(0.72, 0.22, 0.12)         # Brick red tiles
-		var roof_trim_color = Color(0.48, 0.14, 0.08)    # Darker roof eaves outline
-		var door_color = Color(0.45, 0.28, 0.18)         # Warm arched wood door
-		var window_glow_color = Color(1.0, 0.85, 0.35)   # Cozy interior light glow
-		var chimney_color = Color(0.42, 0.42, 0.45)       # Grey stonework chimney
+		var wall_color = Color(0.88, 0.84, 0.78) # Warm plaster beige
+		var dark_beam_color = Color(0.35, 0.23, 0.15) # Tudor dark timber beam brown
+		var roof_color = Color(0.72, 0.22, 0.12) # Brick red tiles
+		var roof_trim_color = Color(0.48, 0.14, 0.08) # Darker roof eaves outline
+		var door_color = Color(0.45, 0.28, 0.18) # Warm arched wood door
+		var window_glow_color = Color(1.0, 0.85, 0.35) # Cozy interior light glow
+		var chimney_color = Color(0.42, 0.42, 0.45) # Grey stonework chimney
 		
 		# 1. Chimney (drawn behind the wall & roof)
 		draw_rect(Rect2(-42, -125, 14, 35), chimney_color, true)
@@ -658,21 +903,21 @@ func _draw() -> void:
 		var door_center_x = 0
 		var door_w = 24.0
 		var door_h = 42.0
-		var door_y = -door_h
+		var door_y = - door_h
 		# Solid body
-		draw_rect(Rect2(door_center_x - door_w/2.0, door_y, door_w, door_h), door_color, true)
-		draw_circle(Vector2(door_center_x, door_y), door_w/2.0, door_color)
+		draw_rect(Rect2(door_center_x - door_w / 2.0, door_y, door_w, door_h), door_color, true)
+		draw_circle(Vector2(door_center_x, door_y), door_w / 2.0, door_color)
 		# Door framing border
 		var door_arch_pts = PackedVector2Array()
 		for step in range(11):
 			var angle = PI + (PI * step / 10.0)
-			door_arch_pts.append(Vector2(door_center_x + cos(angle) * door_w/2.0, door_y + sin(angle) * door_w/2.0))
-		door_arch_pts.append(Vector2(door_center_x + door_w/2.0, 0))
-		door_arch_pts.append(Vector2(door_center_x - door_w/2.0, 0))
-		door_arch_pts.append(Vector2(door_center_x - door_w/2.0, door_y))
+			door_arch_pts.append(Vector2(door_center_x + cos(angle) * door_w / 2.0, door_y + sin(angle) * door_w / 2.0))
+		door_arch_pts.append(Vector2(door_center_x + door_w / 2.0, 0))
+		door_arch_pts.append(Vector2(door_center_x - door_w / 2.0, 0))
+		door_arch_pts.append(Vector2(door_center_x - door_w / 2.0, door_y))
 		draw_polyline(door_arch_pts, dark_beam_color.darkened(0.3), 2.0)
 		# Brass doorknob
-		draw_circle(Vector2(door_center_x + 7, door_y + door_h/2.0), 2.0, Color(0.9, 0.75, 0.15))
+		draw_circle(Vector2(door_center_x + 7, door_y + door_h / 2.0), 2.0, Color(0.9, 0.75, 0.15))
 		
 		# 6. Glowing Windows (Yellow with pane grids)
 		# Left window
@@ -737,7 +982,7 @@ func _draw() -> void:
 		
 		# Draw checkered patterns inside the finish line pad
 		var check_w = 10.0
-		var checkers_y = -pad_h / 2.0
+		var checkers_y = - pad_h / 2.0
 		for x_offset in range(-pad_w / 2.0, pad_w / 2.0, check_w):
 			var idx = int((x_offset + pad_w / 2.0) / check_w)
 			if idx % 2 == 0:
@@ -752,5 +997,42 @@ func _draw() -> void:
 			var txt = "FINISH LINE"
 			var txt_size = font_to_use.get_string_size(txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
 			# Draw background label backing for readability
+			draw_rect(Rect2(-txt_size.x / 2.0 - 6, -37, txt_size.x + 12, 18), Color(0, 0, 0, 0.6), true)
+			draw_string(font_to_use, Vector2(-txt_size.x / 2.0, -24), txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, line_color)
+
+	# 10. Towing Target Zone Overlay
+	if is_towing_target:
+		var pad_w = 200.0
+		var pad_h = 14.0
+		var pad_rect = Rect2(-pad_w / 2.0, -pad_h / 2.0, pad_w, pad_h)
+		
+		var pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+		var glow_color = Color("#ff9f00", 0.2 + 0.15 * pulse) # Amber glow
+		var line_color = Color("#ff9f00", 0.7 + 0.3 * pulse)
+		
+		# Draw glowing pad
+		draw_rect(pad_rect, glow_color, true)
+		draw_rect(pad_rect, line_color, false, 2.0)
+		
+		# Draw tow warning stripes inside the pad
+		var stripe_step = 16.0
+		for x_offset in range(-pad_w / 2.0, pad_w / 2.0, stripe_step):
+			var pts = PackedVector2Array([
+				Vector2(x_offset, -pad_h / 2.0),
+				Vector2(x_offset + 8, -pad_h / 2.0),
+				Vector2(x_offset - 2, pad_h / 2.0),
+				Vector2(x_offset - 10, pad_h / 2.0)
+			])
+			# Clip the polygon to fit within the pad limits
+			var clipped_pts = PackedVector2Array()
+			for pt in pts:
+				clipped_pts.append(Vector2(clamp(pt.x, -pad_w / 2.0, pad_w / 2.0), pt.y))
+			draw_polygon(clipped_pts, PackedColorArray([Color("#15161a", 0.45)]))
+			
+		# Draw target details label
+		var font_to_use = custom_font if custom_font else ThemeDB.fallback_font
+		if font_to_use:
+			var txt = "TOW ZONE"
+			var txt_size = font_to_use.get_string_size(txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
 			draw_rect(Rect2(-txt_size.x / 2.0 - 6, -37, txt_size.x + 12, 18), Color(0, 0, 0, 0.6), true)
 			draw_string(font_to_use, Vector2(-txt_size.x / 2.0, -24), txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, line_color)

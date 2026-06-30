@@ -422,6 +422,61 @@ func _draw() -> void:
 						
 					var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
 					_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 82.0), val_font_size, pink_line)
+		
+		elif road.get("towing_target_chunk") != -1:
+			var target_chunk = road.get("towing_target_chunk")
+			var target_x = (target_chunk + 0.5) * road.get("chunk_width")
+			if road.get("active_chunks").has(target_chunk):
+				var chunk_data = road.get("active_chunks")[target_chunk]
+				if "house" in chunk_data and is_instance_valid(chunk_data.house):
+					target_x = chunk_data.house.global_position.x
+					
+			var dist_rem = 0.0
+			if is_instance_valid(chassis):
+				dist_rem = (target_x - chassis.global_position.x) / 30.0
+				
+			if dist_rem > -50.0:
+				var screen_w = get_viewport_rect().size.x
+				var indicator_w = 220.0
+				var indicator_h = 100.0
+				var right_margin = 38.0
+				
+				var ibox_x = screen_w - global_position.x - indicator_w - right_margin
+				var ibox_y = 68.0 # Align vertically with Petrol bar box
+				
+				var ibox = Rect2(ibox_x, ibox_y, indicator_w, indicator_h)
+				
+				var pulse = 0.5 + 0.5 * sin(_elapsed * 6.0)
+				var amber_glow = Color("#ff9f00", 0.12 + 0.08 * pulse)
+				var amber_line = Color("#ff9f00", 0.8 + 0.2 * pulse)
+				
+				# Draw background container
+				draw_rect(ibox, Color(0.08, 0.08, 0.12, 0.85), true)
+				draw_rect(ibox, amber_line, false, 2.0)
+				draw_rect(ibox.grow(-3), amber_glow, true)
+				
+				var lbl_font_size = 14
+				var val_font_size = 18
+				
+				# Line 1: Title
+				var title_str = "TOWING TARGET"
+				_draw_clean_text_center(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 24.0), lbl_font_size, Color("#ff9f00"))
+				
+				# Line 2: Tow details
+				var progress_str = "TOW VEHICLE"
+				_draw_clean_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 52.0), val_font_size, Color("#ffffff"))
+				
+				# Line 3: Distance remaining & flash arrow
+				var dist_str = "%d M" % int(max(0.0, dist_rem))
+				if dist_rem <= 0.0:
+					dist_str = "ARRIVED"
+					
+				var arrow_char = "▶"
+				if dist_rem < 0.0:
+					arrow_char = "◀"
+					
+				var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
+				_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 82.0), val_font_size, amber_line)
 
 # ── Drawing Engines ──────────────────────────────────────────────────────
 

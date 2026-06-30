@@ -22,15 +22,26 @@ func _ready():
 
 func _physics_process(delta):
 	if is_instance_valid(target):
-		# Interpolate horizontal offset dynamically (combat transition shift)
-		horizontal_offset = lerp(horizontal_offset, target_horizontal_offset, 1.5 * delta)
+		# Determine target offset and zoom based on active event states
+		var active_offset = target_horizontal_offset
+		var active_zoom = default_zoom
+		
+		var road = get_node_or_null("../Road")
+		var is_towing = road and road.get("is_towing_active") == true
+		
+		if is_towing:
+			active_offset = 60.0 # Shift camera left to show towed car behind truck
+			active_zoom = Vector2(1.4, 1.4) # Zoom out slightly for wider view
+			
+		# Interpolate horizontal offset dynamically
+		horizontal_offset = lerp(horizontal_offset, active_offset, 1.5 * delta)
 		
 		# Interpolate position smoothly to center the truck in the camera view with offsets
 		var target_pos = target.global_position + Vector2(horizontal_offset, vertical_offset)
 		global_position = global_position.lerp(target_pos, 10.0 * delta)
 		
-		# Smoothly interpolate zoom based on tunnel state or truck zoom request
-		var target_zoom = default_zoom
+		# Smoothly interpolate zoom based on tunnel, towing, or zoom request
+		var target_zoom = active_zoom
 		if inside_tunnel:
 			target_zoom = tunnel_zoom
 		else:

@@ -384,12 +384,23 @@ func _input(event: InputEvent) -> void:
 				var road = get_node_or_null("/root/main/Road")
 				if road and road.has_method("spawn_crusher_on_next_chunk"):
 					road.call("spawn_crusher_on_next_chunk")
-			elif cheat_buffer.ends_with("house"):
+			elif cheat_buffer.ends_with("housetow"):
 				cheat_buffer = "" # clear buffer
-				print("Cheat activated: house!")
+				print("Cheat activated: housetow!")
 				var road = get_node_or_null("/root/main/Road")
-				if road and road.has_method("spawn_house_at_player"):
-					road.call("spawn_house_at_player")
+				if road and road.has_method("spawn_tow_house_at_player"):
+					road.call("spawn_tow_house_at_player")
+			elif cheat_buffer.ends_with("house"):
+				# Debounce "house" cheat to allow typing "housetow" without instant trigger
+				var current_seq = cheat_buffer
+				get_tree().create_timer(0.35).timeout.connect(func():
+					if cheat_buffer == current_seq:
+						cheat_buffer = "" # clear buffer
+						print("Cheat activated: house!")
+						var road = get_node_or_null("/root/main/Road")
+						if road and road.has_method("spawn_house_at_player"):
+							road.call("spawn_house_at_player")
+				)
 
 
 func _on_gear_button_pressed(gear_type: Gear) -> void:
