@@ -36,16 +36,22 @@ func _physics_process(delta):
 		# Interpolate horizontal offset dynamically
 		horizontal_offset = lerp(horizontal_offset, active_offset, 1.5 * delta)
 		
-		# Interpolate position smoothly to center the truck in the camera view with offsets
-		var target_pos = target.global_position + Vector2(horizontal_offset, vertical_offset)
-		global_position = global_position.lerp(target_pos, 10.0 * delta)
+		var truck = get_node_or_null("../truck")
+		var is_respawning = false
+		if truck and is_instance_valid(truck):
+			is_respawning = truck.get("is_respawning") == true
+			
+		if not is_respawning:
+			# Interpolate position smoothly to center the truck in the camera view with offsets
+			var target_pos = target.global_position + Vector2(horizontal_offset, vertical_offset)
+			if not is_nan(target_pos.x) and not is_nan(target_pos.y):
+				global_position = global_position.lerp(target_pos, 10.0 * delta)
 		
 		# Smoothly interpolate zoom based on tunnel, towing, or zoom request
 		var target_zoom = active_zoom
 		if inside_tunnel:
 			target_zoom = tunnel_zoom
 		else:
-			var truck = get_node_or_null("../truck")
 			if truck and truck.has_method("is_zoom_requested") and truck.is_zoom_requested():
 				target_zoom = zoomed_zoom
 			

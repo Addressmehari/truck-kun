@@ -817,3 +817,231 @@ func set_water_mode(enabled: bool) -> void:
 		indicator.chassis = active_body
 		indicator.container_body = container_body
 
+
+var is_respawning := false
+
+func respawn_at_crusher_start() -> void:
+	if is_respawning:
+		return
+	is_respawning = true
+	controls_locked = true
+	
+	# Reset health to max on respawn
+	truck_health = truck_max_health
+	
+	var main_body = boat if is_water_mode_active else chassis
+	if not is_instance_valid(main_body):
+		is_respawning = false
+		controls_locked = false
+		return
+		
+	# Gather all physics body parts of the truck/boat
+	var bodies = []
+	if is_water_mode_active:
+		if is_instance_valid(boat):
+			bodies.append(boat)
+	else:
+		if is_instance_valid(chassis):
+			bodies.append(chassis)
+		if is_instance_valid(container_body):
+			bodies.append(container_body)
+		if is_instance_valid(tyre_1):
+			bodies.append(tyre_1)
+		if is_instance_valid(tyre_2):
+			bodies.append(tyre_2)
+		if is_instance_valid(tyre_3):
+			bodies.append(tyre_3)
+			
+	# Immediately clear collision masks/layers so the truck parts don't get pushed by physics/crushers
+	var original_collisions = {}
+	for body in bodies:
+		if is_instance_valid(body):
+			original_collisions[body] = [body.collision_layer, body.collision_mask]
+			body.collision_layer = 0
+			body.collision_mask = 0
+			
+	# Disconnect joint node paths temporarily to relax joint constraints during teleportation
+	var main_joint = get_node_or_null("PinJoint2D")
+	var main_joint_a = ""
+	var main_joint_b = ""
+	if is_instance_valid(main_joint):
+		main_joint_a = main_joint.node_a
+		main_joint_b = main_joint.node_b
+		main_joint.node_a = ""
+		main_joint.node_b = ""
+		
+	var c_joint = chassis.get_node_or_null("GrooveJoint2D") if is_instance_valid(chassis) else null
+	var c_joint_a = ""
+	var c_joint_b = ""
+	if is_instance_valid(c_joint):
+		c_joint_a = c_joint.node_a
+		c_joint_b = c_joint.node_b
+		c_joint.node_a = ""
+		c_joint.node_b = ""
+		
+	var cb_joint1 = container_body.get_node_or_null("GrooveJoint2D") if is_instance_valid(container_body) else null
+	var cb_joint1_a = ""
+	var cb_joint1_b = ""
+	if is_instance_valid(cb_joint1):
+		cb_joint1_a = cb_joint1.node_a
+		cb_joint1_b = cb_joint1.node_b
+		cb_joint1.node_a = ""
+		cb_joint1.node_b = ""
+		
+	var cb_joint2 = container_body.get_node_or_null("GrooveJoint2D2") if is_instance_valid(container_body) else null
+	var cb_joint2_a = ""
+	var cb_joint2_b = ""
+	if is_instance_valid(cb_joint2):
+		cb_joint2_a = cb_joint2.node_a
+		cb_joint2_b = cb_joint2.node_b
+		cb_joint2.node_a = ""
+		cb_joint2.node_b = ""
+
+	# Freeze all bodies to prevent physics updates during the fade-out
+	for body in bodies:
+		if is_instance_valid(body):
+			body.freeze = true
+			body.linear_velocity = Vector2.ZERO
+			body.angular_velocity = 0.0
+			
+	# Fade out
+	var tween = create_tween()
+	tween.tween_property(self, "modulate:a", 0.0, 0.4)
+	tween.tween_callback(func():
+		var road = get_node_or_null("/root/main/Road")
+		var spawn_x = 0.0
+		if road:
+			var start_x = road.get("crusher_flat_start_x")
+			if start_x > 0.0:
+				spawn_x = start_x + 100.0
+				
+		var spawn_y = 0.0
+		if road and road.has_method("get_road_height"):
+			spawn_y = road.call("get_road_height", spawn_x) - 80.0
+			
+		var target_pos = Vector2(spawn_x, spawn_y)
+		
+		# Move boat or truck parts
+		if is_water_mode_active:
+			if is_instance_valid(boat):
+				boat.global_position = target_pos
+				boat.global_rotation = 0.0
+				boat.linear_velocity = Vector2.ZERO
+				boat.angular_velocity = 0.0
+		else:
+			if is_instance_valid(chassis):
+				chassis.global_position = target_pos
+				chassis.global_rotation = 0.0
+				chassis.linear_velocity = Vector2.ZERO
+				chassis.angular_velocity = 0.0
+			if is_instance_valid(container_body):
+				container_body.global_position = target_pos + Vector2(1, -1)
+				container_body.global_rotation = 0.0
+				container_body.linear_velocity = Vector2.ZERO
+				container_body.angular_velocity = 0.0
+			# Position tires underneath at their correct suspension anchor offsets
+			if is_instance_valid(tyre_1) and is_instance_valid(chassis):
+				tyre_1.global_position = chassis.global_position + Vector2(35, 10)
+				tyre_1.linear_velocity = Vector2.ZERO
+				tyre_1.angular_velocity = 0.0
+			if is_instance_valid(tyre_2) and is_instance_valid(container_body):
+				tyre_2.global_position = container_body.global_position + Vector2(-31, 10)
+				tyre_2.linear_velocity = Vector2.ZERO
+				tyre_2.angular_velocity = 0.0
+			if is_instance_valid(tyre_3) and is_instance_valid(container_body):
+				tyre_3.global_position = container_body.global_position + Vector2(-91, 10)
+				tyre_3.linear_velocity = Vector2.ZERO
+				tyre_3.angular_velocity = 0.0
+				
+		# Update PinJoint2D's global position to prevent pull forces
+		if is_instance_valid(main_joint):
+			main_joint.global_position = target_pos + Vector2(1, -28)
+				
+		# Update camera to target instantly
+		var camera = get_node_or_null("/root/main/Camera2D")
+		if camera and is_instance_valid(camera):
+			var cam_h = camera.get("horizontal_offset") if "horizontal_offset" in camera else 150.0
+			var cam_v = camera.get("vertical_offset") if "vertical_offset" in camera else -50.0
+			camera.global_position = target_pos + Vector2(cam_h, cam_v)
+			
+		# Handle active towing mission respawn
+		if road and road.has_method("relink_towed_car"):
+			var towed = get_node_or_null("/root/main/TowedCar")
+			if is_instance_valid(towed):
+				# Disconnect towed car joints
+				var tj_back = towed.get_node_or_null("gj_back")
+				var tj_front = towed.get_node_or_null("gj_front")
+				var tj_back_a = ""
+				var tj_back_b = ""
+				var tj_front_a = ""
+				var tj_front_b = ""
+				if is_instance_valid(tj_back):
+					tj_back_a = tj_back.node_a
+					tj_back_b = tj_back.node_b
+					tj_back.node_a = ""
+					tj_back.node_b = ""
+				if is_instance_valid(tj_front):
+					tj_front_a = tj_front.node_a
+					tj_front_b = tj_front.node_b
+					tj_front.node_a = ""
+					tj_front.node_b = ""
+					
+				towed.global_position = target_pos + Vector2(-150, 0)
+				towed.global_rotation = 0.0
+				towed.linear_velocity = Vector2.ZERO
+				towed.angular_velocity = 0.0
+				
+				var t_back = towed.get("tyre_back")
+				var t_front = towed.get("tyre_front")
+				if is_instance_valid(t_back):
+					t_back.global_position = towed.global_position + Vector2(-35, 10)
+					t_back.linear_velocity = Vector2.ZERO
+					t_back.angular_velocity = 0.0
+				if is_instance_valid(t_front):
+					t_front.global_position = towed.global_position + Vector2(35, 10)
+					t_front.linear_velocity = Vector2.ZERO
+					t_front.angular_velocity = 0.0
+					
+				# Reconnect towed car joints
+				if is_instance_valid(tj_back):
+					tj_back.node_a = tj_back_a
+					tj_back.node_b = tj_back_b
+				if is_instance_valid(tj_front):
+					tj_front.node_a = tj_front_a
+					tj_front.node_b = tj_front_b
+					
+			road.call("relink_towed_car")
+	)
+	tween.tween_interval(0.2)
+	tween.tween_property(self, "modulate:a", 1.0, 0.4)
+	tween.tween_callback(func():
+		# Reconnect joints first so they are bound to the new relaxed coordinates
+		if is_instance_valid(main_joint):
+			main_joint.node_a = main_joint_a
+			main_joint.node_b = main_joint_b
+		if is_instance_valid(c_joint):
+			c_joint.node_a = c_joint_a
+			c_joint.node_b = c_joint_b
+		if is_instance_valid(cb_joint1):
+			cb_joint1.node_a = cb_joint1_a
+			cb_joint1.node_b = cb_joint1_b
+		if is_instance_valid(cb_joint2):
+			cb_joint2.node_a = cb_joint2_a
+			cb_joint2.node_b = cb_joint2_b
+			
+		# Restore original collision layers/masks
+		for body in original_collisions:
+			if is_instance_valid(body):
+				body.collision_layer = original_collisions[body][0]
+				body.collision_mask = original_collisions[body][1]
+				
+		for body in bodies:
+			if is_instance_valid(body):
+				body.freeze = false
+				body.linear_velocity = Vector2.ZERO
+				body.angular_velocity = 0.0
+		controls_locked = false
+		is_respawning = false
+	)
+
+
