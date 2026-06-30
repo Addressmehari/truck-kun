@@ -44,6 +44,7 @@ extends StaticBody2D
 @export var is_flat := true:
 	set(val):
 		is_flat = val
+		clear_road_geometry_caches()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -52,6 +53,7 @@ extends StaticBody2D
 @export var flat_height := 42.0:
 	set(val):
 		flat_height = val
+		clear_road_geometry_caches()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -60,6 +62,7 @@ extends StaticBody2D
 @export var hill_amplitude_multiplier := 1.0:
 	set(val):
 		hill_amplitude_multiplier = val
+		clear_road_geometry_caches()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -69,6 +72,7 @@ extends StaticBody2D
 	set(val):
 		road_seed = val
 		update_seed_offsets()
+		clear_road_geometry_caches()
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -112,6 +116,34 @@ extends StaticBody2D
 		else:
 			regenerate_runtime_chunks()
 
+@export_group("Block Settings")
+@export var enable_blocks := true:
+	set(val):
+		enable_blocks = val
+		clear_road_geometry_caches()
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
+@export var block_height := 250.0:
+	set(val):
+		block_height = val
+		clear_road_geometry_caches()
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
+@export var block_flat_before := 500.0:
+	set(val):
+		block_flat_before = val
+		clear_road_geometry_caches()
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
 # Seed offsets for waves
 var seed_offset_1 := 0.0
 var seed_offset_2 := 0.0
@@ -119,7 +151,15 @@ var seed_offset_3 := 0.0
 
 # Dictionary to track runtime active chunks: { chunk_index: { "collision": Col, "fill": Fill, "line": Line } }
 var active_chunks := {}
+var block_cache := {}
+var cumulative_offset_cache := {}
+var tunnel_cache := {}
 var wave_physics_tick := 0
+
+func clear_road_geometry_caches() -> void:
+	block_cache.clear()
+	cumulative_offset_cache.clear()
+	tunnel_cache.clear()
 
 const TUNNEL_MIN_SPACING := 6000.0
 
@@ -229,6 +269,7 @@ func initialize_default_biomes() -> void:
 	biomes.append(b3)
 
 func apply_active_biome() -> void:
+	clear_road_geometry_caches()
 	var biome = get_current_biome()
 	if not biome:
 		return
@@ -338,6 +379,7 @@ func _get_line_2d() -> Line2D:
 	return get_node_or_null("Line2D")
 
 func update_seed_offsets() -> void:
+	clear_road_geometry_caches()
 	var rng = RandomNumberGenerator.new()
 	rng.seed = road_seed
 	seed_offset_1 = rng.randf_range(-10000.0, 10000.0)
@@ -464,8 +506,8 @@ func get_crusher_multiplier(x: float) -> float:
 	else:
 		return 1.0
 
-# Base math function defining the height of the road without flattening
-func get_base_road_height(x: float) -> float:
+# Base math function defining the height of the road without flattening or block offsets
+func get_raw_base_road_height(x: float) -> float:
 	if is_flat:
 		return flat_height
 
@@ -500,15 +542,210 @@ func get_base_road_height(x: float) -> float:
 	# Apply crusher flat land flattening
 	var crusher_mult = get_crusher_multiplier(x)
 	if crusher_mult < 1.0:
-		return lerp(flat_height, base_h, crusher_mult)
+		base_h = lerp(flat_height, base_h, crusher_mult)
 		
 	return base_h
+
+# Base math function defining the height of the road without flattening
+func get_base_road_height(x: float) -> float:
+	var target_x = x
+	var active_block = get_active_block_before(x)
+	if not active_block.is_empty():
+		target_x = active_block["x"] - block_flat_before
+		
+	var raw_h = get_raw_base_road_height(target_x)
+	return raw_h + get_block_height_offset(x)
+
+func get_active_block_before(x: float) -> Dictionary:
+	if not enable_blocks:
+		return {}
+		
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return {}
+		
+	var interval_size = 20000.0
+	var current_idx = int(floor(x / interval_size))
+	
+	for idx in range(current_idx, current_idx + 2):
+		var block = get_block_at_interval(idx)
+		if not block.is_empty():
+			var block_x = block["x"]
+			if x >= block_x - block_flat_before and x < block_x:
+				return block
+	return {}
+
+func has_tunnel_at_chunk_static(chunk_index: int) -> bool:
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return false
+		
+	var spawn_buffer_chunks = int(ceil(1500.0 / chunk_width))
+	if abs(chunk_index) <= spawn_buffer_chunks:
+		return false
+		
+	var spacing_chunks = int(ceil(TUNNEL_MIN_SPACING / chunk_width))
+	if abs(chunk_index) % spacing_chunks != 0:
+		return false
+		
+	return true
+
+func should_spawn_house_static(chunk_idx: int) -> bool:
+	if chunk_idx <= 1:
+		return false
+	if has_tunnel_at_chunk_static(chunk_idx):
+		return false
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return false
+		
+	var spawn_chance = clamp(0.30 * (chunk_width / 3000.0), 0.05, 0.5)
+	var chunk_rng = RandomNumberGenerator.new()
+	chunk_rng.seed = hash(chunk_idx + road_seed * 1109)
+	if chunk_rng.randf() > spawn_chance:
+		return false
+		
+	var min_spacing_chunks = int(ceil(5000.0 / chunk_width))
+	for prev_idx in range(chunk_idx - min_spacing_chunks, chunk_idx):
+		if prev_idx > 0:
+			if has_tunnel_at_chunk_static(prev_idx):
+				continue
+			var prev_rng = RandomNumberGenerator.new()
+			prev_rng.seed = hash(prev_idx + road_seed * 1109)
+			var prev_chance = clamp(0.30 * (chunk_width / 3000.0), 0.05, 0.5)
+			if prev_rng.randf() <= prev_chance:
+				return false
+	return true
+
+func is_near_tunnel(x: float) -> bool:
+	var check_dist = 2000.0
+	var min_chunk = int(floor((x - check_dist) / chunk_width))
+	var max_chunk = int(floor((x + check_dist) / chunk_width))
+	for check_idx in range(min_chunk, max_chunk + 1):
+		if has_tunnel_at_chunk_static(check_idx):
+			return true
+	return false
+
+func is_near_house(x: float) -> bool:
+	var check_dist = 1500.0
+	var min_chunk = int(floor((x - check_dist) / chunk_width))
+	var max_chunk = int(floor((x + check_dist) / chunk_width))
+	for check_idx in range(min_chunk, max_chunk + 1):
+		if should_spawn_house_static(check_idx):
+			return true
+	return false
+
+func get_block_at_interval(idx: int) -> Dictionary:
+	if not enable_blocks or idx < 0:
+		return {}
+		
+	if block_cache.has(idx):
+		return block_cache[idx]
+		
+	var rng = RandomNumberGenerator.new()
+	rng.seed = hash(str(road_seed) + "_block_" + str(idx))
+	
+	var interval_size = 20000.0 # 1000 meters * 20 px/m
+	var start_x = idx * interval_size
+	
+	var min_x = start_x + 2000.0
+	var max_x = start_x + interval_size - 2000.0
+	if idx == 0:
+		min_x = 4000.0
+		
+	if min_x >= max_x:
+		return {}
+		
+	var spawn_x = 0.0
+	var found = false
+	
+	# Attempt to find a valid location that does not conflict with houses or tunnels
+	for attempt in range(15):
+		var candidate_x = rng.randf_range(min_x, max_x)
+		if not is_near_tunnel(candidate_x) and not is_near_house(candidate_x):
+			spawn_x = candidate_x
+			found = true
+			break
+			
+	# If no clean spot was found after 15 attempts, fallback to a safe candidate
+	if not found:
+		spawn_x = rng.randf_range(min_x, max_x)
+		
+	var raw_h_before = get_raw_base_road_height(spawn_x - block_flat_before)
+	var raw_h_after = get_raw_base_road_height(spawn_x)
+	var adjusted_height = block_height + max(0.0, raw_h_after - raw_h_before)
+		
+	var block_data = {
+		"x": spawn_x,
+		"height": adjusted_height
+	}
+	block_cache[idx] = block_data
+	return block_data
+
+func get_cumulative_offset_at_interval(interval_idx: int) -> float:
+	if interval_idx < 0:
+		return 0.0
+	if cumulative_offset_cache.has(interval_idx):
+		return cumulative_offset_cache[interval_idx]
+		
+	var prev_offset = get_cumulative_offset_at_interval(interval_idx - 1)
+	var current_block_contrib = 0.0
+	var block = get_block_at_interval(interval_idx)
+	if not block.is_empty():
+		current_block_contrib = -block["height"]
+		
+	var offset = prev_offset + current_block_contrib
+	cumulative_offset_cache[interval_idx] = offset
+	return offset
+
+func get_block_height_offset(x: float) -> float:
+	if not enable_blocks:
+		return 0.0
+		
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return 0.0
+		
+	if x < 0.0:
+		return 0.0
+		
+	var interval_size = 20000.0
+	var current_interval = int(floor(x / interval_size))
+	
+	var offset = get_cumulative_offset_at_interval(current_interval - 1)
+	
+	var block = get_block_at_interval(current_interval)
+	if not block.is_empty():
+		if x >= block["x"]:
+			offset -= block["height"]
+			
+	return offset
+
+func get_block_in_range(x1: float, x2: float) -> Dictionary:
+	if not enable_blocks:
+		return {}
+		
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return {}
+		
+	var interval_size = 20000.0
+	var start_idx = int(floor(x1 / interval_size))
+	var end_idx = int(floor(x2 / interval_size))
+	
+	for idx in range(start_idx, end_idx + 1):
+		var block = get_block_at_interval(idx)
+		if not block.is_empty():
+			if block["x"] >= x1 and block["x"] < x2:
+				return block
+	return {}
 
 func start_active_event(event_name: String) -> void:
 	if event_name == "Convoy":
 		is_convoy_active = true
 		has_convoy_ended = false
 		convoy_start_x = get_target_x()
+		clear_road_geometry_caches()
 		regenerate_runtime_chunks()
 
 func end_active_event(event_name: String) -> void:
@@ -516,6 +753,7 @@ func end_active_event(event_name: String) -> void:
 		is_convoy_active = false
 		has_convoy_ended = true
 		convoy_end_x = get_target_x()
+		clear_road_geometry_caches()
 		regenerate_runtime_chunks()
 
 func is_event_active() -> bool:
@@ -546,6 +784,9 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 	if biome and biome.is_water:
 		return {}
 		
+	if tunnel_cache.has(chunk_index):
+		return tunnel_cache[chunk_index]
+		
 	# Avoid tunnels too close to spawn (within 1500 units)
 	var spawn_buffer_chunks = int(ceil(1500.0 / chunk_width))
 	if abs(chunk_index) <= spawn_buffer_chunks:
@@ -566,12 +807,14 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 		var tunnel_x = (chunk_index + 0.5) * chunk_width
 		var base_y = get_base_road_height(tunnel_x)
 		
-		return {
+		var tunnel_data = {
 			"x": tunnel_x,
 			"y": base_y,
 			"width": 1000.0,
 			"height": 320.0
 		}
+		tunnel_cache[chunk_index] = tunnel_data
+		return tunnel_data
 	return {}
 
 # Math function defining the height of the road at any X coordinate, flattened inside tunnels and paddings, smoothed in transitions
@@ -644,9 +887,18 @@ func generate_road() -> void:
 	var x = start_x
 	var step = get_current_step_size()
 	while x <= end_x:
-		var y = get_road_height(x)
-		surface_points.append(Vector2(x, y))
-		x += step
+		var block = get_block_in_range(x, min(end_x, x + step))
+		if not block.is_empty():
+			var block_x = block["x"]
+			var y_before = get_road_height(block_x - 0.01)
+			surface_points.append(Vector2(block_x, y_before))
+			var y_after = get_road_height(block_x)
+			surface_points.append(Vector2(block_x, y_after))
+			x = block_x + 0.01
+		else:
+			var y = get_road_height(x)
+			surface_points.append(Vector2(x, y))
+			x += step
 		
 	# Ensure the last point is exactly at the end
 	surface_points.append(Vector2(end_x, get_road_height(end_x)))
@@ -864,6 +1116,48 @@ func update_chunks(player_x: float) -> void:
 	for i in active_keys:
 		if i < start_chunk or i > end_chunk:
 			destroy_chunk(i)
+
+func get_elevator_data_for_chunk(chunk_idx: int) -> Dictionary:
+	if not enable_blocks:
+		return {}
+		
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return {}
+		
+	var start_x = chunk_idx * chunk_width
+	var end_x = (chunk_idx + 1) * chunk_width
+	
+	var start_interval = int(floor((start_x - 2000.0) / 20000.0))
+	var end_interval = int(floor((end_x + 2000.0) / 20000.0))
+	
+	for idx in range(max(0, start_interval), end_interval + 1):
+		var block = get_block_at_interval(idx)
+		if not block.is_empty():
+			var block_x = block["x"]
+			var elev_x = block_x - 120.0 # Center of elevator
+			if elev_x >= start_x and elev_x < end_x:
+				var y_before = get_road_height(block_x - 0.01)
+				var y_after = get_road_height(block_x)
+				var cliff_height = y_before - y_after
+				if cliff_height <= 10.0:
+					return {}
+				return {
+					"x": elev_x,
+					"travel_height": cliff_height
+				}
+	return {}
+
+func spawn_elevator_node(elevator_data: Dictionary) -> Node2D:
+	var elev_scene = load("res://road/simple_elevator.tscn")
+	if not elev_scene:
+		return null
+	var elev = elev_scene.instantiate() as Node2D
+	var road_y = get_road_height(elevator_data["x"])
+	elev.position = Vector2(elevator_data["x"], road_y)
+	elev.set("travel_height", elevator_data["travel_height"])
+	add_child(elev)
+	return elev
 
 func spawn_tunnel_node(chunk_index: int, tunnel_data: Dictionary) -> Node2D:
 	var tunnel_scene = load("res://road/tunnel.tscn")
@@ -1109,9 +1403,18 @@ func create_chunk(i: int) -> void:
 	var x = start_x
 	var step = get_current_step_size()
 	while x < end_x:
-		var y = get_road_height(x)
-		surface_points.append(Vector2(x, y))
-		x += step
+		var block = get_block_in_range(x, min(end_x, x + step))
+		if not block.is_empty():
+			var block_x = block["x"]
+			var y_before = get_road_height(block_x - 0.01)
+			surface_points.append(Vector2(block_x, y_before))
+			var y_after = get_road_height(block_x)
+			surface_points.append(Vector2(block_x, y_after))
+			x = block_x + 0.01
+		else:
+			var y = get_road_height(x)
+			surface_points.append(Vector2(x, y))
+			x += step
 		
 	# Ensure the last point is exactly at the end
 	surface_points.append(Vector2(end_x, get_road_height(end_x)))
@@ -1205,6 +1508,12 @@ func create_chunk(i: int) -> void:
 		elif i == towing_target_chunk:
 			house_node.call("setup_towing_target", towing_reward)
 		
+	# Spawn elevator if present
+	var elevator_node = null
+	var elevator_data = get_elevator_data_for_chunk(i)
+	if not elevator_data.is_empty():
+		elevator_node = spawn_elevator_node(elevator_data)
+		
 	active_chunks[i] = {
 		"collision": col_poly,
 		"fill": fill,
@@ -1213,7 +1522,8 @@ func create_chunk(i: int) -> void:
 		"grass": grass,
 		"grass2": grass2,
 		"tunnel": tunnel_node,
-		"house": house_node
+		"house": house_node,
+		"elevator": elevator_node
 	}
 
 func destroy_chunk(i: int) -> void:
@@ -1235,6 +1545,8 @@ func destroy_chunk(i: int) -> void:
 			chunk.tunnel.queue_free()
 		if "house" in chunk and is_instance_valid(chunk.house):
 			chunk.house.queue_free()
+		if "elevator" in chunk and is_instance_valid(chunk.elevator):
+			chunk.elevator.queue_free()
 		active_chunks.erase(i)
 
 func spawn_crusher_on_next_chunk() -> void:
