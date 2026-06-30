@@ -1152,12 +1152,33 @@ func spawn_elevator_node(elevator_data: Dictionary) -> Node2D:
 	var elev_scene = load("res://road/simple_elevator.tscn")
 	if not elev_scene:
 		return null
-	var elev = elev_scene.instantiate() as Node2D
+		
+	# Create a container node to hold both elevators so chunk cleanup works out-of-the-box
+	var container = Node2D.new()
+	container.name = "ElevatorsContainer"
+	add_child(container)
+	
 	var road_y = get_road_height(elevator_data["x"])
-	elev.position = Vector2(elevator_data["x"], road_y)
-	elev.set("travel_height", elevator_data["travel_height"])
-	add_child(elev)
-	return elev
+	
+	# 1. Player Elevator (Cyber Blue, layer 1)
+	var player_elev = elev_scene.instantiate() as Node2D
+	player_elev.name = "PlayerElevator"
+	player_elev.position = Vector2(elevator_data["x"], road_y)
+	player_elev.set("travel_height", elevator_data["travel_height"])
+	player_elev.set("is_opponent_elevator", false)
+	player_elev.set("width", 200.0)
+	container.add_child(player_elev)
+	
+	# 2. Opponent Elevator (Neon Pink, layer 2)
+	var opponent_elev = elev_scene.instantiate() as Node2D
+	opponent_elev.name = "OpponentElevator"
+	opponent_elev.position = Vector2(elevator_data["x"], road_y)
+	opponent_elev.set("travel_height", elevator_data["travel_height"])
+	opponent_elev.set("is_opponent_elevator", true)
+	opponent_elev.set("width", 220.0) # Slightly wider to clearly show both layers visually
+	container.add_child(opponent_elev)
+	
+	return container
 
 func spawn_tunnel_node(chunk_index: int, tunnel_data: Dictionary) -> Node2D:
 	var tunnel_scene = load("res://road/tunnel.tscn")
