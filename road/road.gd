@@ -112,6 +112,31 @@ extends StaticBody2D
 		else:
 			regenerate_runtime_chunks()
 
+@export_group("Block Settings")
+@export var enable_blocks := true:
+	set(val):
+		enable_blocks = val
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
+@export var block_height := 250.0:
+	set(val):
+		block_height = val
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
+@export var block_flat_before := 500.0:
+	set(val):
+		block_flat_before = val
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
 # Seed offsets for waves
 var seed_offset_1 := 0.0
 var seed_offset_2 := 0.0
@@ -464,8 +489,8 @@ func get_crusher_multiplier(x: float) -> float:
 	else:
 		return 1.0
 
-# Base math function defining the height of the road without flattening
-func get_base_road_height(x: float) -> float:
+# Base math function defining the height of the road without flattening or block offsets
+func get_raw_base_road_height(x: float) -> float:
 	if is_flat:
 		return flat_height
 
@@ -500,9 +525,109 @@ func get_base_road_height(x: float) -> float:
 	# Apply crusher flat land flattening
 	var crusher_mult = get_crusher_multiplier(x)
 	if crusher_mult < 1.0:
-		return lerp(flat_height, base_h, crusher_mult)
+		base_h = lerp(flat_height, base_h, crusher_mult)
 		
 	return base_h
+
+# Base math function defining the height of the road without flattening
+func get_base_road_height(x: float) -> float:
+	var target_x = x
+	var active_block = get_active_block_before(x)
+	if not active_block.is_empty():
+		target_x = active_block["x"] - block_flat_before
+		
+	var raw_h = get_raw_base_road_height(target_x)
+	return raw_h + get_block_height_offset(x)
+
+func get_active_block_before(x: float) -> Dictionary:
+	if not enable_blocks:
+		return {}
+		
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return {}
+		
+	var interval_size = 20000.0
+	var current_idx = int(floor(x / interval_size))
+	
+	for idx in range(current_idx, current_idx + 2):
+		var block = get_block_at_interval(idx)
+		if not block.is_empty():
+			var block_x = block["x"]
+			if x >= block_x - block_flat_before and x < block_x:
+				return block
+	return {}
+
+func get_block_at_interval(idx: int) -> Dictionary:
+	if not enable_blocks:
+		return {}
+		
+	var rng = RandomNumberGenerator.new()
+	rng.seed = hash(str(road_seed) + "_block_" + str(idx))
+	
+	var interval_size = 20000.0 # 1000 meters * 20 px/m
+	var start_x = idx * interval_size
+	
+	# Avoid spawn area (first 4000.0 units)
+	if idx == 0:
+		var min_x = 4000.0
+		var max_x = interval_size - 2000.0
+		if min_x >= max_x:
+			return {}
+		var spawn_x = rng.randf_range(min_x, max_x)
+		return {
+			"x": spawn_x,
+			"height": block_height
+		}
+	else:
+		var min_x = start_x + 2000.0
+		var max_x = start_x + interval_size - 2000.0
+		var spawn_x = rng.randf_range(min_x, max_x)
+		return {
+			"x": spawn_x,
+			"height": block_height
+		}
+
+func get_block_height_offset(x: float) -> float:
+	if not enable_blocks:
+		return 0.0
+		
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return 0.0
+		
+	if x < 0.0:
+		return 0.0
+		
+	var offset = 0.0
+	var interval_size = 20000.0
+	var max_interval = int(floor(x / interval_size))
+	
+	for idx in range(max_interval + 1):
+		var block = get_block_at_interval(idx)
+		if not block.is_empty():
+			if x >= block["x"]:
+				offset -= block["height"]
+	return offset
+
+func get_block_in_range(x1: float, x2: float) -> Dictionary:
+	if not enable_blocks:
+		return {}
+		
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return {}
+		
+	var interval_size = 20000.0
+	var start_idx = int(floor(x1 / interval_size))
+	var end_idx = int(floor(x2 / interval_size))
+	
+	for idx in range(start_idx, end_idx + 1):
+		var block = get_block_at_interval(idx)
+		if not block.is_empty():
+			if block["x"] >= x1 and block["x"] < x2:
+				return block
+	return {}
 
 func start_active_event(event_name: String) -> void:
 	if event_name == "Convoy":
@@ -644,9 +769,18 @@ func generate_road() -> void:
 	var x = start_x
 	var step = get_current_step_size()
 	while x <= end_x:
-		var y = get_road_height(x)
-		surface_points.append(Vector2(x, y))
-		x += step
+		var block = get_block_in_range(x, min(end_x, x + step))
+		if not block.is_empty():
+			var block_x = block["x"]
+			var y_before = get_road_height(block_x - 0.01)
+			surface_points.append(Vector2(block_x, y_before))
+			var y_after = get_road_height(block_x)
+			surface_points.append(Vector2(block_x, y_after))
+			x = block_x + 0.01
+		else:
+			var y = get_road_height(x)
+			surface_points.append(Vector2(x, y))
+			x += step
 		
 	# Ensure the last point is exactly at the end
 	surface_points.append(Vector2(end_x, get_road_height(end_x)))
@@ -1109,9 +1243,18 @@ func create_chunk(i: int) -> void:
 	var x = start_x
 	var step = get_current_step_size()
 	while x < end_x:
-		var y = get_road_height(x)
-		surface_points.append(Vector2(x, y))
-		x += step
+		var block = get_block_in_range(x, min(end_x, x + step))
+		if not block.is_empty():
+			var block_x = block["x"]
+			var y_before = get_road_height(block_x - 0.01)
+			surface_points.append(Vector2(block_x, y_before))
+			var y_after = get_road_height(block_x)
+			surface_points.append(Vector2(block_x, y_after))
+			x = block_x + 0.01
+		else:
+			var y = get_road_height(x)
+			surface_points.append(Vector2(x, y))
+			x += step
 		
 	# Ensure the last point is exactly at the end
 	surface_points.append(Vector2(end_x, get_road_height(end_x)))
