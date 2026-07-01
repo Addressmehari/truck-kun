@@ -169,6 +169,7 @@ var _tunnel_is_queued: bool = false
 var _tunnel_positions: Array[float] = []
 var _was_mission_active: bool = false
 var _mission_end_x: float = -1.0
+var queued_next_biome_index: int = -1
 
 var ground_material: ShaderMaterial = null
 var water_material: ShaderMaterial = null
@@ -205,7 +206,6 @@ var active_opponent_name: String = "Opponent"
 var towing_target_chunk: int = -1
 var towing_reward: int = 0
 var is_towing_active: bool = false
-
 
 
 @export_group("Biomes System")
@@ -313,15 +313,117 @@ func _input(event: InputEvent) -> void:
 		if event.keycode == KEY_B:
 			cycle_biome()
 
-func cycle_biome() -> void:
-	# Always reinitialize if we have fewer biomes than expected (e.g. scene was saved
-	# before the Water biome was added, so the exported array is stale).
+func select_next_biome_index() -> int:
+	var cur = active_biome_index
+	var roll = randf()
+	if cur == 0: # Current is Grass
+		# Choose Silhouette (1) or Water (2) - 50% each
+		return 1 if roll < 0.5 else 2
+	elif cur == 1: # Current is Silhouette
+		# 80% chance to return to Grass (0), 20% chance to transition to Water (2)
+		return 0 if roll < 0.8 else 2
+	else: # Current is Water
+		# 80% chance to return to Grass (0), 20% chance to transition to Silhouette (1)
+		return 0 if roll < 0.8 else 1
+
+func prepare_next_biome() -> void:
 	if biomes.size() < 3:
 		initialize_default_biomes()
-	var new_idx = (active_biome_index + 1) % biomes.size()
-	active_biome_index = new_idx
+		
+	if queued_next_biome_index == -1:
+		queued_next_biome_index = select_next_biome_index()
+		
+	var next_biome_name = biomes[queued_next_biome_index].biome_name
+	show_next_biome_announcement(next_biome_name)
+
+func get_next_tunnel_spacing() -> float:
+	var biome = get_current_biome()
+	if biome:
+		if biome.is_water or biome.biome_name.contains("Silhouette"):
+			# 1500m to 2000m = 45000 to 60000 pixels
+			return randf_range(45000.0, 60000.0)
+	return 90000.0 # Default 3000m
+
+func cycle_biome() -> void:
+	# Always reinitialize if we have fewer biomes than expected
+	if biomes.size() < 3:
+		initialize_default_biomes()
+		
+	# 1. Switch the biome index first (updates active_biome_index and set_water_mode correctly while the tunnel is still registered)
+	if queued_next_biome_index != -1:
+		active_biome_index = queued_next_biome_index
+		queued_next_biome_index = -1
+	else:
+		active_biome_index = select_next_biome_index()
+		
+	# 2. Find and remove the tunnel we just crossed from active positions so it doesn't rebuild in the new biome
+	var player_x = get_target_x()
+	var removed_any = false
+	for i in range(_tunnel_positions.size() - 1, -1, -1):
+		var tx = _tunnel_positions[i]
+		if abs(tx - player_x) < 3000.0:
+			_tunnel_positions.remove_at(i)
+			removed_any = true
+			
+	# 3. Re-run geometry generation to clear the tunnel graphics in the new biome
+	if removed_any:
+		clear_road_geometry_caches()
+		regenerate_runtime_chunks()
+		
 	print("Switched to biome: ", biomes[active_biome_index].biome_name)
 	show_biome_banner(biomes[active_biome_index].biome_name)
+
+func show_next_biome_announcement(biome_name: String) -> void:
+	var hud = get_node_or_null("../truck/HUD")
+	if not hud:
+		return
+		
+	var old_banner = hud.get_node_or_null("BiomeBanner")
+	if old_banner:
+		old_banner.queue_free()
+		
+	var label = Label.new()
+	label.name = "BiomeBanner"
+	label.text = "NEXT BIOME: " + biome_name.to_upper()
+	
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	label.anchors_preset = Control.PRESET_CENTER_TOP
+	label.anchor_left = 0.5
+	label.anchor_right = 0.5
+	label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	label.position = Vector2(-250, 40)
+	label.size = Vector2(500, 40)
+	
+	label.add_theme_font_size_override("font_size", 26)
+	label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3, 1.0)) # Golden warning style
+	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	label.add_theme_constant_override("outline_size", 6)
+	
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.1, 0.08, 0.85)
+	style.border_color = Color(1.0, 0.85, 0.3, 0.3)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 3
+	style.corner_radius_top_left = 6
+	style.corner_radius_top_right = 6
+	style.corner_radius_bottom_left = 6
+	style.corner_radius_bottom_right = 6
+	style.expand_margin_left = 20
+	style.expand_margin_right = 20
+	style.expand_margin_top = 6
+	style.expand_margin_bottom = 6
+	label.add_theme_stylebox_override("normal", style)
+	
+	hud.add_child(label)
+	
+	var tween = label.create_tween()
+	tween.tween_interval(3.0) # Stay on screen longer inside the tunnel
+	tween.tween_property(label, "modulate:a", 0.0, 0.6)
+	tween.tween_callback(label.queue_free)
 
 func show_biome_banner(biome_name: String) -> void:
 	var hud = get_node_or_null("../truck/HUD")
@@ -583,10 +685,6 @@ func get_active_block_before(x: float) -> Dictionary:
 	return {}
 
 func has_tunnel_at_chunk_static(chunk_index: int) -> bool:
-	var biome = get_current_biome()
-	if biome and biome.is_water:
-		return false
-		
 	var spawn_buffer_chunks = int(ceil(1500.0 / chunk_width))
 	if abs(chunk_index) <= spawn_buffer_chunks:
 		return false
@@ -706,7 +804,7 @@ func get_cumulative_offset_at_interval(interval_idx: int) -> float:
 	var current_block_contrib = 0.0
 	var block = get_block_at_interval(interval_idx)
 	if not block.is_empty():
-		current_block_contrib = -block["height"]
+		current_block_contrib = - block["height"]
 		
 	var offset = prev_offset + current_block_contrib
 	cumulative_offset_cache[interval_idx] = offset
@@ -790,11 +888,6 @@ func is_event_active() -> bool:
 
 # Deterministically get tunnel details for a given chunk
 func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
-	# No tunnels in water biome (submerged road)
-	var biome = get_current_biome()
-	if biome and biome.is_water:
-		return {}
-		
 	if tunnel_cache.has(chunk_index):
 		return tunnel_cache[chunk_index]
 		
@@ -820,7 +913,7 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 		var tunnel_data = {
 			"x": found_tx,
 			"y": base_y,
-			"width": 1000.0,
+			"width": 2000.0,
 			"height": 320.0
 		}
 		tunnel_cache[chunk_index] = tunnel_data
@@ -831,7 +924,7 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 # Math function defining the height of the road at any X coordinate, flattened inside tunnels and paddings, smoothed in transitions
 func get_road_height(x: float) -> float:
 	# Determine range of chunk indices that can physically influence the height at x
-	var max_influence = 1500.0 # 500 (half width) + 200 (padding) + 800 (transition)
+	var max_influence = 2500.0 # Safe upper bound for half width (1000) + padding (200) + transition (800)
 	var min_chunk_idx = int(floor((x - max_influence) / chunk_width))
 	var max_chunk_idx = int(floor((x + max_influence) / chunk_width))
 	
@@ -1041,7 +1134,7 @@ func _update_tunnel_spawning(current_x: float) -> void:
 				
 				_tunnel_positions.append(tx)
 				_tunnel_is_queued = false
-				next_planned_tunnel_x = tx + 90000.0
+				next_planned_tunnel_x = tx + get_next_tunnel_spacing()
 				_mission_end_x = -1.0
 				
 				# Regenerate chunks immediately to apply the new tunnel
@@ -1057,7 +1150,7 @@ func _update_tunnel_spawning(current_x: float) -> void:
 				var chunk_idx = int(round(next_planned_tunnel_x / chunk_width))
 				var tx = (chunk_idx + 0.5) * chunk_width
 				_tunnel_positions.append(tx)
-				next_planned_tunnel_x = tx + 90000.0
+				next_planned_tunnel_x = tx + get_next_tunnel_spacing()
 				
 				# Regenerate chunks immediately to apply the new tunnel
 				clear_road_geometry_caches()
@@ -1252,6 +1345,12 @@ func spawn_tunnel_node(chunk_index: int, tunnel_data: Dictionary) -> Node2D:
 		return null
 	var tunnel = tunnel_scene.instantiate() as Node2D
 	tunnel.position = Vector2(tunnel_data["x"], tunnel_data["y"])
+	
+	# Scale tunnel horizontally based on custom width (default design width in tscn is 1000)
+	var default_width = 1000.0
+	var scale_factor = tunnel_data.get("width", default_width) / default_width
+	tunnel.scale = Vector2(scale_factor, 1.0)
+	
 	add_child(tunnel)
 	return tunnel
 
@@ -1568,8 +1667,6 @@ func relink_towed_car() -> void:
 			main.add_child(rope)
 
 
-
-
 func create_chunk(i: int) -> void:
 	var current_biome = get_current_biome()
 	var start_x = i * chunk_width
@@ -1850,7 +1947,6 @@ func start_delivery_race() -> void:
 	start_race_sequence()
 
 func start_race_sequence() -> void:
-	
 	# 1. Locate truck and Lock player controls immediately
 	var truck = get_node_or_null("/root/main/truck")
 	if truck:

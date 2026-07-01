@@ -10,6 +10,7 @@
 script = ExtResource("1_truck_gd")
 suspension_stiffness = 10.0
 suspension_damping = 10.0
+unlimited_petrol = true
 
 [node name="chassis" parent="." instance=ExtResource("2_chassis_scene")]
 position = Vector2(-1, 0)
