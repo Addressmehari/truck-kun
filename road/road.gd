@@ -161,7 +161,14 @@ func clear_road_geometry_caches() -> void:
 	cumulative_offset_cache.clear()
 	tunnel_cache.clear()
 
-const TUNNEL_MIN_SPACING := 6000.0
+const TUNNEL_MIN_SPACING := 30000.0
+
+# Dynamic tunnel spawning tracking
+var next_planned_tunnel_x: float = 90000.0
+var _tunnel_is_queued: bool = false
+var _tunnel_positions: Array[float] = []
+var _was_mission_active: bool = false
+var _mission_end_x: float = -1.0
 
 var ground_material: ShaderMaterial = null
 var water_material: ShaderMaterial = null
@@ -584,11 +591,18 @@ func has_tunnel_at_chunk_static(chunk_index: int) -> bool:
 	if abs(chunk_index) <= spawn_buffer_chunks:
 		return false
 		
-	var spacing_chunks = int(ceil(TUNNEL_MIN_SPACING / chunk_width))
-	if abs(chunk_index) % spacing_chunks != 0:
-		return false
+	if Engine.is_editor_hint():
+		var spacing_chunks = int(ceil(90000.0 / chunk_width))
+		return abs(chunk_index) % spacing_chunks == 0
 		
-	return true
+	# Check if this chunk index contains any planned tunnel position
+	var chunk_start = chunk_index * chunk_width
+	var chunk_end = (chunk_index + 1) * chunk_width
+	for tx in _tunnel_positions:
+		if tx >= chunk_start and tx < chunk_end:
+			return true
+			
+	return false
 
 func should_spawn_house_static(chunk_idx: int) -> bool:
 	if chunk_idx <= 1:
@@ -776,9 +790,6 @@ func is_event_active() -> bool:
 
 # Deterministically get tunnel details for a given chunk
 func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
-	if is_event_active():
-		return {}
-
 	# No tunnels in water biome (submerged road)
 	var biome = get_current_biome()
 	if biome and biome.is_water:
@@ -792,29 +803,29 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 	if abs(chunk_index) <= spawn_buffer_chunks:
 		return {}
 		
-	# Enforce spacing: tunnels can only spawn at chunk indices that respect the minimum physical spacing
-	var spacing_chunks = int(ceil(TUNNEL_MIN_SPACING / chunk_width))
-	if abs(chunk_index) % spacing_chunks != 0:
-		return {}
-		
-	var rng = RandomNumberGenerator.new()
-	# Deterministic seed per chunk
-	rng.seed = hash(str(road_seed) + "_tunnel_" + str(chunk_index))
-	
-	# Always spawn a tunnel in this valid chunk for guaranteed spawning
-	if true:
-		# Tunnel is centered in the middle of the chunk
-		var tunnel_x = (chunk_index + 0.5) * chunk_width
-		var base_y = get_base_road_height(tunnel_x)
-		
+	var found_tx: float = -1.0
+	if Engine.is_editor_hint():
+		var spacing_chunks = int(ceil(90000.0 / chunk_width))
+		if abs(chunk_index) % spacing_chunks == 0:
+			found_tx = (chunk_index + 0.5) * chunk_width
+	else:
+		# Use the dynamic planned positions at runtime
+		for tx in _tunnel_positions:
+			if tx >= chunk_index * chunk_width and tx < (chunk_index + 1) * chunk_width:
+				found_tx = tx
+				break
+				
+	if found_tx != -1.0:
+		var base_y = get_base_road_height(found_tx)
 		var tunnel_data = {
-			"x": tunnel_x,
+			"x": found_tx,
 			"y": base_y,
 			"width": 1000.0,
 			"height": 320.0
 		}
 		tunnel_cache[chunk_index] = tunnel_data
 		return tunnel_data
+		
 	return {}
 
 # Math function defining the height of the road at any X coordinate, flattened inside tunnels and paddings, smoothed in transitions
@@ -998,12 +1009,67 @@ func generate_road() -> void:
 			if child.has_method("snap_to_road"):
 				child.call("snap_to_road")
 
+func is_mission_or_event_active() -> bool:
+	if is_event_active():
+		return true
+	if delivery_target_chunk != -1:
+		return true
+	if racing_target_chunk != -1 or is_racing_active:
+		return true
+	if towing_target_chunk != -1 or is_towing_active:
+		return true
+	return false
+
+func _update_tunnel_spawning(current_x: float) -> void:
+	var mission_active = is_mission_or_event_active()
+	
+	if _was_mission_active and not mission_active:
+		_mission_end_x = current_x
+		
+	_was_mission_active = mission_active
+	
+	if _tunnel_is_queued:
+		if not mission_active:
+			if _mission_end_x == -1.0:
+				_mission_end_x = current_x
+			# 300 meters = 9000 pixels
+			if current_x >= _mission_end_x + 9000.0:
+				# Spawn the tunnel in the next chunk ahead
+				var current_view_dist = get_current_view_distance()
+				var spawn_chunk = int(ceil((current_x + current_view_dist) / chunk_width))
+				var tx = (spawn_chunk + 0.5) * chunk_width
+				
+				_tunnel_positions.append(tx)
+				_tunnel_is_queued = false
+				next_planned_tunnel_x = tx + 90000.0
+				_mission_end_x = -1.0
+				
+				# Regenerate chunks immediately to apply the new tunnel
+				clear_road_geometry_caches()
+				regenerate_runtime_chunks()
+	else:
+		var current_view_dist = get_current_view_distance()
+		if current_x + current_view_dist >= next_planned_tunnel_x:
+			if mission_active:
+				_tunnel_is_queued = true
+				_mission_end_x = -1.0
+			else:
+				var chunk_idx = int(round(next_planned_tunnel_x / chunk_width))
+				var tx = (chunk_idx + 0.5) * chunk_width
+				_tunnel_positions.append(tx)
+				next_planned_tunnel_x = tx + 90000.0
+				
+				# Regenerate chunks immediately to apply the new tunnel
+				clear_road_geometry_caches()
+				regenerate_runtime_chunks()
+
 func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
 		
 	# Throttle chunk updates (check every 8 frames instead of every frame)
 	if Engine.get_physics_frames() % 8 == 0:
+		_update_tunnel_spawning(get_target_x())
 		update_chunks(get_target_x())
 		
 	update_active_chunks_geometry()
