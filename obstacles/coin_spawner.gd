@@ -2,9 +2,9 @@ extends Node
 
 # ─── Tuning ───────────────────────────────────────────────────────────────────
 ## Minimum world-X gap between any two consecutive coins (pixels)
-@export var min_spacing: float = 180.0
+@export var min_spacing: float = 360.0
 ## Maximum world-X gap between consecutive coins (pixels)
-@export var max_spacing: float = 420.0
+@export var max_spacing: float = 840.0
 ## How many coins to keep pre-spawned ahead of the chassis
 @export var pool_size: int = 10
 ## How far ahead of the chassis to pre-spawn coins (pixels)
