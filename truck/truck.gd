@@ -401,6 +401,12 @@ func _input(event: InputEvent) -> void:
 						if road and road.has_method("spawn_house_at_player"):
 							road.call("spawn_house_at_player")
 				)
+			elif cheat_buffer.ends_with("mystery"):
+				cheat_buffer = "" # clear buffer
+				print("Cheat activated: mystery!")
+				var road = get_node_or_null("/root/main/Road")
+				if road and road.has_method("spawn_mystery_box_at_player"):
+					road.call("spawn_mystery_box_at_player")
 
 
 func _on_gear_button_pressed(gear_type: Gear) -> void:
@@ -517,9 +523,6 @@ func end_active_event(event_name: String) -> void:
 	print("Truck ending active event: ", event_name)
 	if event_name == "Convoy":
 		is_autopilot = false
-		
-		# Trigger reward velocity boost
-		boost_timer = boost_duration
 		
 		# Restore camera
 		var camera = get_node_or_null("/root/main/Camera2D")

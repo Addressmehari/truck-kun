@@ -703,6 +703,9 @@ func _draw() -> void:
 	elif metadata.get("type") == "towing_complete":
 		glow_color = Color("#ffd200") # Glowing amber for towing completion
 		inner_glow = Color("#00f0ff", 0.4)
+	elif metadata.get("type") == "delivery_complete":
+		glow_color = Color("#00ff66") # Neon green for delivery success
+		inner_glow = Color("#ffb900", 0.4)
 	elif metadata.get("type") == "race_complete":
 		var won = metadata.get("player_won", true)
 		glow_color = Color("#00ff66") if won else Color("#ff2a6d") # Green if won, Pink/Red if lost

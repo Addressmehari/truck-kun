@@ -15,17 +15,26 @@ extends Node
 @export_range(0.0, 1.0, 0.05) var cluster_chance: float = 0.22
 ## Chance (0-1) that the next slot spawns a petrol can instead of coins
 @export_range(0.0, 0.5, 0.02) var petrol_chance: float = 0.10
+## Chance (0-1) that the next slot spawns a mystery box
+@export_range(0.0, 0.5, 0.01) var mystery_box_chance: float = 0.05
 ## Y offset above road surface so coins hover visibly
 @export var hover_height: float = -20.0
+## Minimum cooldown duration (seconds) after a mini-event ends before mystery boxes can spawn again
+@export var min_cooldown_duration: float = 25.0
+## Maximum cooldown duration (seconds) after a mini-event ends before mystery boxes can spawn again
+@export var max_cooldown_duration: float = 35.0
 
 # ─── Internal ─────────────────────────────────────────────────────────────────
 var _coin_scene: PackedScene
 var _petrol_scene: PackedScene
+var _mystery_box_scene: PackedScene
 var _road: StaticBody2D
 var _chassis: RigidBody2D
 var _coins: Array[Node] = []       # live coin nodes
 var _next_spawn_x: float = 0.0     # world X where the next coin should appear
 var _rng: RandomNumberGenerator
+var _was_event_active: bool = false
+var _cooldown_timer: float = 0.0
 
 func _ready() -> void:
 	_rng = RandomNumberGenerator.new()
@@ -45,6 +54,10 @@ func _ready() -> void:
 	if not _petrol_scene:
 		push_warning("CoinSpawner: petrol.tscn not found — petrol cans won't spawn")
 
+	_mystery_box_scene = load("res://obstacles/mystery_box.tscn")
+	if not _mystery_box_scene:
+		push_warning("CoinSpawner: mystery_box.tscn not found — mystery boxes won't spawn")
+
 	# Seed the first spawn position just ahead of the chassis start
 	if is_instance_valid(_chassis):
 		_next_spawn_x = _chassis.global_position.x + 300.0
@@ -54,9 +67,25 @@ func _ready() -> void:
 	# Prime the pool
 	_fill_pool()
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if not is_instance_valid(_chassis):
 		return
+
+	# Decay cooldown timer
+	if _cooldown_timer > 0.0:
+		_cooldown_timer -= delta
+
+	# Track event transitions to trigger cooldowns
+	var is_event_running = false
+	if _road and _road.has_method("is_event_active"):
+		is_event_running = _road.call("is_event_active")
+		
+	if _was_event_active and not is_event_running:
+		var duration = _rng.randf_range(min_cooldown_duration, max_cooldown_duration)
+		_cooldown_timer = duration
+		print("[CoinSpawner] Event ended! Mystery box spawn cooldown active for %.1f seconds" % duration)
+		
+	_was_event_active = is_event_running
 
 	var chassis_x = _chassis.global_position.x
 
@@ -83,19 +112,33 @@ func _fill_pool() -> void:
 	if is_instance_valid(_chassis):
 		chassis_x = _chassis.global_position.x
 
+	# Ensure the next spawn frontier is always safely ahead of the player to prevent instant overlap loops
+	if _next_spawn_x < chassis_x + 300.0:
+		_next_spawn_x = chassis_x + 300.0
+
 	# Count how many coins are still alive ahead
 	var ahead_count = 0
 	for c in _coins:
 		if is_instance_valid(c) and c.global_position.x > chassis_x:
 			ahead_count += 1
 
+	var is_event_running = false
+	if _road and _road.has_method("is_event_active"):
+		is_event_running = _road.call("is_event_active")
+
+	var on_cooldown = (_cooldown_timer > 0.0)
+	var spawn_blocked = is_event_running or on_cooldown
+
 	while ahead_count < pool_size and _next_spawn_x < chassis_x + spawn_lead:
-		# Decide whether to place a petrol can, cluster, or single coin
+		# Decide whether to place a mystery box, petrol can, cluster, or single coin
 		var roll = _rng.randf()
-		if _petrol_scene and roll < petrol_chance:
+		if not spawn_blocked and _mystery_box_scene and roll < mystery_box_chance:
+			_spawn_mystery_box(_next_spawn_x)
+			ahead_count += 1
+		elif _petrol_scene and roll < (mystery_box_chance if not spawn_blocked else 0.0) + petrol_chance:
 			_spawn_petrol(_next_spawn_x)
 			ahead_count += 1
-		elif roll < petrol_chance + cluster_chance:
+		elif roll < (mystery_box_chance if not spawn_blocked else 0.0) + petrol_chance + cluster_chance:
 			_spawn_cluster(_next_spawn_x)
 			ahead_count += 3
 		else:
@@ -136,3 +179,15 @@ func _spawn_petrol(world_x: float) -> void:
 		road_y = _road.call("get_road_height", world_x)
 	can.global_position = Vector2(world_x, road_y + hover_height - 8.0)
 	_coins.append(can)  # reuse the same tracking array for lifecycle management
+
+# ── Spawn a mystery box at world X ────────────────────────────────────────────
+func _spawn_mystery_box(world_x: float) -> void:
+	if not _mystery_box_scene:
+		return
+	var box = _mystery_box_scene.instantiate()
+	get_parent().add_child.call_deferred(box)
+	var road_y = 0.0
+	if _road and _road.has_method("get_road_height"):
+		road_y = _road.call("get_road_height", world_x)
+	box.global_position = Vector2(world_x, road_y + hover_height - 15.0)
+	_coins.append(box) # reuse the same tracking array for lifecycle management

@@ -164,7 +164,7 @@ func clear_road_geometry_caches() -> void:
 const TUNNEL_MIN_SPACING := 30000.0
 
 # Dynamic tunnel spawning tracking
-var next_planned_tunnel_x: float = 90000.0
+var next_planned_tunnel_x: float = 30000.0
 var _tunnel_is_queued: bool = false
 var _tunnel_positions: Array[float] = []
 var _was_mission_active: bool = false
@@ -340,9 +340,9 @@ func get_next_tunnel_spacing() -> float:
 	var biome = get_current_biome()
 	if biome:
 		if biome.is_water or biome.biome_name.contains("Silhouette"):
-			# 1500m to 2000m = 45000 to 60000 pixels
-			return randf_range(45000.0, 60000.0)
-	return 90000.0 # Default 3000m
+			# 1000m to 1500m = 30000 to 45000 pixels
+			return randf_range(30000.0, 45000.0)
+	return 30000.0 # Default 1000m
 
 func cycle_biome() -> void:
 	# Always reinitialize if we have fewer biomes than expected
@@ -872,6 +872,14 @@ func is_event_active() -> bool:
 	if Engine.is_editor_hint():
 		return false
 		
+	# Check local convoy active state
+	if get("is_convoy_active") == true:
+		return true
+		
+	# Check local racing active state
+	if get("is_racing_active") == true:
+		return true
+		
 	var truck = get_node_or_null("../truck")
 	if truck and is_instance_valid(truck):
 		if truck.get("is_autopilot") == true:
@@ -883,6 +891,9 @@ func is_event_active() -> bool:
 				return true
 			var wheel = hud.get_node_or_null("EventWheelPopup")
 			if wheel and is_instance_valid(wheel):
+				return true
+			var crusher_bar = hud.get_node_or_null("CrusherProgressBar")
+			if crusher_bar and is_instance_valid(crusher_bar):
 				return true
 	return false
 
@@ -1370,7 +1381,7 @@ func spawn_house_node(chunk_index: int) -> Node2D:
 		house.set("house_type", "towing")
 	else:
 		var type_rng = RandomNumberGenerator.new()
-		type_rng.seed = hash(chunk_index + road_seed * 4321)
+		type_rng.seed = hash(str(chunk_index) + "_" + str(road_seed) + "_housetype")
 		var type_val = type_rng.randf()
 		if type_val < 0.33:
 			house.set("house_type", "racing")
@@ -1381,7 +1392,7 @@ func spawn_house_node(chunk_index: int) -> Node2D:
 
 	# Randomize horizontal offset within the chunk using seeded RNG
 	var chunk_rng = RandomNumberGenerator.new()
-	chunk_rng.seed = hash(chunk_index + road_seed * 1109)
+	chunk_rng.seed = hash(str(chunk_index) + "_" + str(road_seed) + "_houseoffset")
 	var offset_ratio = chunk_rng.randf_range(0.25, 0.75)
 	var spawn_x = chunk_index * chunk_width + offset_ratio * chunk_width
 	
@@ -1489,6 +1500,34 @@ func spawn_tow_house_at_player() -> void:
 			active_chunks[chunk_index].house.queue_free()
 		active_chunks[chunk_index]["house"] = house
 	print("[Road] Cheat: Spawned towing house at X: ", spawn_x, " in chunk ", chunk_index)
+
+func spawn_mystery_box_at_player() -> void:
+	if is_event_active():
+		print("[Road] Cannot spawn mystery box: Event is currently active!")
+		return
+		
+	var player_x = get_target_x()
+	var spawn_x = player_x + 350.0 # Spawn a little bit away (350px ahead) so it's clearly visible in front of the truck
+	
+	var box_scene = load("res://obstacles/mystery_box.tscn")
+	if not box_scene:
+		return
+	var box = box_scene.instantiate()
+	
+	var road_y = get_road_height(spawn_x)
+	box.global_position = Vector2(spawn_x, road_y - 35.0)
+	
+	# Add to main scene tree
+	get_parent().add_child(box)
+	
+	# Register in coin spawner list if spawner is active so it gets cleaned up
+	var spawner = get_node_or_null("/root/main/CoinSpawner")
+	if spawner and "_coins" in spawner:
+		var coins_arr = spawner.get("_coins")
+		if coins_arr is Array:
+			coins_arr.append(box)
+			
+	print("[Road] Cheat: Spawned mystery box at X: ", spawn_x)
 
 
 func spawn_and_link_towed_car(house_pos: Vector2) -> void:

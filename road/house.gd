@@ -86,7 +86,7 @@ func _ready() -> void:
 	# If house_type is not pre-assigned, randomize it
 	if house_type == "":
 		var rng_type = RandomNumberGenerator.new()
-		rng_type.seed = hash(int(position.x) + 4321)
+		rng_type.seed = hash(str(position.x) + "_housetype")
 		var val = rng_type.randf()
 		if val < 0.33:
 			house_type = "racing"
@@ -102,7 +102,7 @@ func _ready() -> void:
 	
 	# Seeded generation of contract parameters
 	var rng = RandomNumberGenerator.new()
-	rng.seed = hash(int(position.x) + 4321)
+	rng.seed = hash(str(position.x) + "_houseparams")
 	if house_type == "racing":
 		reward_amount = rng.randi_range(200, 350)
 	elif house_type == "towing":
@@ -282,10 +282,6 @@ func open_dialogue() -> void:
 						if "house" in chunk_data and is_instance_valid(chunk_data.house):
 							chunk_data.house.call("setup_delivery_target", crate_count, reward_amount)
 							
-					# Start the delivery race sequence with the opponent truck and countdown
-					if road.has_method("start_delivery_race"):
-						road.call("start_delivery_race")
-							
 				spawn_crates(crate_count)
 				dialogue_box.call("close_dialogue")
 				
@@ -419,16 +415,9 @@ func _on_delivery_area_body_entered(body: Node2D) -> void:
 
 func complete_delivery() -> void:
 	var road = get_node_or_null("/root/main/Road")
-	var player_won = true
-	if road:
-		if road.get("opponent_finished"):
-			player_won = false
-			
 	var actual_payout = delivery_reward
-	if not player_won:
-		actual_payout = int(delivery_reward * 0.15) # 15% reward
 		
-	print("[House] Delivery complete! Player won: ", player_won, " Payout: $", actual_payout)
+	print("[House] Delivery complete! Payout: $", actual_payout)
 	
 	var hud_stats = get_node_or_null("/root/main/truck/HUD/HudStats")
 	if hud_stats:
@@ -439,15 +428,47 @@ func complete_delivery() -> void:
 		delivery_area.queue_free()
 		
 	if road:
-		road.call("end_racing_event") # Cleanly fade and free opponent
 		road.set("delivery_target_chunk", -1)
 		road.set("delivery_crates_delivered", 0)
 		var current_chunk = int(floor(global_position.x / road.get("chunk_width")))
 		if not road.get("used_house_chunks").has(current_chunk):
 			road.get("used_house_chunks").append(current_chunk)
 		
-	show_completion_dialogue(player_won, actual_payout)
+	show_delivery_completion_dialogue(actual_payout)
 	queue_redraw()
+
+func show_delivery_completion_dialogue(payout: int) -> void:
+	var hud = get_node_or_null("/root/main/truck/HUD")
+	if not hud:
+		return
+	if hud.has_node("DialogueBox"):
+		hud.get_node("DialogueBox").queue_free()
+		
+	var dialogue_script = load("res://ui/dialogue_box.gd")
+	if not dialogue_script:
+		return
+		
+	var dialogue_box = Control.new()
+	dialogue_box.name = "DialogueBox"
+	dialogue_box.set_script(dialogue_script)
+	
+	var title = "[ DELIVERY COMPLETED ]"
+	var desc = "Crates successfully delivered!\n\nEarned full reward:\nReward: $%d" % payout
+	var completion_text = "%s\n\n%s" % [title, desc]
+	
+	var on_ok = func():
+		dialogue_box.call("close_dialogue")
+		
+	dialogue_box.call("setup", completion_text, [
+		{
+			"text": "Awesome!",
+			"callback": on_ok
+		}
+	], {
+		"type": "delivery_complete",
+		"reward": payout
+	})
+	hud.add_child(dialogue_box)
 
 func show_completion_dialogue(player_won: bool, payout: int) -> void:
 	var hud = get_node_or_null("/root/main/truck/HUD")

@@ -72,8 +72,6 @@ func _physics_process(delta: float) -> void:
 			if is_instance_valid(_road):
 				_road.set("crusher_flat_start_x", 0.0)
 				_road.set("crusher_flat_end_x", 0.0)
-				if _road.has_method("regenerate_runtime_chunks"):
-					_road.call("regenerate_runtime_chunks")
 			end_event()
 			
 	queue_redraw()
