@@ -24,6 +24,7 @@ func _ready() -> void:
 	add_to_group("coins")
 	_road = get_node_or_null("/root/main/Road")
 	_hover_offset = randf_range(0.0, TAU)
+	scale = Vector2(0.7, 0.7)
 
 	# Determine coin tier via Gaussian Distribution
 	_initialize_coin_tier()
@@ -49,28 +50,28 @@ func _initialize_coin_tier() -> void:
 	#   else    →  ~98.5%  → Gold  (Common)
 	if roll >= 3.8:
 		# Red (Ultra Rare)
-		value = 1000
+		value = 500
 		_color_main = Color(0.65, 0.05, 0.05)
 		_color_inner = Color(0.95, 0.25, 0.25)
 		_color_gem_dark = Color(0.5, 0.0, 0.0)
 		_color_gem_light = Color(1.0, 0.7, 0.7)
 	elif roll >= 3.0:
 		# Blue (Rare)
-		value = 100
+		value = 50
 		_color_main = Color(0.05, 0.35, 0.65)
 		_color_inner = Color(0.25, 0.65, 0.95)
 		_color_gem_dark = Color(0.0, 0.2, 0.5)
 		_color_gem_light = Color(0.7, 0.9, 1.0)
 	elif roll >= 2.5:
 		# Green (Uncommon)
-		value = 25
+		value = 12
 		_color_main = Color(0.05, 0.55, 0.15)
 		_color_inner = Color(0.25, 0.85, 0.35)
 		_color_gem_dark = Color(0.0, 0.4, 0.1)
 		_color_gem_light = Color(0.7, 1.0, 0.8)
 	else:
 		# Gold (Common) — ~98.5% of all spawns
-		value = 4
+		value = 2
 		_color_main = Color(0.88, 0.60, 0.02)
 		_color_inner = Color(1.0, 0.88, 0.28)
 		_color_gem_dark = Color(0.72, 0.44, 0.0)
@@ -86,7 +87,7 @@ func _process(delta: float) -> void:
 	if _road and _road.has_method("get_road_height"):
 		_base_y = _road.call("get_road_height", global_position.x)
 	
-	var hover = sin(_elapsed * 3.2 + _hover_offset) * 12.0 - 32.0
+	var hover = sin(_elapsed * 3.2 + _hover_offset) * 12.0 - 45.0
 	position.y = _base_y + hover
 
 	queue_redraw()

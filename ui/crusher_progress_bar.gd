@@ -58,9 +58,17 @@ func _physics_process(delta: float) -> void:
 	var active_body = _get_active_player_body()
 	if is_instance_valid(active_body):
 		var current_x = active_body.global_position.x
-		if current_x >= end_x:
+		
+		# Slide the UI away when player clears the last crusher
+		if current_x >= end_x and offset_top > -130:
+			var tween = create_tween().set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_BACK)
+			tween.tween_property(self, "offset_top", -140.0, 0.4)
+			tween.tween_property(self, "offset_bottom", -10.0, 0.4)
+			offset_top = -140
+			
+		# Reset road flattening only when player is fully past the 400px hilly transition zone
+		if current_x >= end_x + 500.0:
 			is_active = false
-			# Restore road chunks to normal (re-hillify) using cached reference
 			if is_instance_valid(_road):
 				_road.set("crusher_flat_start_x", 0.0)
 				_road.set("crusher_flat_end_x", 0.0)
@@ -74,12 +82,7 @@ func end_event() -> void:
 	# Clean up any active treadmills in the scene
 	for t in get_tree().get_nodes_in_group("treadmills"):
 		t.queue_free()
-		
-	# Slide up offscreen using offsets and queue free
-	var tween = create_tween().set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_BACK)
-	tween.tween_property(self, "offset_top", -140.0, 0.4)
-	tween.tween_property(self, "offset_bottom", -10.0, 0.4)
-	tween.tween_callback(queue_free)
+	queue_free()
 
 func _draw() -> void:
 	# Get player X for current progress calculation

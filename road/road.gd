@@ -161,7 +161,14 @@ func clear_road_geometry_caches() -> void:
 	cumulative_offset_cache.clear()
 	tunnel_cache.clear()
 
-const TUNNEL_MIN_SPACING := 6000.0
+const TUNNEL_MIN_SPACING := 30000.0
+
+# Dynamic tunnel spawning tracking
+var next_planned_tunnel_x: float = 90000.0
+var _tunnel_is_queued: bool = false
+var _tunnel_positions: Array[float] = []
+var _was_mission_active: bool = false
+var _mission_end_x: float = -1.0
 
 var ground_material: ShaderMaterial = null
 var water_material: ShaderMaterial = null
@@ -584,11 +591,18 @@ func has_tunnel_at_chunk_static(chunk_index: int) -> bool:
 	if abs(chunk_index) <= spawn_buffer_chunks:
 		return false
 		
-	var spacing_chunks = int(ceil(TUNNEL_MIN_SPACING / chunk_width))
-	if abs(chunk_index) % spacing_chunks != 0:
-		return false
+	if Engine.is_editor_hint():
+		var spacing_chunks = int(ceil(90000.0 / chunk_width))
+		return abs(chunk_index) % spacing_chunks == 0
 		
-	return true
+	# Check if this chunk index contains any planned tunnel position
+	var chunk_start = chunk_index * chunk_width
+	var chunk_end = (chunk_index + 1) * chunk_width
+	for tx in _tunnel_positions:
+		if tx >= chunk_start and tx < chunk_end:
+			return true
+			
+	return false
 
 func should_spawn_house_static(chunk_idx: int) -> bool:
 	if chunk_idx <= 1:
@@ -776,9 +790,6 @@ func is_event_active() -> bool:
 
 # Deterministically get tunnel details for a given chunk
 func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
-	if is_event_active():
-		return {}
-
 	# No tunnels in water biome (submerged road)
 	var biome = get_current_biome()
 	if biome and biome.is_water:
@@ -792,29 +803,29 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 	if abs(chunk_index) <= spawn_buffer_chunks:
 		return {}
 		
-	# Enforce spacing: tunnels can only spawn at chunk indices that respect the minimum physical spacing
-	var spacing_chunks = int(ceil(TUNNEL_MIN_SPACING / chunk_width))
-	if abs(chunk_index) % spacing_chunks != 0:
-		return {}
-		
-	var rng = RandomNumberGenerator.new()
-	# Deterministic seed per chunk
-	rng.seed = hash(str(road_seed) + "_tunnel_" + str(chunk_index))
-	
-	# Always spawn a tunnel in this valid chunk for guaranteed spawning
-	if true:
-		# Tunnel is centered in the middle of the chunk
-		var tunnel_x = (chunk_index + 0.5) * chunk_width
-		var base_y = get_base_road_height(tunnel_x)
-		
+	var found_tx: float = -1.0
+	if Engine.is_editor_hint():
+		var spacing_chunks = int(ceil(90000.0 / chunk_width))
+		if abs(chunk_index) % spacing_chunks == 0:
+			found_tx = (chunk_index + 0.5) * chunk_width
+	else:
+		# Use the dynamic planned positions at runtime
+		for tx in _tunnel_positions:
+			if tx >= chunk_index * chunk_width and tx < (chunk_index + 1) * chunk_width:
+				found_tx = tx
+				break
+				
+	if found_tx != -1.0:
+		var base_y = get_base_road_height(found_tx)
 		var tunnel_data = {
-			"x": tunnel_x,
+			"x": found_tx,
 			"y": base_y,
 			"width": 1000.0,
 			"height": 320.0
 		}
 		tunnel_cache[chunk_index] = tunnel_data
 		return tunnel_data
+		
 	return {}
 
 # Math function defining the height of the road at any X coordinate, flattened inside tunnels and paddings, smoothed in transitions
@@ -998,12 +1009,67 @@ func generate_road() -> void:
 			if child.has_method("snap_to_road"):
 				child.call("snap_to_road")
 
+func is_mission_or_event_active() -> bool:
+	if is_event_active():
+		return true
+	if delivery_target_chunk != -1:
+		return true
+	if racing_target_chunk != -1 or is_racing_active:
+		return true
+	if towing_target_chunk != -1 or is_towing_active:
+		return true
+	return false
+
+func _update_tunnel_spawning(current_x: float) -> void:
+	var mission_active = is_mission_or_event_active()
+	
+	if _was_mission_active and not mission_active:
+		_mission_end_x = current_x
+		
+	_was_mission_active = mission_active
+	
+	if _tunnel_is_queued:
+		if not mission_active:
+			if _mission_end_x == -1.0:
+				_mission_end_x = current_x
+			# 300 meters = 9000 pixels
+			if current_x >= _mission_end_x + 9000.0:
+				# Spawn the tunnel in the next chunk ahead
+				var current_view_dist = get_current_view_distance()
+				var spawn_chunk = int(ceil((current_x + current_view_dist) / chunk_width))
+				var tx = (spawn_chunk + 0.5) * chunk_width
+				
+				_tunnel_positions.append(tx)
+				_tunnel_is_queued = false
+				next_planned_tunnel_x = tx + 90000.0
+				_mission_end_x = -1.0
+				
+				# Regenerate chunks immediately to apply the new tunnel
+				clear_road_geometry_caches()
+				regenerate_runtime_chunks()
+	else:
+		var current_view_dist = get_current_view_distance()
+		if current_x + current_view_dist >= next_planned_tunnel_x:
+			if mission_active:
+				_tunnel_is_queued = true
+				_mission_end_x = -1.0
+			else:
+				var chunk_idx = int(round(next_planned_tunnel_x / chunk_width))
+				var tx = (chunk_idx + 0.5) * chunk_width
+				_tunnel_positions.append(tx)
+				next_planned_tunnel_x = tx + 90000.0
+				
+				# Regenerate chunks immediately to apply the new tunnel
+				clear_road_geometry_caches()
+				regenerate_runtime_chunks()
+
 func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
 		
 	# Throttle chunk updates (check every 8 frames instead of every frame)
 	if Engine.get_physics_frames() % 8 == 0:
+		_update_tunnel_spawning(get_target_x())
 		update_chunks(get_target_x())
 		
 	update_active_chunks_geometry()
@@ -1152,12 +1218,33 @@ func spawn_elevator_node(elevator_data: Dictionary) -> Node2D:
 	var elev_scene = load("res://road/simple_elevator.tscn")
 	if not elev_scene:
 		return null
-	var elev = elev_scene.instantiate() as Node2D
+		
+	# Create a container node to hold both elevators so chunk cleanup works out-of-the-box
+	var container = Node2D.new()
+	container.name = "ElevatorsContainer"
+	add_child(container)
+	
 	var road_y = get_road_height(elevator_data["x"])
-	elev.position = Vector2(elevator_data["x"], road_y)
-	elev.set("travel_height", elevator_data["travel_height"])
-	add_child(elev)
-	return elev
+	
+	# 1. Player Elevator (Cyber Blue, layer 1)
+	var player_elev = elev_scene.instantiate() as Node2D
+	player_elev.name = "PlayerElevator"
+	player_elev.position = Vector2(elevator_data["x"], road_y)
+	player_elev.set("travel_height", elevator_data["travel_height"])
+	player_elev.set("is_opponent_elevator", false)
+	player_elev.set("width", 200.0)
+	container.add_child(player_elev)
+	
+	# 2. Opponent Elevator (Neon Pink, layer 2)
+	var opponent_elev = elev_scene.instantiate() as Node2D
+	opponent_elev.name = "OpponentElevator"
+	opponent_elev.position = Vector2(elevator_data["x"], road_y)
+	opponent_elev.set("travel_height", elevator_data["travel_height"])
+	opponent_elev.set("is_opponent_elevator", true)
+	opponent_elev.set("width", 220.0) # Slightly wider to clearly show both layers visually
+	container.add_child(opponent_elev)
+	
+	return container
 
 func spawn_tunnel_node(chunk_index: int, tunnel_data: Dictionary) -> Node2D:
 	var tunnel_scene = load("res://road/tunnel.tscn")
@@ -1391,6 +1478,95 @@ func cleanup_towed_car() -> void:
 		var rope = main.get_node_or_null("TowingRope")
 		if is_instance_valid(rope):
 			rope.queue_free()
+
+
+func relink_towed_car() -> void:
+	var main = get_node_or_null("/root/main")
+	if not main:
+		return
+	var towed = main.get_node_or_null("TowedCar")
+	if not is_instance_valid(towed):
+		return
+		
+	var truck = get_node_or_null("/root/main/truck")
+	var attach_body: Node2D = null
+	var local_attach_offset = Vector2.ZERO
+	
+	if truck:
+		if truck.get("is_water_mode_active") and is_instance_valid(truck.get("boat")):
+			attach_body = truck.get("boat")
+			local_attach_offset = Vector2(-75, 10)
+		elif is_instance_valid(truck.get("container_body")):
+			attach_body = truck.get("container_body")
+			local_attach_offset = Vector2(-118, 10)
+		elif is_instance_valid(truck.get("chassis")):
+			attach_body = truck.get("chassis")
+			local_attach_offset = Vector2(-50, 10)
+		else:
+			attach_body = truck
+
+	var old_joint = main.get_node_or_null("TowingJoint")
+	if is_instance_valid(old_joint):
+		old_joint.queue_free()
+	var old_rope = main.get_node_or_null("TowingRope")
+	if is_instance_valid(old_rope):
+		old_rope.queue_free()
+		
+	if attach_body:
+		var joint = DampedSpringJoint2D.new()
+		joint.name = "TowingJoint"
+		joint.disable_collision = true
+		joint.length = 80.0
+		joint.rest_length = 65.0
+		joint.stiffness = 50.0
+		joint.damping = 4.0
+		
+		var attach_point = attach_body.global_position + local_attach_offset.rotated(attach_body.global_rotation)
+		joint.global_position = attach_point
+		main.add_child(joint)
+		joint.node_a = joint.get_path_to(attach_body)
+		joint.node_b = joint.get_path_to(towed)
+		
+		var is_duck = false
+		if towed.get_script():
+			is_duck = "towed_duck" in towed.get_script().resource_path
+		var hook_offset_b = Vector2(38, -12) if is_duck else Vector2(55, -5)
+		
+		# --- Position the towed vehicle at the perfect relaxed rope distance to avoid spring yank ---
+		var player_rot = attach_body.global_rotation
+		var forward_dir = Vector2.RIGHT.rotated(player_rot)
+		
+		var target_hook_pos = attach_point - forward_dir * joint.rest_length
+		var target_towed_pos = target_hook_pos - hook_offset_b.rotated(player_rot)
+		
+		towed.global_position = target_towed_pos
+		towed.global_rotation = player_rot
+		towed.linear_velocity = attach_body.linear_velocity
+		towed.angular_velocity = attach_body.angular_velocity
+		
+		# Also reset its tyres' velocities and positions if they exist
+		var t_back = towed.get("tyre_back")
+		var t_front = towed.get("tyre_front")
+		if is_instance_valid(t_back):
+			t_back.global_position = towed.global_position + Vector2(-35, 10).rotated(player_rot)
+			t_back.linear_velocity = attach_body.linear_velocity
+			t_back.angular_velocity = attach_body.angular_velocity
+		if is_instance_valid(t_front):
+			t_front.global_position = towed.global_position + Vector2(35, 10).rotated(player_rot)
+			t_front.linear_velocity = attach_body.linear_velocity
+			t_front.angular_velocity = attach_body.angular_velocity
+			
+		var rope_script = load("res://road/tow_rope.gd")
+		if rope_script:
+			var rope = Node2D.new()
+			rope.set_script(rope_script)
+			rope.name = "TowingRope"
+			rope.set("body_a", attach_body)
+			rope.set("body_b", towed)
+			rope.set("offset_a", local_attach_offset)
+			rope.set("offset_b", hook_offset_b)
+			main.add_child(rope)
+
 
 
 

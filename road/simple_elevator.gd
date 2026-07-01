@@ -11,6 +11,11 @@ extends AnimatableBody2D
 		height = val
 		update_layout()
 
+@export var is_opponent_elevator := false:
+	set(val):
+		is_opponent_elevator = val
+		update_layout()
+
 @export var travel_height := 250.0
 @export var speed := 150.0
 
@@ -28,6 +33,21 @@ func _ready() -> void:
 	if not Engine.is_editor_hint():
 		start_y = global_position.y
 		target_y = start_y
+		
+		# Set collision layer and mask dynamically
+		if is_opponent_elevator:
+			collision_layer = 2
+			collision_mask = 2
+			if area:
+				area.collision_layer = 2
+				area.collision_mask = 2
+		else:
+			collision_layer = 1
+			collision_mask = 1
+			if area:
+				area.collision_layer = 1
+				area.collision_mask = 1
+				
 		if area:
 			area.body_entered.connect(_on_body_entered)
 			area.body_exited.connect(_on_body_exited)
@@ -38,7 +58,10 @@ func update_layout() -> void:
 	if cr:
 		cr.size = Vector2(width, height)
 		cr.position = Vector2(-width / 2.0, -height / 2.0)
-		cr.color = Color(0.2, 0.6, 0.8) # Sleek cyber blue
+		if is_opponent_elevator:
+			cr.color = Color(0.8, 0.1, 0.4) # Neon Pink
+		else:
+			cr.color = Color(0.2, 0.6, 0.8) # Sleek cyber blue
 		
 		var border = cr.get_node_or_null("Border")
 		if not border:
@@ -47,7 +70,10 @@ func update_layout() -> void:
 			cr.add_child(border)
 		border.size = Vector2(width, 3.0)
 		border.position = Vector2(0, 0)
-		border.color = Color(0.4, 0.8, 1.0) # Light blue glowing top deck
+		if is_opponent_elevator:
+			border.color = Color(1.0, 0.3, 0.6) # Bright neon pink glow
+		else:
+			border.color = Color(0.4, 0.8, 1.0) # Light blue glowing top deck
 		
 	var shape_node = get_node_or_null("CollisionShape2D")
 	if shape_node:
@@ -73,29 +99,40 @@ func update_elevator_state() -> void:
 		return
 		
 	var bodies = area.get_overlapping_bodies()
-	var has_chassis = false
-	var has_container = false
-	var has_boat = false
+	var active = false
 	
-	for b in bodies:
-		if b.name == "boat":
-			has_boat = true
-		elif b.name == "chassis":
-			has_chassis = true
-		elif b.name == "container_body":
-			has_container = true
-			
-	var active = has_boat or (has_chassis and has_container)
+	if is_opponent_elevator:
+		# Detect opponent car
+		for b in bodies:
+			if b is OpponentCar or b.name.begins_with("opponent") or b.get("vehicle_type") != null:
+				active = true
+				break
+	else:
+		# Detect player car parts
+		var has_chassis = false
+		var has_container = false
+		var has_boat = false
+		
+		for b in bodies:
+			if b.name == "boat":
+				has_boat = true
+			elif b.name == "chassis":
+				has_chassis = true
+			elif b.name == "container_body":
+				has_container = true
+				
+		active = has_boat or (has_chassis and has_container)
+	
 	if active:
 		is_waiting_to_fall = false
 		if not is_active:
 			is_active = true
-			print("[Elevator] Truck fully stood on elevator, raising!")
+			print("[Elevator] Vehicle stood on elevator, raising! (opponent=", is_opponent_elevator, ")")
 	else:
 		if is_active and not is_waiting_to_fall:
 			is_waiting_to_fall = true
 			fall_timer = 4.0
-			print("[Elevator] Truck left elevator, waiting 4s before lowering...")
+			print("[Elevator] Vehicle left elevator, waiting 4s before lowering... (opponent=", is_opponent_elevator, ")")
 
 func _on_body_entered(body: Node2D) -> void:
 	if Engine.is_editor_hint():
@@ -116,7 +153,7 @@ func _physics_process(delta: float) -> void:
 		if fall_timer <= 0.0:
 			is_active = false
 			is_waiting_to_fall = false
-			print("[Elevator] Wait time completed, lowering!")
+			print("[Elevator] Wait time completed, lowering! (opponent=", is_opponent_elevator, ")")
 		
 	# Target Y coordinate: if active, move up by travel_height. Note: Y goes up is negative in Godot!
 	var target = start_y - travel_height if is_active else start_y
