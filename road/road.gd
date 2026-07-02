@@ -144,6 +144,16 @@ extends StaticBody2D
 		else:
 			regenerate_runtime_chunks()
 
+## Flat zone length AFTER a downward drop so the truck has room to land
+@export var block_flat_after := 1000.0:
+	set(val):
+		block_flat_after = val
+		clear_road_geometry_caches()
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
 # Seed offsets for waves
 var seed_offset_1 := 0.0
 var seed_offset_2 := 0.0
@@ -643,11 +653,12 @@ func get_raw_base_road_height(x: float) -> float:
 			
 			# Combine waves to create interesting rolling hills and dips, offset by seed
 			var mult = hill_amplitude_multiplier * get_convoy_multiplier(x)
-			var long_hills = sin((x + seed_offset_1) * 0.0015) * 140.0 * mult # Large elevations
-			var medium_waves = cos((x + seed_offset_2) * 0.004) * 50.0 * mult # Medium slopes
-			var small_bumps = sin((x + seed_offset_3) * 0.012) * 12.0 * mult # Small bumpy texture
+			var long_hills = sin((x + seed_offset_1) * 0.0012) * 140.0 * mult # Sweeping hills (wider freq, 140px amp)
+			var medium_waves = cos((x + seed_offset_2) * 0.003) * 60.0 * mult # Medium hills (gentler slope)
+			var sharp_dips = sin((x + seed_offset_2 * 0.6 + seed_offset_3) * 0.008) * 30.0 * mult # Wider frequency dips
+			var small_bumps = sin((x + seed_offset_3) * 0.01) * 12.0 * mult # Mild surface bumps
 			
-			var height = 42.0 + (long_hills + medium_waves + small_bumps)
+			var height = 42.0 + (long_hills + medium_waves + sharp_dips + small_bumps)
 			base_h = lerp(42.0, height, factor)
 
 	# Apply crusher flat land flattening
@@ -660,29 +671,66 @@ func get_raw_base_road_height(x: float) -> float:
 # Base math function defining the height of the road without flattening
 func get_base_road_height(x: float) -> float:
 	var target_x = x
-	var active_block = get_active_block_before(x)
-	if not active_block.is_empty():
-		target_x = active_block["x"] - block_flat_before
-		
+
+	# Freeze height BEFORE upward cliff (approach run-up)
+	var block_before = get_active_block_before(x)
+	if not block_before.is_empty():
+		target_x = block_before["x"] - block_flat_before
+		var raw_h = get_raw_base_road_height(target_x)
+		return raw_h + get_block_height_offset(x)
+
+	# Downward drop: flat landing zone + smooth blend back to terrain
+	const DOWN_TRANSITION := 700.0 # pixels over which height blends back to natural
+	var down_block = _get_down_block_in_range(x, block_flat_after + DOWN_TRANSITION)
+	if not down_block.is_empty():
+		var bx = down_block["x"]
+		var flat_end = bx + block_flat_after
+		if x < flat_end:
+			# Fully flat landing zone
+			var raw_h = get_raw_base_road_height(bx)
+			return raw_h + get_block_height_offset(x)
+		else:
+			# Smooth S-curve blend from frozen height back to natural terrain
+			var t = clamp((x - flat_end) / DOWN_TRANSITION, 0.0, 1.0)
+			var factor = t * t * (3.0 - 2.0 * t) # smoothstep
+			var frozen_h = get_raw_base_road_height(bx) + get_block_height_offset(x)
+			var natural_h = get_raw_base_road_height(x) + get_block_height_offset(x)
+			return lerp(frozen_h, natural_h, factor)
+
 	var raw_h = get_raw_base_road_height(target_x)
 	return raw_h + get_block_height_offset(x)
 
+## Returns the block if x is in the flat zone BEFORE an upward cliff
 func get_active_block_before(x: float) -> Dictionary:
 	if not enable_blocks:
 		return {}
-		
 	var biome = get_current_biome()
 	if biome and biome.is_water:
 		return {}
-		
 	var interval_size = 20000.0
 	var current_idx = int(floor(x / interval_size))
-	
 	for idx in range(current_idx, current_idx + 2):
 		var block = get_block_at_interval(idx)
-		if not block.is_empty():
+		if not block.is_empty() and block.get("type", "up") == "up":
 			var block_x = block["x"]
 			if x >= block_x - block_flat_before and x < block_x:
+				return block
+	return {}
+
+## Returns a down-type block if x falls within search_range pixels after its cliff edge
+func _get_down_block_in_range(x: float, search_range: float) -> Dictionary:
+	if not enable_blocks:
+		return {}
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return {}
+	var interval_size = 20000.0
+	var current_idx = int(floor(x / interval_size))
+	for idx in range(max(0, current_idx - 1), current_idx + 2):
+		var block = get_block_at_interval(idx)
+		if not block.is_empty() and block.get("type", "up") == "down":
+			var bx = block["x"]
+			if x >= bx and x < bx + search_range:
 				return block
 	return {}
 
@@ -788,10 +836,15 @@ func get_block_at_interval(idx: int) -> Dictionary:
 	var raw_h_before = get_raw_base_road_height(spawn_x - block_flat_before)
 	var raw_h_after = get_raw_base_road_height(spawn_x)
 	var adjusted_height = block_height + max(0.0, raw_h_after - raw_h_before)
+	
+	# Randomly roll for block type (upward wall or downward drop)
+	var type_roll = rng.randf()
+	var type = "down" if type_roll < 0.5 else "up"
 		
 	var block_data = {
 		"x": spawn_x,
-		"height": adjusted_height
+		"height": adjusted_height,
+		"type": type
 	}
 	block_cache[idx] = block_data
 	return block_data
@@ -806,7 +859,10 @@ func get_cumulative_offset_at_interval(interval_idx: int) -> float:
 	var current_block_contrib = 0.0
 	var block = get_block_at_interval(interval_idx)
 	if not block.is_empty():
-		current_block_contrib = - block["height"]
+		if block.get("type", "up") == "down":
+			current_block_contrib = block["height"]
+		else:
+			current_block_contrib = - block["height"]
 		
 	var offset = prev_offset + current_block_contrib
 	cumulative_offset_cache[interval_idx] = offset
@@ -831,7 +887,10 @@ func get_block_height_offset(x: float) -> float:
 	var block = get_block_at_interval(current_interval)
 	if not block.is_empty():
 		if x >= block["x"]:
-			offset -= block["height"]
+			if block.get("type", "up") == "down":
+				offset += block["height"]
+			else:
+				offset -= block["height"]
 			
 	return offset
 
@@ -1327,13 +1386,16 @@ func get_elevator_data_for_chunk(chunk_idx: int) -> Dictionary:
 	for idx in range(max(0, start_interval), end_interval + 1):
 		var block = get_block_at_interval(idx)
 		if not block.is_empty():
+			# Down-type blocks: no elevator — truck drives off the cliff freely
+			if block.get("type", "up") == "down":
+				continue
 			var block_x = block["x"]
-			var elev_x = block_x - 120.0 # Center of elevator
+			var elev_x = block_x - 120.0 # Elevator sits before the upward wall
 			if elev_x >= start_x and elev_x < end_x:
 				var y_before = get_road_height(block_x - 0.01)
 				var y_after = get_road_height(block_x)
 				var cliff_height = y_before - y_after
-				if cliff_height <= 10.0:
+				if abs(cliff_height) <= 10.0:
 					return {}
 				return {
 					"x": elev_x,
