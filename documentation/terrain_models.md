@@ -55,3 +55,15 @@ The dynamic blend factor `blend` is defined by:
    A low-frequency sine wave based on distance `x` (wavelength of ~25,000 pixels / 1.25km). The shift is biased so that the rugged terrain stays fully active for ~50% of the cycle, transitions smoothly for ~21%, and leaves a quick smooth breather section for ~29% of the cycle.
 3. **Synthesis:**
    `blend = raw_shift * max_ruggedness`
+
+---
+
+## Procedural Physics Bridges
+To add physical and aesthetic variety, the terrain system periodically cuts the road to spawn hanging, physics-jointed bridges:
+* **Spawning Criteria:** Spawns deterministically in chunks where `abs(chunk_index) % 8 == 5`, excluding water biomes, start buffer zones, or chunks with tunnels/elevators.
+* **Canyon Profile:** Shipped as a smooth parabolic canyon of width `700` pixels:
+  $$\text{depth}(x) = \text{base\_height} + 260.0 \times \left( \frac{\cos\left(\frac{x - x_{center}}{350.0} \pi\right) + 1.0}{2} \right)$$
+* **Plank Bridge System:**
+  - Spawns a chain of **10 RigidBody2D planks** (with wooden Polygon2D aesthetics and borders) linked using **PinJoint2D** connectors.
+  - The left-most and right-most joints anchor the bridge to the main `StaticBody2D` road.
+  - The asphalt visual lines (`Line2D` and `Line2D2`) are split precisely around the bridge gap so they stop at the cliffs, keeping the bridge looking natural and suspended.

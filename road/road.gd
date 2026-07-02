@@ -1125,12 +1125,58 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 		
 	return {}
 
+# Deterministically get bridge details for a given chunk
+func get_bridge_at_chunk(chunk_index: int) -> Dictionary:
+	# Avoid bridge spawn near start
+	if abs(chunk_index) <= 2:
+		return {}
+	
+	# Avoid bridge in water biome
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return {}
+		
+	# Spawn a bridge every 8 chunks (e.g. chunk index % 8 == 5)
+	if abs(chunk_index) % 8 == 5:
+		# Check if there is an elevator or a tunnel at this chunk (to avoid overlap)
+		var tunnel = get_tunnel_at_chunk(chunk_index)
+		if not tunnel.is_empty():
+			return {}
+		var elev = get_elevator_data_for_chunk(chunk_index)
+		if not elev.is_empty():
+			return {}
+			
+		var center_x = (chunk_index + 0.5) * chunk_width
+		var base_y = get_base_road_height(center_x)
+		return {
+			"x": center_x,
+			"y": base_y,
+			"width": 700.0
+		}
+	return {}
+
 # Math function defining the height of the road at any X coordinate, flattened inside tunnels and paddings, smoothed in transitions
 func get_road_height(x: float) -> float:
+	# Check for bridge canyons first
+	var min_chunk_idx = int(floor((x - 1000.0) / chunk_width))
+	var max_chunk_idx = int(floor((x + 1000.0) / chunk_width))
+	for check_idx in range(min_chunk_idx, max_chunk_idx + 1):
+		var bridge = get_bridge_at_chunk(check_idx)
+		if not bridge.is_empty():
+			var bx = bridge["x"]
+			var by = bridge["y"]
+			var bw = bridge["width"]
+			var half_w = bw / 2.0
+			var dist = x - bx
+			if abs(dist) < half_w:
+				# Smooth parabolic canyon profile
+				var factor = (cos((dist / half_w) * PI) + 1.0) / 2.0
+				return by + factor * 260.0
+
 	# Determine range of chunk indices that can physically influence the height at x
 	var max_influence = 2500.0 # Safe upper bound for half width (1000) + padding (200) + transition (800)
-	var min_chunk_idx = int(floor((x - max_influence) / chunk_width))
-	var max_chunk_idx = int(floor((x + max_influence) / chunk_width))
+	min_chunk_idx = int(floor((x - max_influence) / chunk_width))
+	max_chunk_idx = int(floor((x + max_influence) / chunk_width))
 	
 	for check_idx in range(min_chunk_idx, max_chunk_idx + 1):
 		var tunnel = get_tunnel_at_chunk(check_idx)
@@ -1566,6 +1612,34 @@ func spawn_tunnel_node(chunk_index: int, tunnel_data: Dictionary) -> Node2D:
 	add_child(tunnel)
 	return tunnel
 
+func spawn_physics_bridge(chunk_index: int, bridge_x: float, bridge_y: float, bridge_width: float) -> Node2D:
+	var container = Node2D.new()
+	container.name = "BridgeContainer"
+	
+	# Load the compiled script file for safe, clean runtime execution
+	var bridge_script = load("res://road/bridge.gd")
+	if bridge_script:
+		container.set_script(bridge_script)
+	add_child(container)
+	
+	var start_x = bridge_x - bridge_width / 2.0
+	var end_x = bridge_x + bridge_width / 2.0
+	var start_y = get_base_road_height(start_x)
+	var end_y = get_base_road_height(end_x)
+	
+	container.set("start_pos", Vector2(start_x, start_y))
+	container.set("end_pos", Vector2(end_x, end_y))
+	
+	var plank_count = 14
+	var plank_length = bridge_width / plank_count
+	container.set("plank_length", plank_length)
+	container.set("N", plank_count + 1)
+	
+	if container.has_method("initialize_bridge"):
+		container.call("initialize_bridge")
+		
+	return container
+
 func spawn_house_node(chunk_index: int) -> Node2D:
 	var house_script = load("res://road/house.gd")
 	if not house_script:
@@ -1954,21 +2028,80 @@ func create_chunk(i: int) -> void:
 	fill.material = get_ground_material(template_fill_color, road_color)
 	add_child(fill)
 	
-	# Create Line2D
-	var line = Line2D.new()
-	line.points = surface_points
-	line.width = 0.0 if current_biome.is_water else road_thickness
-	line.default_color = road_color
-	add_child(line)
+	# Create Line2D (Split around bridge if present)
+	var line = null
+	var line_right = null
+	var bridge_data = get_bridge_at_chunk(i)
+	
+	if not bridge_data.is_empty():
+		var bx = bridge_data["x"]
+		var bw = bridge_data["width"]
+		var half_w = bw / 2.0
+		var bridge_start = bx - half_w
+		var bridge_end = bx + half_w
+		
+		var left_points = PackedVector2Array()
+		var right_points = PackedVector2Array()
+		for pt in surface_points:
+			if pt.x <= bridge_start:
+				left_points.append(pt)
+			elif pt.x >= bridge_end:
+				right_points.append(pt)
+				
+		line = Line2D.new()
+		line.points = left_points
+		line.width = 0.0 if current_biome.is_water else road_thickness
+		line.default_color = road_color
+		add_child(line)
+		
+		line_right = Line2D.new()
+		line_right.points = right_points
+		line_right.width = 0.0 if current_biome.is_water else road_thickness
+		line_right.default_color = road_color
+		add_child(line_right)
+	else:
+		line = Line2D.new()
+		line.points = surface_points
+		line.width = 0.0 if current_biome.is_water else road_thickness
+		line.default_color = road_color
+		add_child(line)
 	
 	# Create second Line2D
 	var line2 = null
+	var line2_right = null
 	if enable_second_road:
-		line2 = Line2D.new()
-		line2.points = surface_points_2
-		line2.width = 0.0 if current_biome.is_water else road_thickness
-		line2.default_color = road_color
-		add_child(line2)
+		if not bridge_data.is_empty():
+			var bx = bridge_data["x"]
+			var bw = bridge_data["width"]
+			var half_w = bw / 2.0
+			var bridge_start = bx - half_w
+			var bridge_end = bx + half_w
+			
+			var left_points_2 = PackedVector2Array()
+			var right_points_2 = PackedVector2Array()
+			for pt in surface_points_2:
+				if pt.x <= bridge_start:
+					left_points_2.append(pt)
+				elif pt.x >= bridge_end:
+					right_points_2.append(pt)
+					
+			line2 = Line2D.new()
+			line2.points = left_points_2
+			line2.width = 0.0 if current_biome.is_water else road_thickness
+			line2.default_color = road_color
+			add_child(line2)
+			
+			line2_right = Line2D.new()
+			line2_right.points = right_points_2
+			line2_right.width = 0.0 if current_biome.is_water else road_thickness
+			line2_right.default_color = road_color
+			add_child(line2_right)
+		else:
+			line2 = Line2D.new()
+			line2.points = surface_points_2
+			line2.width = 0.0 if current_biome.is_water else road_thickness
+			line2.default_color = road_color
+			add_child(line2)
 	
 	# Create GrassDecorator
 	current_biome = get_current_biome()
@@ -2026,15 +2159,24 @@ func create_chunk(i: int) -> void:
 	if not elevator_data.is_empty():
 		elevator_node = spawn_elevator_node(elevator_data)
 		
+	# Spawn physics bridge at runtime if present
+	var bridge_node = null
+	if not Engine.is_editor_hint():
+		if not bridge_data.is_empty():
+			bridge_node = spawn_physics_bridge(i, bridge_data["x"], bridge_data["y"], bridge_data["width"])
+		
 	active_chunks[i] = {
 		"collision": col_poly,
 		"fill": fill,
 		"line": line,
+		"line_right": line_right,
 		"line2": line2,
+		"line2_right": line2_right,
 		"grass": grass,
 		"grass2": grass2,
 		"house": house_node,
-		"elevator": elevator_node
+		"elevator": elevator_node,
+		"bridge": bridge_node
 	}
 
 func destroy_chunk(i: int) -> void:
@@ -2046,8 +2188,12 @@ func destroy_chunk(i: int) -> void:
 			chunk.fill.queue_free()
 		if is_instance_valid(chunk.line):
 			chunk.line.queue_free()
+		if "line_right" in chunk and is_instance_valid(chunk.line_right):
+			chunk.line_right.queue_free()
 		if "line2" in chunk and is_instance_valid(chunk.line2):
 			chunk.line2.queue_free()
+		if "line2_right" in chunk and is_instance_valid(chunk.line2_right):
+			chunk.line2_right.queue_free()
 		if "grass" in chunk and is_instance_valid(chunk.grass):
 			chunk.grass.queue_free()
 		if "grass2" in chunk and is_instance_valid(chunk.grass2):
@@ -2058,6 +2204,8 @@ func destroy_chunk(i: int) -> void:
 			chunk.house.queue_free()
 		if "elevator" in chunk and is_instance_valid(chunk.elevator):
 			chunk.elevator.queue_free()
+		if "bridge" in chunk and is_instance_valid(chunk.bridge):
+			chunk.bridge.queue_free()
 		active_chunks.erase(i)
 
 func spawn_crusher_on_next_chunk() -> void:
