@@ -182,6 +182,8 @@ var is_convoy_active := false
 var convoy_start_x := 0.0
 var convoy_end_x := 0.0
 var has_convoy_ended := false
+# When a delivery/tow mission is active, convoy auto-ends at this X
+var convoy_auto_end_x := -1.0
 
 # Crusher event variables for flat road transition
 var crusher_flat_start_x := 0.0
@@ -852,11 +854,26 @@ func get_block_in_range(x1: float, x2: float) -> Dictionary:
 				return block
 	return {}
 
+# Returns the world-X of the active delivery or tow destination, or -1 if none
+func _get_active_mission_destination_x() -> float:
+	if delivery_target_chunk != -1:
+		return delivery_target_chunk * chunk_width
+	if towing_target_chunk != -1:
+		return towing_target_chunk * chunk_width
+	return -1.0
+
 func start_active_event(event_name: String) -> void:
 	if event_name == "Convoy":
 		is_convoy_active = true
 		has_convoy_ended = false
 		convoy_start_x = get_target_x()
+		convoy_auto_end_x = -1.0
+		# If delivery or tow is active, auto-end convoy before the destination
+		var dest_x = _get_active_mission_destination_x()
+		if dest_x > 0.0:
+			# End convoy 5000px (250m) before destination so road has time to un-flatten
+			convoy_auto_end_x = dest_x - 5000.0
+			print("[Road] Convoy capped: will auto-end at X=", convoy_auto_end_x, " (destination at X=", dest_x, ")")
 		clear_road_geometry_caches()
 		regenerate_runtime_chunks()
 
@@ -865,6 +882,7 @@ func end_active_event(event_name: String) -> void:
 		is_convoy_active = false
 		has_convoy_ended = true
 		convoy_end_x = get_target_x()
+		convoy_auto_end_x = -1.0
 		clear_road_geometry_caches()
 		regenerate_runtime_chunks()
 
@@ -1171,6 +1189,12 @@ func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
 		
+	# Auto-end convoy before mission destination if a cap was set
+	if is_convoy_active and convoy_auto_end_x > 0.0:
+		if get_target_x() >= convoy_auto_end_x:
+			print("[Road] Convoy auto-ended before mission destination.")
+			end_active_event("Convoy")
+	
 	# Throttle chunk updates (check every 8 frames instead of every frame)
 	if Engine.get_physics_frames() % 8 == 0:
 		update_chunks(get_target_x())
@@ -1865,6 +1889,15 @@ func spawn_crusher_on_next_chunk() -> void:
 	var num_crushers = randi_range(3, 8)
 	var first_crusher_x = player_x + 800.0
 	var spacing = 400.0
+	
+	# If delivery or tow is active, cap crushers so zone ends before destination
+	var dest_x = _get_active_mission_destination_x()
+	if dest_x > 0.0:
+		# Leave 3000px (150m) buffer before destination for the road to recover
+		var max_end_x = dest_x - 3000.0
+		var max_crushers = int(floor((max_end_x - first_crusher_x) / spacing)) + 1
+		num_crushers = clamp(num_crushers, 1, max(1, max_crushers))
+		print("[Road] Crusher capped to ", num_crushers, " (destination at X=", dest_x, ")")
 	
 	# Define flat road zone boundaries to cover the entire sequence dynamically
 	crusher_flat_start_x = first_crusher_x - 300.0
