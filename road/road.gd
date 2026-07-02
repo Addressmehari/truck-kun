@@ -1,6 +1,7 @@
 @tool
 extends StaticBody2D
 
+enum TerrainType { RUGGED, SMOOTH, CUSTOM }
 @export var road_length := 15000.0:
 	set(val):
 		road_length = val
@@ -67,6 +68,61 @@ extends StaticBody2D
 			generate_road()
 		else:
 			regenerate_runtime_chunks()
+
+@export var terrain_type: TerrainType = TerrainType.RUGGED:
+	set(val):
+		terrain_type = val
+		_apply_terrain_preset()
+		clear_road_geometry_caches()
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
+@export_subgroup("Terrain Wave Amplitudes")
+@export var mountain_amplitude := 220.0:
+	set(val):
+		mountain_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+@export var long_hills_amplitude := 85.0:
+	set(val):
+		long_hills_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+@export var medium_waves_amplitude := 50.0:
+	set(val):
+		medium_waves_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+@export var smooth_spikes_amplitude := 65.0:
+	set(val):
+		smooth_spikes_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+@export var sharp_dips_amplitude := 25.0:
+	set(val):
+		sharp_dips_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+@export var lil_spikes_amplitude := 18.0:
+	set(val):
+		lil_spikes_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+@export var small_bumps_amplitude := 12.0:
+	set(val):
+		small_bumps_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+
 
 @export var road_seed := 12345:
 	set(val):
@@ -170,6 +226,32 @@ func clear_road_geometry_caches() -> void:
 	block_cache.clear()
 	cumulative_offset_cache.clear()
 	tunnel_cache.clear()
+
+func _on_terrain_param_changed() -> void:
+	clear_road_geometry_caches()
+	if Engine.is_editor_hint():
+		generate_road()
+	else:
+		regenerate_runtime_chunks()
+
+func _apply_terrain_preset() -> void:
+	if terrain_type == TerrainType.RUGGED:
+		mountain_amplitude = 220.0
+		long_hills_amplitude = 85.0
+		medium_waves_amplitude = 50.0
+		smooth_spikes_amplitude = 65.0
+		sharp_dips_amplitude = 25.0
+		lil_spikes_amplitude = 18.0
+		small_bumps_amplitude = 12.0
+	elif terrain_type == TerrainType.SMOOTH:
+		mountain_amplitude = 130.0
+		long_hills_amplitude = 60.0
+		medium_waves_amplitude = 35.0
+		smooth_spikes_amplitude = 15.0
+		sharp_dips_amplitude = 8.0
+		lil_spikes_amplitude = 0.0
+		small_bumps_amplitude = 6.0
+
 
 const TUNNEL_MIN_SPACING := 30000.0
 
@@ -653,16 +735,18 @@ func get_raw_base_road_height(x: float) -> float:
 			
 			# Combine waves to create varied terrain, offset by seed
 			var mult = hill_amplitude_multiplier * get_convoy_multiplier(x)
-			var mountains     = sin((x + seed_offset_3 * 0.3 + seed_offset_1 * 0.7) * 0.0003) * 220.0 * mult # Mountains — very wide spacing (max slope 0.066)
-			var long_hills    = sin((x + seed_offset_1) * 0.0007) * 85.0  * mult # Rolling hills — spaced out (max 0.060)
-			var medium_waves  = cos((x + seed_offset_2) * 0.0013) * 50.0  * mult # Moderate undulation (max 0.065)
-			var smooth_spikes = sin((x + seed_offset_2 * 1.5 + seed_offset_3) * 0.006) * 65.0 * mult # Narrow spikes — unchanged (max 0.39)
-			var sharp_dips    = sin((x + seed_offset_2 * 0.6 + seed_offset_3) * 0.003) * 25.0 * mult # Dips — more spread out (max 0.075)
-			var lil_spikes    = sin((x + seed_offset_1 * 2.1 + seed_offset_2) * 0.022) * 18.0 * mult # Tiny spikes — unchanged (max 0.40)
-			var small_bumps   = sin((x + seed_offset_3) * 0.008) * 12.0   * mult # Surface texture — unchanged
+			
+			var mountains     = sin((x + seed_offset_3 * 0.3 + seed_offset_1 * 0.7) * 0.0003) * mountain_amplitude * mult
+			var long_hills    = sin((x + seed_offset_1) * 0.0007) * long_hills_amplitude * mult
+			var medium_waves  = cos((x + seed_offset_2) * 0.0013) * medium_waves_amplitude * mult
+			var smooth_spikes = sin((x + seed_offset_2 * 1.5 + seed_offset_3) * 0.006) * smooth_spikes_amplitude * mult
+			var sharp_dips    = sin((x + seed_offset_2 * 0.6 + seed_offset_3) * 0.003) * sharp_dips_amplitude * mult
+			var lil_spikes    = sin((x + seed_offset_1 * 2.1 + seed_offset_2) * 0.022) * lil_spikes_amplitude * mult
+			var small_bumps   = sin((x + seed_offset_3) * 0.008) * small_bumps_amplitude * mult
 			
 			var height = 42.0 + (mountains + long_hills + medium_waves + smooth_spikes + sharp_dips + lil_spikes + small_bumps)
 			base_h = lerp(42.0, height, factor)
+
 
 	# Apply crusher flat land flattening
 	var crusher_mult = get_crusher_multiplier(x)
