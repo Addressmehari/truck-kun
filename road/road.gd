@@ -1768,6 +1768,51 @@ func create_chunk(i: int) -> void:
 		line2.default_color = road_color
 		add_child(line2)
 	
+	# Create GrassDecorator
+	current_biome = get_current_biome()
+	var grass = null
+	var grass2 = null
+	var grass_script = load("res://road/grass_decorator.gd")
+	if grass_script and current_biome.spawn_foliage:
+		grass = grass_script.new()
+		grass.points = surface_points
+		grass.color = current_biome.foliage_color if current_biome.foliage_color != Color(0, 0, 0, 0) else road_color
+		grass.road_seed = road_seed
+		grass.chunk_index = i
+		grass.chunk_width = chunk_width
+		grass.road = self
+		grass.textures = grass_textures
+		grass.sprite_frames = grass_frames
+		grass.density_multiplier = current_biome.foliage_density_multiplier
+		add_child(grass)
+		
+		# GrassDecorator2 for the second road line
+		if enable_second_road:
+			grass2 = grass_script.new()
+			grass2.points = surface_points_2
+			grass2.color = current_biome.foliage_color if current_biome.foliage_color != Color(0, 0, 0, 0) else road_color
+			grass2.road_seed = road_seed + 1
+			grass2.chunk_index = i
+			grass2.chunk_width = chunk_width
+			grass2.road = self
+			grass2.textures = grass_textures
+			grass2.sprite_frames = grass_frames
+			grass2.density_multiplier = 0.4 * current_biome.foliage_density_multiplier
+			add_child(grass2)
+	
+	# Spawn house based on seeded natural random distribution (no tunnels active)
+	var house_node = null
+	if should_spawn_house_procedurally(i):
+		house_node = spawn_house_node(i)
+		if used_house_chunks.has(i):
+			house_node.set("has_accepted", true)
+		if i == delivery_target_chunk:
+			house_node.call("setup_delivery_target", delivery_crate_count, delivery_reward)
+		elif i == racing_target_chunk:
+			house_node.call("setup_racing_target", racing_reward)
+		elif i == towing_target_chunk:
+			house_node.call("setup_towing_target", towing_reward)
+	
 	# Spawn elevator if present
 	var elevator_node = null
 	var elevator_data = get_elevator_data_for_chunk(i)
@@ -1779,6 +1824,9 @@ func create_chunk(i: int) -> void:
 		"fill": fill,
 		"line": line,
 		"line2": line2,
+		"grass": grass,
+		"grass2": grass2,
+		"house": house_node,
 		"elevator": elevator_node
 	}
 

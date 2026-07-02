@@ -105,7 +105,6 @@ func _physics_process(delta: float) -> void:
 
 # ── Spawn until we have pool_size coins within spawn_lead ahead ───────────────
 func _fill_pool() -> void:
-	return # DISABLED: no spawning during road reset
 	if not _coin_scene:
 		return
 
@@ -127,19 +126,13 @@ func _fill_pool() -> void:
 	if _road and _road.has_method("is_event_active"):
 		is_event_running = _road.call("is_event_active")
 
-	var on_cooldown = (_cooldown_timer > 0.0)
-	var spawn_blocked = is_event_running or on_cooldown
-
 	while ahead_count < pool_size and _next_spawn_x < chassis_x + spawn_lead:
-		# Decide whether to place a mystery box, petrol can, cluster, or single coin
 		var roll = _rng.randf()
-		if not spawn_blocked and _mystery_box_scene and roll < mystery_box_chance:
-			_spawn_mystery_box(_next_spawn_x)
-			ahead_count += 1
-		elif _petrol_scene and roll < (mystery_box_chance if not spawn_blocked else 0.0) + petrol_chance:
+		# Mystery boxes are disabled — skip that branch entirely
+		if _petrol_scene and roll < petrol_chance:
 			_spawn_petrol(_next_spawn_x)
 			ahead_count += 1
-		elif roll < (mystery_box_chance if not spawn_blocked else 0.0) + petrol_chance + cluster_chance:
+		elif roll < petrol_chance + cluster_chance:
 			_spawn_cluster(_next_spawn_x)
 			ahead_count += 3
 		else:
