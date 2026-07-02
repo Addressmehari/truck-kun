@@ -1800,9 +1800,14 @@ func create_chunk(i: int) -> void:
 			grass2.density_multiplier = 0.4 * current_biome.foliage_density_multiplier
 			add_child(grass2)
 	
+	# Suppress houses during convoy (flat-road event) and crusher events
+	var convoy_running: bool = get("is_convoy_active") == true
+	var crusher_running: bool = crusher_flat_start_x != 0.0 and crusher_flat_end_x != 0.0
+	var suppress_houses: bool = convoy_running or crusher_running
+
 	# Spawn house based on seeded natural random distribution (no tunnels active)
 	var house_node = null
-	if should_spawn_house_procedurally(i):
+	if not suppress_houses and should_spawn_house_procedurally(i):
 		house_node = spawn_house_node(i)
 		if used_house_chunks.has(i):
 			house_node.set("has_accepted", true)
