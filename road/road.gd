@@ -1,7 +1,7 @@
 @tool
 extends StaticBody2D
 
-enum TerrainType { RUGGED, SMOOTH, CUSTOM }
+enum TerrainType { RUGGED, SMOOTH, BOTH, CUSTOM }
 @export var road_length := 15000.0:
 	set(val):
 		road_length = val
@@ -251,6 +251,7 @@ func _apply_terrain_preset() -> void:
 		sharp_dips_amplitude = 8.0
 		lil_spikes_amplitude = 0.0
 		small_bumps_amplitude = 6.0
+	# BOTH does not set static parameters on the sliders, as they vary dynamically by distance.
 
 
 const TUNNEL_MIN_SPACING := 30000.0
@@ -736,13 +737,39 @@ func get_raw_base_road_height(x: float) -> float:
 			# Combine waves to create varied terrain, offset by seed
 			var mult = hill_amplitude_multiplier * get_convoy_multiplier(x)
 			
-			var mountains     = sin((x + seed_offset_3 * 0.3 + seed_offset_1 * 0.7) * 0.0003) * mountain_amplitude * mult
-			var long_hills    = sin((x + seed_offset_1) * 0.0007) * long_hills_amplitude * mult
-			var medium_waves  = cos((x + seed_offset_2) * 0.0013) * medium_waves_amplitude * mult
-			var smooth_spikes = sin((x + seed_offset_2 * 1.5 + seed_offset_3) * 0.006) * smooth_spikes_amplitude * mult
-			var sharp_dips    = sin((x + seed_offset_2 * 0.6 + seed_offset_3) * 0.003) * sharp_dips_amplitude * mult
-			var lil_spikes    = sin((x + seed_offset_1 * 2.1 + seed_offset_2) * 0.022) * lil_spikes_amplitude * mult
-			var small_bumps   = sin((x + seed_offset_3) * 0.008) * small_bumps_amplitude * mult
+			var active_mountain = mountain_amplitude
+			var active_long_hills = long_hills_amplitude
+			var active_medium_waves = medium_waves_amplitude
+			var active_smooth_spikes = smooth_spikes_amplitude
+			var active_sharp_dips = sharp_dips_amplitude
+			var active_lil_spikes = lil_spikes_amplitude
+			var active_small_bumps = small_bumps_amplitude
+			
+			if terrain_type == TerrainType.BOTH:
+				var dist = max(0.0, abs(x))
+				# Starts smooth, but ramps up to full ruggedness potential quickly between 1000px and 7000px (~350m)
+				var max_ruggedness = clamp((dist - 1000.0) / 6000.0, 0.0, 1.0)
+				# Sine wave with ~25k pixel wavelength (~1.25km cycle)
+				var cycle_val = sin(dist * 0.00025 + road_seed * 0.07)
+				# Wide rugged peaks (stays at 1.0 for ~50% of the cycle), quick smooth breaks (~29% of the cycle)
+				var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 1.0)
+				var blend = raw_shift * max_ruggedness
+				
+				active_mountain      = lerp(130.0, 220.0, blend)
+				active_long_hills    = lerp(60.0, 85.0, blend)
+				active_medium_waves  = lerp(35.0, 50.0, blend)
+				active_smooth_spikes = lerp(15.0, 65.0, blend)
+				active_sharp_dips    = lerp(8.0, 25.0, blend)
+				active_lil_spikes    = lerp(0.0, 18.0, blend)
+				active_small_bumps   = lerp(6.0, 12.0, blend)
+			
+			var mountains     = sin((x + seed_offset_3 * 0.3 + seed_offset_1 * 0.7) * 0.0003) * active_mountain * mult
+			var long_hills    = sin((x + seed_offset_1) * 0.0007) * active_long_hills * mult
+			var medium_waves  = cos((x + seed_offset_2) * 0.0013) * active_medium_waves * mult
+			var smooth_spikes = sin((x + seed_offset_2 * 1.5 + seed_offset_3) * 0.006) * active_smooth_spikes * mult
+			var sharp_dips    = sin((x + seed_offset_2 * 0.6 + seed_offset_3) * 0.003) * active_sharp_dips * mult
+			var lil_spikes    = sin((x + seed_offset_1 * 2.1 + seed_offset_2) * 0.022) * active_lil_spikes * mult
+			var small_bumps   = sin((x + seed_offset_3) * 0.008) * active_small_bumps * mult
 			
 			var height = 42.0 + (mountains + long_hills + medium_waves + smooth_spikes + sharp_dips + lil_spikes + small_bumps)
 			base_h = lerp(42.0, height, factor)
