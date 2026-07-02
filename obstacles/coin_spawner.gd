@@ -105,6 +105,7 @@ func _physics_process(delta: float) -> void:
 
 # ── Spawn until we have pool_size coins within spawn_lead ahead ───────────────
 func _fill_pool() -> void:
+	return # DISABLED: no spawning during road reset
 	if not _coin_scene:
 		return
 
