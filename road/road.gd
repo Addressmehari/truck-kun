@@ -1125,6 +1125,21 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 		
 	return {}
 
+# Returns true when the terrain at world-x is in a smooth (low-ruggedness) zone.
+# Works for SMOOTH, and for BOTH mode by reading the same blend formula used in get_raw_base_road_height.
+func is_smooth_zone_at_x(x: float) -> bool:
+	if terrain_type == TerrainType.SMOOTH:
+		return true
+	if terrain_type == TerrainType.BOTH:
+		var dist = max(0.0, abs(x))
+		var max_ruggedness = clamp((dist - 1000.0) / 6000.0, 0.0, 1.0)
+		var cycle_val = sin(dist * 0.00025 + road_seed * 0.07)
+		var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 1.0)
+		var blend = raw_shift * max_ruggedness
+		# blend < 0.25 is considered a smooth zone
+		return blend < 0.25
+	return false
+
 # Deterministically get bridge details for a given chunk
 func get_bridge_at_chunk(chunk_index: int) -> Dictionary:
 	# Avoid bridge spawn near start
@@ -1134,6 +1149,11 @@ func get_bridge_at_chunk(chunk_index: int) -> Dictionary:
 	# Avoid bridge in water biome
 	var biome = get_current_biome()
 	if biome and biome.is_water:
+		return {}
+	
+	# Only spawn bridges during smooth terrain zones (SMOOTH mode, or BOTH mode in a smooth window)
+	var center_x = (chunk_index + 0.5) * chunk_width
+	if not is_smooth_zone_at_x(center_x):
 		return {}
 		
 	# Spawn a bridge every 8 chunks (e.g. chunk index % 8 == 5)
@@ -1146,7 +1166,6 @@ func get_bridge_at_chunk(chunk_index: int) -> Dictionary:
 		if not elev.is_empty():
 			return {}
 			
-		var center_x = (chunk_index + 0.5) * chunk_width
 		var base_y = get_base_road_height(center_x)
 		return {
 			"x": center_x,
@@ -1615,6 +1634,9 @@ func spawn_tunnel_node(chunk_index: int, tunnel_data: Dictionary) -> Node2D:
 func spawn_physics_bridge(chunk_index: int, bridge_x: float, bridge_y: float, bridge_width: float) -> Node2D:
 	var container = Node2D.new()
 	container.name = "BridgeContainer"
+	# Draw behind the road polygon and its Line2D surface so the bridge
+	# appears to slot visually underneath the road endpoints.
+	container.z_index = -1
 	
 	# Load the compiled script file for safe, clean runtime execution
 	var bridge_script = load("res://road/bridge.gd")
