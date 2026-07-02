@@ -112,35 +112,67 @@ func _fill_pool() -> void:
 	if is_instance_valid(_chassis):
 		chassis_x = _chassis.global_position.x
 
-	# Ensure the next spawn frontier is always safely ahead of the player to prevent instant overlap loops
+	# Ensure the next spawn frontier is always safely ahead of the player
 	if _next_spawn_x < chassis_x + 300.0:
 		_next_spawn_x = chassis_x + 300.0
 
-	# Count how many coins are still alive ahead
+	# ── Pause ALL normal spawning while a mini-event is active ────────────────
+	# (Convoy, Crusher, Racing etc. all have their own world-generation logic)
+	var is_event_running = false
+	if _road and _road.has_method("is_event_active"):
+		is_event_running = _road.call("is_event_active")
+	if is_event_running:
+		return
+
+	# Count how many coins are still alive ahead of the player
 	var ahead_count = 0
 	for c in _coins:
 		if is_instance_valid(c) and c.global_position.x > chassis_x:
 			ahead_count += 1
 
-	var is_event_running = false
-	if _road and _road.has_method("is_event_active"):
-		is_event_running = _road.call("is_event_active")
+	# During crate delivery or tow missions, always allow mystery boxes
+	# (Racing is already fully paused above via is_event_running)
+	var is_delivery_or_tow_active := false
+	if _road:
+		var dtc = _road.get("delivery_target_chunk")
+		if dtc != null and dtc != -1:
+			is_delivery_or_tow_active = true
+		if not is_delivery_or_tow_active:
+			var ttc = _road.get("towing_target_chunk")
+			if ttc != null and ttc != -1:
+				is_delivery_or_tow_active = true
+		if not is_delivery_or_tow_active:
+			var tow = _road.get("is_towing_active")
+			if tow == true:
+				is_delivery_or_tow_active = true
 
-	var on_cooldown = (_cooldown_timer > 0.0)
-	var spawn_blocked = is_event_running or on_cooldown
+	# Mystery boxes blocked during post-event cooldown — UNLESS delivery/tow is active
+	var mystery_box_blocked: bool = (_cooldown_timer > 0.0) and not is_delivery_or_tow_active
 
 	while ahead_count < pool_size and _next_spawn_x < chassis_x + spawn_lead:
-		# Decide whether to place a mystery box, petrol can, cluster, or single coin
 		var roll = _rng.randf()
-		if not spawn_blocked and _mystery_box_scene and roll < mystery_box_chance:
+
+		if not mystery_box_blocked and _mystery_box_scene and roll < mystery_box_chance:
+			# Mystery box — only when no active event and cooldown has expired
 			_spawn_mystery_box(_next_spawn_x)
 			ahead_count += 1
-		elif _petrol_scene and roll < (mystery_box_chance if not spawn_blocked else 0.0) + petrol_chance:
-			_spawn_petrol(_next_spawn_x)
+		elif _petrol_scene and roll < mystery_box_chance + petrol_chance:
+			# Petrol can — probability band sits right after mystery box band
+			# When mystery boxes are blocked the whole roll range shifts down cleanly
+			var petrol_max = petrol_chance if mystery_box_blocked else mystery_box_chance + petrol_chance
+			if roll < petrol_max:
+				_spawn_petrol(_next_spawn_x)
+			else:
+				_spawn_coin(_next_spawn_x)
 			ahead_count += 1
-		elif roll < (mystery_box_chance if not spawn_blocked else 0.0) + petrol_chance + cluster_chance:
-			_spawn_cluster(_next_spawn_x)
-			ahead_count += 3
+		elif roll < mystery_box_chance + petrol_chance + cluster_chance:
+			var cluster_max = petrol_chance + cluster_chance if mystery_box_blocked else mystery_box_chance + petrol_chance + cluster_chance
+			if roll < cluster_max:
+				_spawn_cluster(_next_spawn_x)
+				ahead_count += 3
+			else:
+				_spawn_coin(_next_spawn_x)
+				ahead_count += 1
 		else:
 			_spawn_coin(_next_spawn_x)
 			ahead_count += 1

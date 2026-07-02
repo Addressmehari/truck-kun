@@ -1,6 +1,7 @@
 @tool
 extends StaticBody2D
 
+enum TerrainType { RUGGED, SMOOTH, BOTH, CUSTOM }
 @export var road_length := 15000.0:
 	set(val):
 		road_length = val
@@ -67,6 +68,61 @@ extends StaticBody2D
 			generate_road()
 		else:
 			regenerate_runtime_chunks()
+
+@export var terrain_type: TerrainType = TerrainType.RUGGED:
+	set(val):
+		terrain_type = val
+		_apply_terrain_preset()
+		clear_road_geometry_caches()
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
+@export_subgroup("Terrain Wave Amplitudes")
+@export var mountain_amplitude := 220.0:
+	set(val):
+		mountain_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+@export var long_hills_amplitude := 85.0:
+	set(val):
+		long_hills_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+@export var medium_waves_amplitude := 50.0:
+	set(val):
+		medium_waves_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+@export var smooth_spikes_amplitude := 65.0:
+	set(val):
+		smooth_spikes_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+@export var sharp_dips_amplitude := 25.0:
+	set(val):
+		sharp_dips_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+@export var lil_spikes_amplitude := 18.0:
+	set(val):
+		lil_spikes_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+@export var small_bumps_amplitude := 12.0:
+	set(val):
+		small_bumps_amplitude = val
+		if terrain_type != TerrainType.CUSTOM:
+			terrain_type = TerrainType.CUSTOM
+		_on_terrain_param_changed()
+
 
 @export var road_seed := 12345:
 	set(val):
@@ -144,6 +200,16 @@ extends StaticBody2D
 		else:
 			regenerate_runtime_chunks()
 
+## Flat zone length AFTER a downward drop so the truck has room to land
+@export var block_flat_after := 1000.0:
+	set(val):
+		block_flat_after = val
+		clear_road_geometry_caches()
+		if Engine.is_editor_hint():
+			generate_road()
+		else:
+			regenerate_runtime_chunks()
+
 # Seed offsets for waves
 var seed_offset_1 := 0.0
 var seed_offset_2 := 0.0
@@ -160,6 +226,33 @@ func clear_road_geometry_caches() -> void:
 	block_cache.clear()
 	cumulative_offset_cache.clear()
 	tunnel_cache.clear()
+
+func _on_terrain_param_changed() -> void:
+	clear_road_geometry_caches()
+	if Engine.is_editor_hint():
+		generate_road()
+	else:
+		regenerate_runtime_chunks()
+
+func _apply_terrain_preset() -> void:
+	if terrain_type == TerrainType.RUGGED:
+		mountain_amplitude = 220.0
+		long_hills_amplitude = 85.0
+		medium_waves_amplitude = 50.0
+		smooth_spikes_amplitude = 65.0
+		sharp_dips_amplitude = 25.0
+		lil_spikes_amplitude = 18.0
+		small_bumps_amplitude = 12.0
+	elif terrain_type == TerrainType.SMOOTH:
+		mountain_amplitude = 130.0
+		long_hills_amplitude = 60.0
+		medium_waves_amplitude = 35.0
+		smooth_spikes_amplitude = 15.0
+		sharp_dips_amplitude = 8.0
+		lil_spikes_amplitude = 0.0
+		small_bumps_amplitude = 6.0
+	# BOTH does not set static parameters on the sliders, as they vary dynamically by distance.
+
 
 const TUNNEL_MIN_SPACING := 30000.0
 
@@ -182,6 +275,8 @@ var is_convoy_active := false
 var convoy_start_x := 0.0
 var convoy_end_x := 0.0
 var has_convoy_ended := false
+# When a delivery/tow mission is active, convoy auto-ends at this X
+var convoy_auto_end_x := -1.0
 
 # Crusher event variables for flat road transition
 var crusher_flat_start_x := 0.0
@@ -639,14 +734,46 @@ func get_raw_base_road_height(x: float) -> float:
 			var raw_factor = clamp((abs(x) - 400.0) / 300.0, 0.0, 1.0)
 			var factor = raw_factor * raw_factor * (3.0 - 2.0 * raw_factor)
 			
-			# Combine waves to create interesting rolling hills and dips, offset by seed
+			# Combine waves to create varied terrain, offset by seed
 			var mult = hill_amplitude_multiplier * get_convoy_multiplier(x)
-			var long_hills = sin((x + seed_offset_1) * 0.0015) * 140.0 * mult # Large elevations
-			var medium_waves = cos((x + seed_offset_2) * 0.004) * 50.0 * mult # Medium slopes
-			var small_bumps = sin((x + seed_offset_3) * 0.012) * 12.0 * mult # Small bumpy texture
 			
-			var height = 42.0 + (long_hills + medium_waves + small_bumps)
+			var active_mountain = mountain_amplitude
+			var active_long_hills = long_hills_amplitude
+			var active_medium_waves = medium_waves_amplitude
+			var active_smooth_spikes = smooth_spikes_amplitude
+			var active_sharp_dips = sharp_dips_amplitude
+			var active_lil_spikes = lil_spikes_amplitude
+			var active_small_bumps = small_bumps_amplitude
+			
+			if terrain_type == TerrainType.BOTH:
+				var dist = max(0.0, abs(x))
+				# Starts smooth, but ramps up to full ruggedness potential quickly between 1000px and 7000px (~350m)
+				var max_ruggedness = clamp((dist - 1000.0) / 6000.0, 0.0, 1.0)
+				# Sine wave with ~25k pixel wavelength (~1.25km cycle)
+				var cycle_val = sin(dist * 0.00025 + road_seed * 0.07)
+				# Wide rugged peaks (stays at 1.0 for ~50% of the cycle), quick smooth breaks (~29% of the cycle)
+				var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 1.0)
+				var blend = raw_shift * max_ruggedness
+				
+				active_mountain      = lerp(130.0, 220.0, blend)
+				active_long_hills    = lerp(60.0, 85.0, blend)
+				active_medium_waves  = lerp(35.0, 50.0, blend)
+				active_smooth_spikes = lerp(15.0, 65.0, blend)
+				active_sharp_dips    = lerp(8.0, 25.0, blend)
+				active_lil_spikes    = lerp(0.0, 18.0, blend)
+				active_small_bumps   = lerp(6.0, 12.0, blend)
+			
+			var mountains     = sin((x + seed_offset_3 * 0.3 + seed_offset_1 * 0.7) * 0.0003) * active_mountain * mult
+			var long_hills    = sin((x + seed_offset_1) * 0.0007) * active_long_hills * mult
+			var medium_waves  = cos((x + seed_offset_2) * 0.0013) * active_medium_waves * mult
+			var smooth_spikes = sin((x + seed_offset_2 * 1.5 + seed_offset_3) * 0.006) * active_smooth_spikes * mult
+			var sharp_dips    = sin((x + seed_offset_2 * 0.6 + seed_offset_3) * 0.003) * active_sharp_dips * mult
+			var lil_spikes    = sin((x + seed_offset_1 * 2.1 + seed_offset_2) * 0.022) * active_lil_spikes * mult
+			var small_bumps   = sin((x + seed_offset_3) * 0.008) * active_small_bumps * mult
+			
+			var height = 42.0 + (mountains + long_hills + medium_waves + smooth_spikes + sharp_dips + lil_spikes + small_bumps)
 			base_h = lerp(42.0, height, factor)
+
 
 	# Apply crusher flat land flattening
 	var crusher_mult = get_crusher_multiplier(x)
@@ -658,29 +785,70 @@ func get_raw_base_road_height(x: float) -> float:
 # Base math function defining the height of the road without flattening
 func get_base_road_height(x: float) -> float:
 	var target_x = x
-	var active_block = get_active_block_before(x)
-	if not active_block.is_empty():
-		target_x = active_block["x"] - block_flat_before
-		
+
+	# Freeze height BEFORE upward cliff (approach run-up)
+	var block_before = get_active_block_before(x)
+	if not block_before.is_empty():
+		target_x = block_before["x"] - block_flat_before
+		var raw_h = get_raw_base_road_height(target_x)
+		return raw_h + get_block_height_offset(x)
+
+	# Downward drop: flat landing zone + smooth blend back to same global level
+	const DOWN_TRANSITION := 700.0 # pixels over which height blends back to natural
+	var down_block = _get_down_block_in_range(x, block_flat_after + DOWN_TRANSITION)
+	if not down_block.is_empty():
+		var bx = down_block["x"]
+		var drop_amount = down_block["height"]  # How many pixels downward the cliff drops
+		var flat_end = bx + block_flat_after
+		# Base (UP-block-only) offset at and after the cliff — stays the same since DOWN
+		# blocks no longer contribute to cumulative offset
+		var base_offset = get_block_height_offset(bx)
+		if x < flat_end:
+			# Flat landing pad at the lower level
+			var raw_h = get_raw_base_road_height(bx) + base_offset + drop_amount
+			return raw_h
+		else:
+			# Smooth S-curve blend from lower level back to natural terrain height
+			var t = clamp((x - flat_end) / DOWN_TRANSITION, 0.0, 1.0)
+			var factor = t * t * (3.0 - 2.0 * t) # smoothstep
+			var landing_h = get_raw_base_road_height(bx) + base_offset + drop_amount
+			var natural_h  = get_raw_base_road_height(x)  + get_block_height_offset(x)
+			return lerp(landing_h, natural_h, factor)
+
 	var raw_h = get_raw_base_road_height(target_x)
 	return raw_h + get_block_height_offset(x)
 
+## Returns the block if x is in the flat zone BEFORE an upward cliff
 func get_active_block_before(x: float) -> Dictionary:
 	if not enable_blocks:
 		return {}
-		
 	var biome = get_current_biome()
 	if biome and biome.is_water:
 		return {}
-		
 	var interval_size = 20000.0
 	var current_idx = int(floor(x / interval_size))
-	
 	for idx in range(current_idx, current_idx + 2):
 		var block = get_block_at_interval(idx)
-		if not block.is_empty():
+		if not block.is_empty() and block.get("type", "up") == "up":
 			var block_x = block["x"]
 			if x >= block_x - block_flat_before and x < block_x:
+				return block
+	return {}
+
+## Returns a down-type block if x falls within search_range pixels after its cliff edge
+func _get_down_block_in_range(x: float, search_range: float) -> Dictionary:
+	if not enable_blocks:
+		return {}
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return {}
+	var interval_size = 20000.0
+	var current_idx = int(floor(x / interval_size))
+	for idx in range(max(0, current_idx - 1), current_idx + 2):
+		var block = get_block_at_interval(idx)
+		if not block.is_empty() and block.get("type", "up") == "down":
+			var bx = block["x"]
+			if x >= bx and x < bx + search_range:
 				return block
 	return {}
 
@@ -786,10 +954,15 @@ func get_block_at_interval(idx: int) -> Dictionary:
 	var raw_h_before = get_raw_base_road_height(spawn_x - block_flat_before)
 	var raw_h_after = get_raw_base_road_height(spawn_x)
 	var adjusted_height = block_height + max(0.0, raw_h_after - raw_h_before)
+	
+	# Randomly roll for block type (upward wall or downward drop)
+	var type_roll = rng.randf()
+	var type = "down" if type_roll < 0.5 else "up"
 		
 	var block_data = {
 		"x": spawn_x,
-		"height": adjusted_height
+		"height": adjusted_height,
+		"type": type
 	}
 	block_cache[idx] = block_data
 	return block_data
@@ -804,7 +977,10 @@ func get_cumulative_offset_at_interval(interval_idx: int) -> float:
 	var current_block_contrib = 0.0
 	var block = get_block_at_interval(interval_idx)
 	if not block.is_empty():
-		current_block_contrib = - block["height"]
+		# DOWN blocks are handled locally in get_base_road_height — they must NOT
+		# pollute the global cumulative offset or the world drifts downward forever.
+		if block.get("type", "up") == "up":
+			current_block_contrib = -block["height"]
 		
 	var offset = prev_offset + current_block_contrib
 	cumulative_offset_cache[interval_idx] = offset
@@ -828,7 +1004,8 @@ func get_block_height_offset(x: float) -> float:
 	
 	var block = get_block_at_interval(current_interval)
 	if not block.is_empty():
-		if x >= block["x"]:
+		# DOWN blocks are excluded — their drop is handled locally in get_base_road_height
+		if x >= block["x"] and block.get("type", "up") == "up":
 			offset -= block["height"]
 			
 	return offset
@@ -852,11 +1029,26 @@ func get_block_in_range(x1: float, x2: float) -> Dictionary:
 				return block
 	return {}
 
+# Returns the world-X of the active delivery or tow destination, or -1 if none
+func _get_active_mission_destination_x() -> float:
+	if delivery_target_chunk != -1:
+		return delivery_target_chunk * chunk_width
+	if towing_target_chunk != -1:
+		return towing_target_chunk * chunk_width
+	return -1.0
+
 func start_active_event(event_name: String) -> void:
 	if event_name == "Convoy":
 		is_convoy_active = true
 		has_convoy_ended = false
 		convoy_start_x = get_target_x()
+		convoy_auto_end_x = -1.0
+		# If delivery or tow is active, auto-end convoy before the destination
+		var dest_x = _get_active_mission_destination_x()
+		if dest_x > 0.0:
+			# End convoy 5000px (250m) before destination so road has time to un-flatten
+			convoy_auto_end_x = dest_x - 5000.0
+			print("[Road] Convoy capped: will auto-end at X=", convoy_auto_end_x, " (destination at X=", dest_x, ")")
 		clear_road_geometry_caches()
 		regenerate_runtime_chunks()
 
@@ -865,6 +1057,7 @@ func end_active_event(event_name: String) -> void:
 		is_convoy_active = false
 		has_convoy_ended = true
 		convoy_end_x = get_target_x()
+		convoy_auto_end_x = -1.0
 		clear_road_geometry_caches()
 		regenerate_runtime_chunks()
 
@@ -932,12 +1125,77 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 		
 	return {}
 
+# Returns true when the terrain at world-x is in a smooth (low-ruggedness) zone.
+# Works for SMOOTH, and for BOTH mode by reading the same blend formula used in get_raw_base_road_height.
+func is_smooth_zone_at_x(x: float) -> bool:
+	if terrain_type == TerrainType.SMOOTH:
+		return true
+	if terrain_type == TerrainType.BOTH:
+		var dist = max(0.0, abs(x))
+		var max_ruggedness = clamp((dist - 1000.0) / 6000.0, 0.0, 1.0)
+		var cycle_val = sin(dist * 0.00025 + road_seed * 0.07)
+		var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 1.0)
+		var blend = raw_shift * max_ruggedness
+		# blend < 0.25 is considered a smooth zone
+		return blend < 0.25
+	return false
+
+# Deterministically get bridge details for a given chunk
+func get_bridge_at_chunk(chunk_index: int) -> Dictionary:
+	# Avoid bridge spawn near start
+	if abs(chunk_index) <= 2:
+		return {}
+	
+	# Avoid bridge in water biome
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return {}
+	
+	# Only spawn bridges during smooth terrain zones (SMOOTH mode, or BOTH mode in a smooth window)
+	var center_x = (chunk_index + 0.5) * chunk_width
+	if not is_smooth_zone_at_x(center_x):
+		return {}
+		
+	# Spawn a bridge every 8 chunks (e.g. chunk index % 8 == 5)
+	if abs(chunk_index) % 8 == 5:
+		# Check if there is an elevator or a tunnel at this chunk (to avoid overlap)
+		var tunnel = get_tunnel_at_chunk(chunk_index)
+		if not tunnel.is_empty():
+			return {}
+		var elev = get_elevator_data_for_chunk(chunk_index)
+		if not elev.is_empty():
+			return {}
+			
+		var base_y = get_base_road_height(center_x)
+		return {
+			"x": center_x,
+			"y": base_y,
+			"width": 700.0
+		}
+	return {}
+
 # Math function defining the height of the road at any X coordinate, flattened inside tunnels and paddings, smoothed in transitions
 func get_road_height(x: float) -> float:
+	# Check for bridge canyons first
+	var min_chunk_idx = int(floor((x - 1000.0) / chunk_width))
+	var max_chunk_idx = int(floor((x + 1000.0) / chunk_width))
+	for check_idx in range(min_chunk_idx, max_chunk_idx + 1):
+		var bridge = get_bridge_at_chunk(check_idx)
+		if not bridge.is_empty():
+			var bx = bridge["x"]
+			var by = bridge["y"]
+			var bw = bridge["width"]
+			var half_w = bw / 2.0
+			var dist = x - bx
+			if abs(dist) < half_w:
+				# Smooth parabolic canyon profile
+				var factor = (cos((dist / half_w) * PI) + 1.0) / 2.0
+				return by + factor * 260.0
+
 	# Determine range of chunk indices that can physically influence the height at x
 	var max_influence = 2500.0 # Safe upper bound for half width (1000) + padding (200) + transition (800)
-	var min_chunk_idx = int(floor((x - max_influence) / chunk_width))
-	var max_chunk_idx = int(floor((x + max_influence) / chunk_width))
+	min_chunk_idx = int(floor((x - max_influence) / chunk_width))
+	max_chunk_idx = int(floor((x + max_influence) / chunk_width))
 	
 	for check_idx in range(min_chunk_idx, max_chunk_idx + 1):
 		var tunnel = get_tunnel_at_chunk(check_idx)
@@ -1171,9 +1429,14 @@ func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
 		
+	# Auto-end convoy before mission destination if a cap was set
+	if is_convoy_active and convoy_auto_end_x > 0.0:
+		if get_target_x() >= convoy_auto_end_x:
+			print("[Road] Convoy auto-ended before mission destination.")
+			end_active_event("Convoy")
+	
 	# Throttle chunk updates (check every 8 frames instead of every frame)
 	if Engine.get_physics_frames() % 8 == 0:
-		_update_tunnel_spawning(get_target_x())
 		update_chunks(get_target_x())
 		
 	update_active_chunks_geometry()
@@ -1304,13 +1567,16 @@ func get_elevator_data_for_chunk(chunk_idx: int) -> Dictionary:
 	for idx in range(max(0, start_interval), end_interval + 1):
 		var block = get_block_at_interval(idx)
 		if not block.is_empty():
+			# Down-type blocks: no elevator — truck drives off the cliff freely
+			if block.get("type", "up") == "down":
+				continue
 			var block_x = block["x"]
-			var elev_x = block_x - 120.0 # Center of elevator
+			var elev_x = block_x - 120.0 # Elevator sits before the upward wall
 			if elev_x >= start_x and elev_x < end_x:
 				var y_before = get_road_height(block_x - 0.01)
 				var y_after = get_road_height(block_x)
 				var cliff_height = y_before - y_after
-				if cliff_height <= 10.0:
+				if abs(cliff_height) <= 10.0:
 					return {}
 				return {
 					"x": elev_x,
@@ -1364,6 +1630,37 @@ func spawn_tunnel_node(chunk_index: int, tunnel_data: Dictionary) -> Node2D:
 	
 	add_child(tunnel)
 	return tunnel
+
+func spawn_physics_bridge(chunk_index: int, bridge_x: float, bridge_y: float, bridge_width: float) -> Node2D:
+	var container = Node2D.new()
+	container.name = "BridgeContainer"
+	# Draw behind the road polygon and its Line2D surface so the bridge
+	# appears to slot visually underneath the road endpoints.
+	container.z_index = -1
+	
+	# Load the compiled script file for safe, clean runtime execution
+	var bridge_script = load("res://road/bridge.gd")
+	if bridge_script:
+		container.set_script(bridge_script)
+	add_child(container)
+	
+	var start_x = bridge_x - bridge_width / 2.0
+	var end_x = bridge_x + bridge_width / 2.0
+	var start_y = get_base_road_height(start_x)
+	var end_y = get_base_road_height(end_x)
+	
+	container.set("start_pos", Vector2(start_x, start_y))
+	container.set("end_pos", Vector2(end_x, end_y))
+	
+	var plank_count = 14
+	var plank_length = bridge_width / plank_count
+	container.set("plank_length", plank_length)
+	container.set("N", plank_count + 1)
+	
+	if container.has_method("initialize_bridge"):
+		container.call("initialize_bridge")
+		
+	return container
 
 func spawn_house_node(chunk_index: int) -> Node2D:
 	var house_script = load("res://road/house.gd")
@@ -1753,21 +2050,80 @@ func create_chunk(i: int) -> void:
 	fill.material = get_ground_material(template_fill_color, road_color)
 	add_child(fill)
 	
-	# Create Line2D
-	var line = Line2D.new()
-	line.points = surface_points
-	line.width = 0.0 if current_biome.is_water else road_thickness
-	line.default_color = road_color
-	add_child(line)
+	# Create Line2D (Split around bridge if present)
+	var line = null
+	var line_right = null
+	var bridge_data = get_bridge_at_chunk(i)
+	
+	if not bridge_data.is_empty():
+		var bx = bridge_data["x"]
+		var bw = bridge_data["width"]
+		var half_w = bw / 2.0
+		var bridge_start = bx - half_w
+		var bridge_end = bx + half_w
+		
+		var left_points = PackedVector2Array()
+		var right_points = PackedVector2Array()
+		for pt in surface_points:
+			if pt.x <= bridge_start:
+				left_points.append(pt)
+			elif pt.x >= bridge_end:
+				right_points.append(pt)
+				
+		line = Line2D.new()
+		line.points = left_points
+		line.width = 0.0 if current_biome.is_water else road_thickness
+		line.default_color = road_color
+		add_child(line)
+		
+		line_right = Line2D.new()
+		line_right.points = right_points
+		line_right.width = 0.0 if current_biome.is_water else road_thickness
+		line_right.default_color = road_color
+		add_child(line_right)
+	else:
+		line = Line2D.new()
+		line.points = surface_points
+		line.width = 0.0 if current_biome.is_water else road_thickness
+		line.default_color = road_color
+		add_child(line)
 	
 	# Create second Line2D
 	var line2 = null
+	var line2_right = null
 	if enable_second_road:
-		line2 = Line2D.new()
-		line2.points = surface_points_2
-		line2.width = 0.0 if current_biome.is_water else road_thickness
-		line2.default_color = road_color
-		add_child(line2)
+		if not bridge_data.is_empty():
+			var bx = bridge_data["x"]
+			var bw = bridge_data["width"]
+			var half_w = bw / 2.0
+			var bridge_start = bx - half_w
+			var bridge_end = bx + half_w
+			
+			var left_points_2 = PackedVector2Array()
+			var right_points_2 = PackedVector2Array()
+			for pt in surface_points_2:
+				if pt.x <= bridge_start:
+					left_points_2.append(pt)
+				elif pt.x >= bridge_end:
+					right_points_2.append(pt)
+					
+			line2 = Line2D.new()
+			line2.points = left_points_2
+			line2.width = 0.0 if current_biome.is_water else road_thickness
+			line2.default_color = road_color
+			add_child(line2)
+			
+			line2_right = Line2D.new()
+			line2_right.points = right_points_2
+			line2_right.width = 0.0 if current_biome.is_water else road_thickness
+			line2_right.default_color = road_color
+			add_child(line2_right)
+		else:
+			line2 = Line2D.new()
+			line2.points = surface_points_2
+			line2.width = 0.0 if current_biome.is_water else road_thickness
+			line2.default_color = road_color
+			add_child(line2)
 	
 	# Create GrassDecorator
 	current_biome = get_current_biome()
@@ -1787,7 +2143,7 @@ func create_chunk(i: int) -> void:
 		grass.density_multiplier = current_biome.foliage_density_multiplier
 		add_child(grass)
 		
-		# Create GrassDecorator2 for below road
+		# GrassDecorator2 for the second road line
 		if enable_second_road:
 			grass2 = grass_script.new()
 			grass2.points = surface_points_2
@@ -1801,15 +2157,14 @@ func create_chunk(i: int) -> void:
 			grass2.density_multiplier = 0.4 * current_biome.foliage_density_multiplier
 			add_child(grass2)
 	
-	# Spawn tunnel if present
-	var tunnel_node = null
-	var tunnel_data = get_tunnel_at_chunk(i)
-	if not tunnel_data.is_empty():
-		tunnel_node = spawn_tunnel_node(i, tunnel_data)
-		
-	# Spawn house on back layer based on seeded natural random distribution
+	# Suppress houses during convoy (flat-road event) and crusher events
+	var convoy_running: bool = get("is_convoy_active") == true
+	var crusher_running: bool = crusher_flat_start_x != 0.0 and crusher_flat_end_x != 0.0
+	var suppress_houses: bool = convoy_running or crusher_running
+
+	# Spawn house based on seeded natural random distribution (no tunnels active)
 	var house_node = null
-	if should_spawn_house_procedurally(i):
+	if not suppress_houses and should_spawn_house_procedurally(i):
 		house_node = spawn_house_node(i)
 		if used_house_chunks.has(i):
 			house_node.set("has_accepted", true)
@@ -1819,23 +2174,31 @@ func create_chunk(i: int) -> void:
 			house_node.call("setup_racing_target", racing_reward)
 		elif i == towing_target_chunk:
 			house_node.call("setup_towing_target", towing_reward)
-		
+	
 	# Spawn elevator if present
 	var elevator_node = null
 	var elevator_data = get_elevator_data_for_chunk(i)
 	if not elevator_data.is_empty():
 		elevator_node = spawn_elevator_node(elevator_data)
 		
+	# Spawn physics bridge at runtime if present
+	var bridge_node = null
+	if not Engine.is_editor_hint():
+		if not bridge_data.is_empty():
+			bridge_node = spawn_physics_bridge(i, bridge_data["x"], bridge_data["y"], bridge_data["width"])
+		
 	active_chunks[i] = {
 		"collision": col_poly,
 		"fill": fill,
 		"line": line,
+		"line_right": line_right,
 		"line2": line2,
+		"line2_right": line2_right,
 		"grass": grass,
 		"grass2": grass2,
-		"tunnel": tunnel_node,
 		"house": house_node,
-		"elevator": elevator_node
+		"elevator": elevator_node,
+		"bridge": bridge_node
 	}
 
 func destroy_chunk(i: int) -> void:
@@ -1847,8 +2210,12 @@ func destroy_chunk(i: int) -> void:
 			chunk.fill.queue_free()
 		if is_instance_valid(chunk.line):
 			chunk.line.queue_free()
+		if "line_right" in chunk and is_instance_valid(chunk.line_right):
+			chunk.line_right.queue_free()
 		if "line2" in chunk and is_instance_valid(chunk.line2):
 			chunk.line2.queue_free()
+		if "line2_right" in chunk and is_instance_valid(chunk.line2_right):
+			chunk.line2_right.queue_free()
 		if "grass" in chunk and is_instance_valid(chunk.grass):
 			chunk.grass.queue_free()
 		if "grass2" in chunk and is_instance_valid(chunk.grass2):
@@ -1859,6 +2226,8 @@ func destroy_chunk(i: int) -> void:
 			chunk.house.queue_free()
 		if "elevator" in chunk and is_instance_valid(chunk.elevator):
 			chunk.elevator.queue_free()
+		if "bridge" in chunk and is_instance_valid(chunk.bridge):
+			chunk.bridge.queue_free()
 		active_chunks.erase(i)
 
 func spawn_crusher_on_next_chunk() -> void:
@@ -1868,6 +2237,15 @@ func spawn_crusher_on_next_chunk() -> void:
 	var num_crushers = randi_range(3, 8)
 	var first_crusher_x = player_x + 800.0
 	var spacing = 400.0
+	
+	# If delivery or tow is active, cap crushers so zone ends before destination
+	var dest_x = _get_active_mission_destination_x()
+	if dest_x > 0.0:
+		# Leave 3000px (150m) buffer before destination for the road to recover
+		var max_end_x = dest_x - 3000.0
+		var max_crushers = int(floor((max_end_x - first_crusher_x) / spacing)) + 1
+		num_crushers = clamp(num_crushers, 1, max(1, max_crushers))
+		print("[Road] Crusher capped to ", num_crushers, " (destination at X=", dest_x, ")")
 	
 	# Define flat road zone boundaries to cover the entire sequence dynamically
 	crusher_flat_start_x = first_crusher_x - 300.0
