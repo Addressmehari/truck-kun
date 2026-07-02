@@ -651,14 +651,17 @@ func get_raw_base_road_height(x: float) -> float:
 			var raw_factor = clamp((abs(x) - 400.0) / 300.0, 0.0, 1.0)
 			var factor = raw_factor * raw_factor * (3.0 - 2.0 * raw_factor)
 			
-			# Combine waves to create interesting rolling hills and dips, offset by seed
+			# Combine waves to create varied terrain, offset by seed
 			var mult = hill_amplitude_multiplier * get_convoy_multiplier(x)
-			var long_hills = sin((x + seed_offset_1) * 0.0012) * 140.0 * mult # Sweeping hills (wider freq, 140px amp)
-			var medium_waves = cos((x + seed_offset_2) * 0.003) * 60.0 * mult # Medium hills (gentler slope)
-			var sharp_dips = sin((x + seed_offset_2 * 0.6 + seed_offset_3) * 0.008) * 30.0 * mult # Wider frequency dips
-			var small_bumps = sin((x + seed_offset_3) * 0.01) * 12.0 * mult # Mild surface bumps
+			var mountains     = sin((x + seed_offset_3 * 0.3 + seed_offset_1 * 0.7) * 0.0003) * 220.0 * mult # Mountains — very wide spacing (max slope 0.066)
+			var long_hills    = sin((x + seed_offset_1) * 0.0007) * 85.0  * mult # Rolling hills — spaced out (max 0.060)
+			var medium_waves  = cos((x + seed_offset_2) * 0.0013) * 50.0  * mult # Moderate undulation (max 0.065)
+			var smooth_spikes = sin((x + seed_offset_2 * 1.5 + seed_offset_3) * 0.006) * 65.0 * mult # Narrow spikes — unchanged (max 0.39)
+			var sharp_dips    = sin((x + seed_offset_2 * 0.6 + seed_offset_3) * 0.003) * 25.0 * mult # Dips — more spread out (max 0.075)
+			var lil_spikes    = sin((x + seed_offset_1 * 2.1 + seed_offset_2) * 0.022) * 18.0 * mult # Tiny spikes — unchanged (max 0.40)
+			var small_bumps   = sin((x + seed_offset_3) * 0.008) * 12.0   * mult # Surface texture — unchanged
 			
-			var height = 42.0 + (long_hills + medium_waves + sharp_dips + small_bumps)
+			var height = 42.0 + (mountains + long_hills + medium_waves + smooth_spikes + sharp_dips + lil_spikes + small_bumps)
 			base_h = lerp(42.0, height, factor)
 
 	# Apply crusher flat land flattening
@@ -679,23 +682,27 @@ func get_base_road_height(x: float) -> float:
 		var raw_h = get_raw_base_road_height(target_x)
 		return raw_h + get_block_height_offset(x)
 
-	# Downward drop: flat landing zone + smooth blend back to terrain
+	# Downward drop: flat landing zone + smooth blend back to same global level
 	const DOWN_TRANSITION := 700.0 # pixels over which height blends back to natural
 	var down_block = _get_down_block_in_range(x, block_flat_after + DOWN_TRANSITION)
 	if not down_block.is_empty():
 		var bx = down_block["x"]
+		var drop_amount = down_block["height"]  # How many pixels downward the cliff drops
 		var flat_end = bx + block_flat_after
+		# Base (UP-block-only) offset at and after the cliff — stays the same since DOWN
+		# blocks no longer contribute to cumulative offset
+		var base_offset = get_block_height_offset(bx)
 		if x < flat_end:
-			# Fully flat landing zone
-			var raw_h = get_raw_base_road_height(bx)
-			return raw_h + get_block_height_offset(x)
+			# Flat landing pad at the lower level
+			var raw_h = get_raw_base_road_height(bx) + base_offset + drop_amount
+			return raw_h
 		else:
-			# Smooth S-curve blend from frozen height back to natural terrain
+			# Smooth S-curve blend from lower level back to natural terrain height
 			var t = clamp((x - flat_end) / DOWN_TRANSITION, 0.0, 1.0)
 			var factor = t * t * (3.0 - 2.0 * t) # smoothstep
-			var frozen_h = get_raw_base_road_height(bx) + get_block_height_offset(x)
-			var natural_h = get_raw_base_road_height(x) + get_block_height_offset(x)
-			return lerp(frozen_h, natural_h, factor)
+			var landing_h = get_raw_base_road_height(bx) + base_offset + drop_amount
+			var natural_h  = get_raw_base_road_height(x)  + get_block_height_offset(x)
+			return lerp(landing_h, natural_h, factor)
 
 	var raw_h = get_raw_base_road_height(target_x)
 	return raw_h + get_block_height_offset(x)
@@ -859,10 +866,10 @@ func get_cumulative_offset_at_interval(interval_idx: int) -> float:
 	var current_block_contrib = 0.0
 	var block = get_block_at_interval(interval_idx)
 	if not block.is_empty():
-		if block.get("type", "up") == "down":
-			current_block_contrib = block["height"]
-		else:
-			current_block_contrib = - block["height"]
+		# DOWN blocks are handled locally in get_base_road_height — they must NOT
+		# pollute the global cumulative offset or the world drifts downward forever.
+		if block.get("type", "up") == "up":
+			current_block_contrib = -block["height"]
 		
 	var offset = prev_offset + current_block_contrib
 	cumulative_offset_cache[interval_idx] = offset
@@ -886,11 +893,9 @@ func get_block_height_offset(x: float) -> float:
 	
 	var block = get_block_at_interval(current_interval)
 	if not block.is_empty():
-		if x >= block["x"]:
-			if block.get("type", "up") == "down":
-				offset += block["height"]
-			else:
-				offset -= block["height"]
+		# DOWN blocks are excluded — their drop is handled locally in get_base_road_height
+		if x >= block["x"] and block.get("type", "up") == "up":
+			offset -= block["height"]
 			
 	return offset
 
