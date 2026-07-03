@@ -1196,6 +1196,19 @@ func get_bridge_at_chunk(chunk_index: int) -> Dictionary:
 		}
 	return {}
 
+## Returns true when world_x falls inside any bridge span (plus optional padding pixels on each side).
+## Used by the crusher spawner and coin spawner to avoid placing obstacles/pickups in bridge canyons.
+func is_in_bridge_zone(world_x: float, padding: float = 200.0) -> bool:
+	var min_ci = int(floor((world_x - 1000.0) / chunk_width))
+	var max_ci = int(floor((world_x + 1000.0) / chunk_width))
+	for ci in range(min_ci, max_ci + 1):
+		var bridge = get_bridge_at_chunk(ci)
+		if not bridge.is_empty():
+			var half_w = bridge["width"] / 2.0 + padding
+			if abs(world_x - bridge["x"]) < half_w:
+				return true
+	return false
+
 # Math function defining the height of the road at any X coordinate, flattened inside tunnels and paddings, smoothed in transitions
 func get_road_height(x: float) -> float:
 	# Check for bridge canyons first
@@ -2269,6 +2282,24 @@ func spawn_crusher_on_next_chunk() -> void:
 		num_crushers = clamp(num_crushers, 1, max(1, max_crushers))
 		print("[Road] Crusher capped to ", num_crushers, " (destination at X=", dest_x, ")")
 	
+	# ── Bridge collision guard ────────────────────────────────────────────────
+	# If the planned crusher sequence overlaps a bridge span, push first_crusher_x
+	# past the bridge's far edge so crushers are always on solid flat ground.
+	var zone_end_x = first_crusher_x + (num_crushers - 1) * spacing
+	var bridge_search_min = int(floor((first_crusher_x - 1000.0) / chunk_width))
+	var bridge_search_max = int(floor((zone_end_x + 1000.0) / chunk_width))
+	for ci in range(bridge_search_min, bridge_search_max + 1):
+		var bridge = get_bridge_at_chunk(ci)
+		if not bridge.is_empty():
+			var half_w = bridge["width"] / 2.0
+			var bridge_end = bridge["x"] + half_w
+			if first_crusher_x < bridge_end + 400.0:
+				# Shift the entire zone to start cleanly after this bridge
+				first_crusher_x = bridge_end + 400.0
+				zone_end_x = first_crusher_x + (num_crushers - 1) * spacing
+				print("[Road] Crusher start pushed past bridge to X=", first_crusher_x)
+				break  # one bridge per zone is the common case; a second pass isn't needed
+
 	# Define flat road zone boundaries to cover the entire sequence dynamically
 	crusher_flat_start_x = first_crusher_x - 300.0
 	crusher_flat_end_x = first_crusher_x + (num_crushers - 1) * spacing + 300.0

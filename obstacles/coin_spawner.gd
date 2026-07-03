@@ -152,7 +152,14 @@ func _fill_pool() -> void:
 	while ahead_count < pool_size and _next_spawn_x < chassis_x + spawn_lead:
 		var roll = _rng.randf()
 
-		if not mystery_box_blocked and _mystery_box_scene and roll < mystery_box_chance:
+		# Resolve whether this spawn X falls inside a bridge canyon — mystery boxes
+		# are suppressed there because get_road_height() returns the canyon floor,
+		# not the bridge deck, so the box would spawn far below the playable surface.
+		var in_bridge_zone := false
+		if _road and _road.has_method("is_in_bridge_zone"):
+			in_bridge_zone = _road.call("is_in_bridge_zone", _next_spawn_x, 150.0)
+
+		if not mystery_box_blocked and not in_bridge_zone and _mystery_box_scene and roll < mystery_box_chance:
 			# Mystery box — only when no active event and cooldown has expired
 			_spawn_mystery_box(_next_spawn_x)
 			ahead_count += 1
