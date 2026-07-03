@@ -919,24 +919,6 @@ func _spawn_retry_menu(cause: String, distance: float) -> void:
 	get_tree().root.add_child(menu)
 	menu.call("show_death", cause, distance)
 
-	# ── RETRY ──────────────────────────────────────────────────────────────────
-	menu.retry_requested.connect(func(seed_val: int):
-		menu.queue_free()
-		# Store the seed so road.gd can read it on the next _ready()
-		if Engine.has_singleton("GameState") or get_node_or_null("/root/GameState"):
-			var gs = get_node_or_null("/root/GameState")
-			if gs:
-				gs.pending_road_seed = seed_val if seed_val != 0 else randi()
-		# Full scene reload restores all state cleanly
-		get_tree().change_scene_to_file("res://main.tscn")
-	)
-
-	# ── MENU ───────────────────────────────────────────────────────────────────
-	menu.menu_requested.connect(func():
-		menu.queue_free()
-		get_tree().change_scene_to_file("res://ui/menu.tscn")
-	)
-
 func respawn_at_crusher_start() -> void:
 	if is_respawning:
 		return
@@ -1160,5 +1142,3 @@ func respawn_at_crusher_start() -> void:
 		controls_locked = false
 		is_respawning = false
 	)
-
-
