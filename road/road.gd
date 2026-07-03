@@ -159,6 +159,8 @@ enum TerrainType { RUGGED, SMOOTH, BOTH, CUSTOM }
 @export var road_color := Color(0.40392, 0.56863, 0.26275, 1):
 	set(val):
 		road_color = val
+		if _suppress_regen:
+			return
 		if Engine.is_editor_hint():
 			generate_road()
 		else:
@@ -221,6 +223,9 @@ var block_cache := {}
 var cumulative_offset_cache := {}
 var tunnel_cache := {}
 var wave_physics_tick := 0
+# Guard: when true the road_color / terrain setters skip regenerate_runtime_chunks()
+# so that apply_active_biome() only triggers a single rebuild at the end.
+var _suppress_regen := false
 
 func clear_road_geometry_caches() -> void:
 	block_cache.clear()
@@ -372,12 +377,21 @@ func initialize_default_biomes() -> void:
 
 func apply_active_biome() -> void:
 	clear_road_geometry_caches()
+	
+	# --- Reset cached shader materials so the new biome always gets fresh parameters ---
+	# Without this, toggling between biomes reuses a stale material from a prior biome.
+	ground_material = null
+	water_material = null
+	
 	var biome = get_current_biome()
 	if not biome:
 		return
 		
-	# Update road colors
+	# Update road colors — suppress the setter's auto-regeneration so we only
+	# fire a single regenerate_runtime_chunks() at the bottom of this function.
+	_suppress_regen = true
 	road_color = biome.road_color
+	_suppress_regen = false
 	template_fill_color = biome.road_fill_color
 	
 	# Update sky background
@@ -385,17 +399,22 @@ func apply_active_biome() -> void:
 	if sky and sky.has_method("apply_biome_settings"):
 		sky.call("apply_biome_settings", biome.sky_texture, biome.sky_modulate, biome.sky_shader, biome.sky_shader_params)
 		
-	# Update truck silhouette and headlight settings
+	# Update truck — always clear silhouette FIRST so no stale shader lingers
+	# when transitioning from Silhouette → Grass or Silhouette → Water.
 	var truck = get_node_or_null("../truck")
 	if truck:
 		if truck.has_method("set_silhouette_mode"):
-			truck.call("set_silhouette_mode", biome.use_silhouette_truck, biome.truck_silhouette_color)
+			truck.call("set_silhouette_mode", false)          # clear first
+			if biome.use_silhouette_truck:
+				truck.call("set_silhouette_mode", true, biome.truck_silhouette_color)
 		if truck.has_method("set_headlight_enabled"):
 			truck.call("set_headlight_enabled", biome.enable_headlight if "enable_headlight" in biome else false)
 		if truck.has_method("set_water_mode"):
 			truck.call("set_water_mode", biome.is_water)
 		
-	# Regenerate visuals
+	# Regenerate visuals (single call — road_color setter fires regenerate too,
+	# but only at runtime and only when the value changes, so we skip the double
+	# by setting the backing var above when already at runtime.)
 	if Engine.is_editor_hint():
 		generate_road()
 	else:
@@ -444,14 +463,17 @@ func cycle_biome() -> void:
 	if biomes.size() < 3:
 		initialize_default_biomes()
 		
-	# 1. Switch the biome index first (updates active_biome_index and set_water_mode correctly while the tunnel is still registered)
+	# ── Strict sequential cycle: Grass(0) → Silhouette(1) → Water(2) → Grass(0) ──
+	# Queued index (from tunnel-based auto-advance) takes priority over the manual
+	# B-key press so the two systems stay in sync.
 	if queued_next_biome_index != -1:
 		active_biome_index = queued_next_biome_index
 		queued_next_biome_index = -1
 	else:
-		active_biome_index = select_next_biome_index()
+		# Simple wrap-around — always step forward by one.
+		active_biome_index = (active_biome_index + 1) % biomes.size()
 		
-	# 2. Find and remove the tunnel we just crossed from active positions so it doesn't rebuild in the new biome
+	# Remove the tunnel we just crossed so it doesn't rebuild in the new biome
 	var player_x = get_target_x()
 	var removed_any = false
 	for i in range(_tunnel_positions.size() - 1, -1, -1):
@@ -460,7 +482,7 @@ func cycle_biome() -> void:
 			_tunnel_positions.remove_at(i)
 			removed_any = true
 			
-	# 3. Re-run geometry generation to clear the tunnel graphics in the new biome
+	# Re-run geometry generation to clear the tunnel graphics in the new biome
 	if removed_any:
 		clear_road_geometry_caches()
 		regenerate_runtime_chunks()
