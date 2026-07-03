@@ -76,6 +76,13 @@ var boost_timer := 0.0
 var boat: RigidBody2D
 var is_water_mode_active := false
 
+# ─── Death / Retry State ──────────────────────────────────────────────────────
+var is_dead := false
+var _flip_death_timer   := 0.0   # seconds chassis has been upside-down
+var _fuel_empty_timer   := 0.0   # seconds fuel has been at 0
+const FLIP_DEATH_DELAY  := 3.0   # upside-down for this long = death
+const FUEL_DEATH_DELAY  := 2.5   # empty for this long = death
+
 func _ready() -> void:
 	chassis = get_node_or_null("chassis")
 	container_body = get_node_or_null("container_body")
@@ -335,6 +342,10 @@ func _physics_process(delta: float) -> void:
 		if is_instance_valid(container_body):
 			container_body.apply_torque(-tilt_input * air_tilt_power * 1.5)
 
+	# ── Death checks (skip during convoy/autopilot events) ─────────────────────
+	if not is_autopilot and not is_dead:
+		_check_death(delta)
+
 ## Calls each tyre's drive() method so the wheel handles its own physics.
 func _drive_wheels(delta: float, move_input: float, braking: bool) -> void:
 	var parked = (current_gear == Gear.PARK)
@@ -548,15 +559,22 @@ func take_damage(amount: float) -> void:
 	# Scale damage by inspector-configurable multiplier
 	truck_health = max(0.0, truck_health - amount * damage_scale)
 	if truck_health <= 0.0:
-		# Dramatic explosion shake
+		# Dramatic explosion shake first
 		var dashboard = get_node_or_null("HUD/Dashboard")
 		if dashboard and "shake_intensity" in dashboard:
 			dashboard.shake_intensity = 35.0
-			
-		# Force end the timer bar UI event early (failed, but no cargo spill)
+
+		# End the timer bar UI immediately
 		var timer_bar = get_node_or_null("HUD/EventTimerBar")
 		if timer_bar and timer_bar.has_method("end_event"):
 			timer_bar.call("end_event")
+
+		# Brief pause so the shake registers visually, then trigger death.
+		# trigger_death() guards against double-calls via is_dead, so it's safe
+		# even if called while the convoy-end cleanup is still running.
+		get_tree().create_timer(0.45).timeout.connect(func():
+			trigger_death("CONVOY DESTROYED")
+		)
 
 func spill_all_cargo() -> void:
 	if not container_body:
@@ -823,6 +841,84 @@ func set_water_mode(enabled: bool) -> void:
 
 var is_respawning := false
 
+## ─── Death Detection ──────────────────────────────────────────────────────────
+
+func _check_death(delta: float) -> void:
+	var active_body = boat if is_water_mode_active else chassis
+	if not is_instance_valid(active_body):
+		return
+
+	# ── Flip detection (land only; boats naturally right themselves) ────────────
+	if not is_water_mode_active:
+		# abs(rotation) > 90 degrees (~1.57 rad) means substantially flipped
+		var rot_abs = abs(fmod(active_body.global_rotation, TAU))
+		# Normalise to [0, PI] so both ±180 map to the same range
+		if rot_abs > PI:
+			rot_abs = TAU - rot_abs
+		if rot_abs > 1.65:  # ~95 degrees — clearly upside-down
+			_flip_death_timer += delta
+			if _flip_death_timer >= FLIP_DEATH_DELAY:
+				trigger_death("FLIPPED!")
+				return
+		else:
+			_flip_death_timer = 0.0
+
+	# ── Out of fuel detection ─────────────────────────────────────────────────
+	var hud_stats = get_node_or_null("HUD/HudStats")
+	if hud_stats and "petrol" in hud_stats:
+		if hud_stats.petrol <= 0.0:
+			_fuel_empty_timer += delta
+			if _fuel_empty_timer >= FUEL_DEATH_DELAY:
+				trigger_death("OUT OF FUEL")
+				return
+		else:
+			_fuel_empty_timer = 0.0
+
+func trigger_death(cause: String) -> void:
+	if is_dead:
+		return
+	is_dead = true
+	controls_locked = true
+	print("[Truck] DEATH — cause: ", cause)
+
+	# Freeze physics on all truck parts
+	var bodies: Array = []
+	if is_water_mode_active:
+		if is_instance_valid(boat):
+			bodies.append(boat)
+	else:
+		for b in [chassis, container_body, tyre_1, tyre_2, tyre_3]:
+			if is_instance_valid(b):
+				bodies.append(b)
+	for b in bodies:
+		b.freeze = true
+		b.linear_velocity  = Vector2.ZERO
+		b.angular_velocity = 0.0
+
+	# Calculate distance covered
+	var hud_stats = get_node_or_null("HUD/HudStats")
+	var dist_m := 0.0
+	if hud_stats and "_distance_m" in hud_stats:
+		dist_m = hud_stats.get("_distance_m")
+
+	# Fade to a death tint then show menu
+	var tween = create_tween()
+	tween.tween_property(self, "modulate", Color(1.0, 0.3, 0.3, 1.0), 0.25)
+	tween.tween_interval(0.35)
+	tween.tween_property(self, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.2)
+	tween.tween_callback(func(): _spawn_retry_menu(cause, dist_m))
+
+func _spawn_retry_menu(cause: String, distance: float) -> void:
+	var retry_script = load("res://ui/retry_menu.gd")
+	if not retry_script:
+		push_error("[Truck] retry_menu.gd not found!")
+		return
+	var menu = CanvasLayer.new()
+	menu.set_script(retry_script)
+	menu.name = "RetryMenu"
+	get_tree().root.add_child(menu)
+	menu.call("show_death", cause, distance)
+
 func respawn_at_crusher_start() -> void:
 	if is_respawning:
 		return
@@ -1046,5 +1142,3 @@ func respawn_at_crusher_start() -> void:
 		controls_locked = false
 		is_respawning = false
 	)
-
-

@@ -162,8 +162,9 @@ func _physics_process(delta: float) -> void:
 						is_crushing = true
 						
 					if is_crushing:
-						print("[Crusher] Player crushed! Respawning.")
-						truck_node.call("respawn_at_crusher_start")
+						print("[Crusher] Player crushed! Triggering death.")
+						if truck_node.has_method("trigger_death"):
+							truck_node.call("trigger_death", "CRUSHED!")
 						break
 		
 	# Spin the sawblade angle
