@@ -666,6 +666,14 @@ func _ready() -> void:
 		capture_templates()
 		initialize_default_biomes()
 		
+		# ── Apply retry seed from GameState if set ────────────────────────────
+		var gs = get_node_or_null("/root/GameState")
+		if gs and gs.pending_road_seed != 0:
+			road_seed = gs.pending_road_seed
+			gs.pending_road_seed = 0   # consume it so next run is random again
+			update_seed_offsets()
+			print("[Road] Using retry seed: ", road_seed)
+		
 		# Free template nodes at runtime to avoid collision/visual duplication at the start
 		var col_poly = _get_collision_polygon()
 		var fill = _get_road_fill()
