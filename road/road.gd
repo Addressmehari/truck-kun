@@ -262,7 +262,7 @@ func _apply_terrain_preset() -> void:
 const TUNNEL_MIN_SPACING := 30000.0
 
 # Dynamic tunnel spawning tracking
-var next_planned_tunnel_x: float = 30000.0
+var next_planned_tunnel_x: float = 60000.0 # First tunnel planned at or after 2000m
 var _tunnel_is_queued: bool = false
 var _tunnel_positions: Array[float] = []
 var _was_mission_active: bool = false
@@ -936,6 +936,23 @@ func is_near_tunnel(x: float) -> bool:
 			return true
 	return false
 
+func is_in_tunnel_spawn_shield(x: float) -> bool:
+	# Check active/spawned tunnels
+	for tx in _tunnel_positions:
+		# Tunnel spans [tx - 1000, tx + 1000]
+		# 100m padding before is [tx - 4000, tx - 1000]
+		# Total blocked range is [tx - 4000, tx + 1000]
+		if x >= tx - 4000.0 and x <= tx + 1000.0:
+			return true
+			
+	# Also check the upcoming future tunnel to avoid race conditions with the coin spawner
+	var chunk_idx = int(round(next_planned_tunnel_x / chunk_width))
+	var future_tx = (chunk_idx + 0.5) * chunk_width
+	if x >= future_tx - 4000.0 and x <= future_tx + 1000.0:
+		return true
+		
+	return false
+
 func is_near_house(x: float) -> bool:
 	var check_dist = 1500.0
 	var min_chunk = int(floor((x - check_dist) / chunk_width))
@@ -1439,19 +1456,22 @@ func _update_tunnel_spawning(current_x: float) -> void:
 				_mission_end_x = current_x
 			# 300 meters = 9000 pixels
 			if current_x >= _mission_end_x + 9000.0:
-				# Spawn the tunnel in the next chunk ahead
 				var current_view_dist = get_current_view_distance()
 				var spawn_chunk = int(ceil((current_x + current_view_dist) / chunk_width))
 				var tx = (spawn_chunk + 0.5) * chunk_width
 				
-				_tunnel_positions.append(tx)
-				_tunnel_is_queued = false
-				next_planned_tunnel_x = tx + get_next_tunnel_spacing()
-				_mission_end_x = -1.0
-				
-				# Regenerate chunks immediately to apply the new tunnel
-				clear_road_geometry_caches()
-				regenerate_runtime_chunks()
+				# Spawn ONLY when distance is greater than 2000m AND road is in smooth state
+				if tx > 60000.0 and is_smooth_zone_at_x(tx):
+					_tunnel_positions.append(tx)
+					_tunnel_is_queued = false
+					next_planned_tunnel_x = tx + get_next_tunnel_spacing()
+					_mission_end_x = -1.0
+					
+					clear_road_geometry_caches()
+					regenerate_runtime_chunks()
+				else:
+					# Push _mission_end_x forward so we check again after moving 300px
+					_mission_end_x += 300.0
 	else:
 		var current_view_dist = get_current_view_distance()
 		if current_x + current_view_dist >= next_planned_tunnel_x:
@@ -1461,12 +1481,17 @@ func _update_tunnel_spawning(current_x: float) -> void:
 			else:
 				var chunk_idx = int(round(next_planned_tunnel_x / chunk_width))
 				var tx = (chunk_idx + 0.5) * chunk_width
-				_tunnel_positions.append(tx)
-				next_planned_tunnel_x = tx + get_next_tunnel_spacing()
 				
-				# Regenerate chunks immediately to apply the new tunnel
-				clear_road_geometry_caches()
-				regenerate_runtime_chunks()
+				# Spawn ONLY when distance is greater than 2000m AND road is in smooth state
+				if tx > 60000.0 and is_smooth_zone_at_x(tx):
+					_tunnel_positions.append(tx)
+					next_planned_tunnel_x = tx + get_next_tunnel_spacing()
+					
+					clear_road_geometry_caches()
+					regenerate_runtime_chunks()
+				else:
+					# Push the planned tunnel forward to the next chunk
+					next_planned_tunnel_x = tx + chunk_width
 
 func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint():
@@ -1481,6 +1506,7 @@ func _physics_process(_delta: float) -> void:
 	# Throttle chunk updates (check every 8 frames instead of every frame)
 	if Engine.get_physics_frames() % 8 == 0:
 		update_chunks(get_target_x())
+		_update_tunnel_spawning(get_target_x())
 		
 	update_active_chunks_geometry()
 
@@ -2230,6 +2256,13 @@ func create_chunk(i: int) -> void:
 		if not bridge_data.is_empty():
 			bridge_node = spawn_physics_bridge(i, bridge_data["x"], bridge_data["y"], bridge_data["width"])
 		
+	# Spawn tunnel if present at runtime
+	var tunnel_node = null
+	if not Engine.is_editor_hint():
+		var tunnel_data = get_tunnel_at_chunk(i)
+		if not tunnel_data.is_empty():
+			tunnel_node = spawn_tunnel_node(i, tunnel_data)
+
 	active_chunks[i] = {
 		"collision": col_poly,
 		"fill": fill,
@@ -2241,7 +2274,8 @@ func create_chunk(i: int) -> void:
 		"grass2": grass2,
 		"house": house_node,
 		"elevator": elevator_node,
-		"bridge": bridge_node
+		"bridge": bridge_node,
+		"tunnel": tunnel_node
 	}
 
 func destroy_chunk(i: int) -> void:

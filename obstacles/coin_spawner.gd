@@ -161,6 +161,16 @@ func _fill_pool() -> void:
 	while ahead_count < pool_size and _next_spawn_x < chassis_x + spawn_lead:
 		var roll = _rng.randf()
 
+		# Check if this spawn X is within the tunnel spawn shield (inside or 100m before the tunnel)
+		var in_tunnel_shield := false
+		if _road and _road.has_method("is_in_tunnel_spawn_shield"):
+			in_tunnel_shield = _road.is_in_tunnel_spawn_shield(_next_spawn_x)
+			
+		if in_tunnel_shield:
+			# Suppress spawns, just advance the frontier
+			_next_spawn_x += _rng.randf_range(min_spacing, max_spacing)
+			continue
+
 		# Resolve whether this spawn X falls inside a bridge canyon — mystery boxes
 		# are suppressed there because get_road_height() returns the canyon floor,
 		# not the bridge deck, so the box would spawn far below the playable surface.
