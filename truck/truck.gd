@@ -76,6 +76,7 @@ var is_o_currently_holding: bool = false
 # Combat / Convoy Event State
 var is_autopilot := false
 var is_tunnel_autopilot := false
+var is_debug_display_active := false
 var tunnel_target_x := 0.0
 var cinematic_top_bar: ColorRect = null
 var cinematic_bottom_bar: ColorRect = null
@@ -387,6 +388,78 @@ func _physics_process(delta: float) -> void:
 	if not is_autopilot and not is_tunnel_autopilot and not is_dead:
 		_check_death(delta)
 
+	# ── Debug Tunnel Distance Display ─────────────────────────────────────────
+	var hud = get_node_or_null("HUD")
+	if hud:
+		if is_debug_display_active:
+			var label = hud.get_node_or_null("DebugTunnelLabel")
+			if not label:
+				label = Label.new()
+				label.name = "DebugTunnelLabel"
+				label.anchor_left = 1.0
+				label.anchor_right = 1.0
+				label.anchor_top = 0.0
+				label.anchor_bottom = 0.0
+				label.offset_left = -320
+				label.offset_right = -20
+				label.offset_top = 20
+				label.offset_bottom = 60
+				label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				label.add_theme_font_size_override("font_size", 20)
+				label.add_theme_color_override("font_shadow_color", Color.BLACK)
+				label.add_theme_constant_override("shadow_offset_x", 2)
+				label.add_theme_constant_override("shadow_offset_y", 2)
+				hud.add_child(label)
+			
+			var road = get_node_or_null("/root/main/Road")
+			var player_x = active_body.global_position.x if is_instance_valid(active_body) else 0.0
+			var target_tunnel_x = INF
+			
+			if road:
+				# 1. First, check if there's any already spawned tunnel ahead of us
+				var tunnel_positions = road.get("_tunnel_positions")
+				if tunnel_positions is Array:
+					for tx in tunnel_positions:
+						if tx > player_x:
+							target_tunnel_x = min(target_tunnel_x, tx)
+				
+				# 2. If no spawned tunnel is ahead, estimate when the upcoming tunnel will spawn
+				if target_tunnel_x == INF:
+					var plan_x = road.get("next_planned_tunnel_x")
+					if plan_x is float:
+						var tunnel_is_queued = road.get("_tunnel_is_queued") == true
+						var mission_active = road.call("is_mission_or_event_active") == true
+						var chunk_width = road.get("chunk_width") if road.get("chunk_width") != null else 3000.0
+						
+						if tunnel_is_queued or (mission_active and player_x + 4500.0 >= plan_x):
+							var dest_x = road.call("_get_active_mission_destination_x")
+							if dest_x > 0.0:
+								# Spawns after mission ends plus 300m safety gap + view distance
+								var estimated_x = dest_x + 9000.0 + 4500.0
+								var chunk_idx = int(ceil(estimated_x / chunk_width))
+								target_tunnel_x = (chunk_idx + 0.5) * chunk_width
+							else:
+								var mission_end_x = road.get("_mission_end_x")
+								if mission_end_x is float and mission_end_x > 0.0:
+									var estimated_x = mission_end_x + 9000.0 + 4500.0
+									var chunk_idx = int(ceil(estimated_x / chunk_width))
+									target_tunnel_x = (chunk_idx + 0.5) * chunk_width
+						
+						# Fallback to standard planned coordinate if not queued
+						if target_tunnel_x == INF:
+							var chunk_idx = int(round(plan_x / chunk_width))
+							target_tunnel_x = (chunk_idx + 0.5) * chunk_width
+			
+			if target_tunnel_x == INF or target_tunnel_x <= player_x:
+				label.text = "Tunnel: -- m"
+			else:
+				var dist_meters = int(round((target_tunnel_x - player_x) / 30.0))
+				label.text = "Tunnel: %d m" % dist_meters
+		else:
+			var label = hud.get_node_or_null("DebugTunnelLabel")
+			if label:
+				label.queue_free()
+
 ## Calls each tyre's drive() method so the wheel handles its own physics.
 func _drive_wheels(delta: float, move_input: float, braking: bool) -> void:
 	var parked = (current_gear == Gear.PARK)
@@ -429,6 +502,10 @@ func _input(event: InputEvent) -> void:
 						var norm = sqrt(-2.0 * log(u1)) * cos(TAU * u2)
 						var event_dist = clamp(550.0 + norm * 30.0, 500.0, 600.0)
 						timer_bar.call("setup", "Convoy", "🚚", Color(0.15, 0.42, 0.85), event_dist)
+			elif cheat_buffer.ends_with("stats"):
+				cheat_buffer = ""
+				is_debug_display_active = not is_debug_display_active
+				print("Cheat activated: debug tunnel distance (Active: ", is_debug_display_active, ")")
 			
 			elif cheat_buffer.ends_with("crusher"):
 				cheat_buffer = "" # clear buffer

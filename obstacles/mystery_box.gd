@@ -95,6 +95,11 @@ func _process(delta: float) -> void:
 
 	_elapsed += delta
 	
+	# Despawn immediately if there is an active event (convoy/crusher/etc.)
+	if not _collected and _road and _road.has_method("is_event_active") and _road.call("is_event_active"):
+		queue_free()
+		return
+	
 	if _collected:
 		_collection_timer += delta
 		# Update particles with velocity and drag

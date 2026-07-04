@@ -1460,8 +1460,8 @@ func _update_tunnel_spawning(current_x: float) -> void:
 				var spawn_chunk = int(ceil((current_x + current_view_dist) / chunk_width))
 				var tx = (spawn_chunk + 0.5) * chunk_width
 				
-				# Spawn ONLY when distance is greater than 3000m
-				if tx > 90000.0:
+				# Spawn ONLY when distance is greater than 1500m
+				if tx > 45000.0:
 					_tunnel_positions.append(tx)
 					_tunnel_is_queued = false
 					next_planned_tunnel_x = tx + get_next_tunnel_spacing()
@@ -1482,8 +1482,8 @@ func _update_tunnel_spawning(current_x: float) -> void:
 				var chunk_idx = int(round(next_planned_tunnel_x / chunk_width))
 				var tx = (chunk_idx + 0.5) * chunk_width
 				
-				# Spawn ONLY when distance is greater than 3000m
-				if tx > 90000.0:
+				# Spawn ONLY when distance is greater than 1500m
+				if tx > 45000.0:
 					_tunnel_positions.append(tx)
 					next_planned_tunnel_x = tx + get_next_tunnel_spacing()
 					

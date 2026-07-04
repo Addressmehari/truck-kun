@@ -89,6 +89,12 @@ func _physics_process(delta: float) -> void:
 	if _road and _road.has_method("is_event_active"):
 		is_event_running = _road.call("is_event_active")
 		
+	if is_event_running:
+		# Despawn any existing uncollected mystery boxes immediately when an event starts/runs
+		for box in get_tree().get_nodes_in_group("mystery_boxes"):
+			if is_instance_valid(box) and not box.get("_collected"):
+				box.queue_free()
+		
 	if _was_event_active and not is_event_running:
 		var duration = _rng.randf_range(min_cooldown_duration, max_cooldown_duration)
 		_cooldown_timer = duration
@@ -212,7 +218,14 @@ func _fill_pool() -> void:
 						print("[CoinSpawner] SMART SPAWN: Fuel ratio %.2f, dynamic chance %.2f%%. Spawning petrol can at X=%.1f" % [fuel_ratio, dynamic_chance * 100.0, _next_spawn_x])
 
 		# ── Obstacle Selection ──
-		if not mystery_box_blocked and not in_bridge_zone and _mystery_box_scene and roll < mystery_box_chance:
+		var is_event_or_mission = false
+		if _road:
+			if _road.has_method("is_event_active") and _road.call("is_event_active"):
+				is_event_or_mission = true
+			if _road.has_method("is_mission_or_event_active") and _road.call("is_mission_or_event_active"):
+				is_event_or_mission = true
+				
+		if not mystery_box_blocked and not in_bridge_zone and not is_event_or_mission and _mystery_box_scene and roll < mystery_box_chance:
 			# Mystery box — only when no active event and cooldown has expired
 			_spawn_mystery_box(_next_spawn_x)
 			ahead_count += 1
