@@ -75,6 +75,13 @@ var is_o_currently_holding: bool = false
 
 # Combat / Convoy Event State
 var is_autopilot := false
+var is_tunnel_autopilot := false
+var is_debug_display_active := false
+var tunnel_target_x := 0.0
+var has_completed_journey := false
+var is_cinematic_mission_complete := false
+var cinematic_top_bar: ColorRect = null
+var cinematic_bottom_bar: ColorRect = null
 var truck_health := 100.0
 var cheat_buffer := ""
 var convoy_spawn_timer := 0.0
@@ -211,12 +218,38 @@ func _physics_process(delta: float) -> void:
 
 	var active_body = boat if is_water_mode_active else chassis
 
-	# Simplified driving mechanics:
-	# "D" key (and W, UP, RIGHT) drives forward
-	# "A" key (and S, DOWN, LEFT) drives backward
 	var forward_pressed = false
 	var backward_pressed = false
-	if not controls_locked:
+	var is_braking = false
+	
+	if is_tunnel_autopilot:
+		var current_px = active_body.global_position.x if is_instance_valid(active_body) else 0.0
+		var dist_to_target = tunnel_target_x - current_px
+		
+		# Slowly drive to the center of the tunnel
+		if abs(dist_to_target) > 30.0:
+			if dist_to_target > 0:
+				forward_pressed = true
+				backward_pressed = false
+				if current_gear != Gear.DRIVE:
+					set_gear(Gear.DRIVE)
+			else:
+				forward_pressed = false
+				backward_pressed = true
+				if current_gear != Gear.REVERSE:
+					set_gear(Gear.REVERSE)
+		else:
+			# Stop at center
+			forward_pressed = false
+			backward_pressed = false
+			is_braking = true
+			if current_gear != Gear.PARK:
+				set_gear(Gear.PARK)
+				
+			if not has_completed_journey:
+				has_completed_journey = true
+				call_deferred("_spawn_journey_completed_menu")
+	elif not controls_locked:
 		forward_pressed = Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_RIGHT)
 		backward_pressed = Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT)
 	
@@ -252,9 +285,13 @@ func _physics_process(delta: float) -> void:
 					active_enemies += 1
 			
 	var move_input = 0.0
-	var is_braking = false
 	
-	if controls_locked:
+	if is_tunnel_autopilot:
+		if forward_pressed and not backward_pressed:
+			move_input = 0.25 # Slow crawl forward
+		elif backward_pressed and not forward_pressed:
+			move_input = -0.25 # Slow crawl backward
+	elif controls_locked:
 		is_braking = true
 	else:
 		if forward_pressed and not backward_pressed:
@@ -353,9 +390,81 @@ func _physics_process(delta: float) -> void:
 		if is_instance_valid(container_body):
 			container_body.apply_torque(-tilt_input * air_tilt_power * 1.5)
 
-	# ── Death checks (skip during convoy/autopilot events) ─────────────────────
-	if not is_autopilot and not is_dead:
+	# ── Death checks (skip during convoy/autopilot/tunnel events) ─────────────
+	if not is_autopilot and not is_tunnel_autopilot and not is_dead:
 		_check_death(delta)
+
+	# ── Debug Tunnel Distance Display ─────────────────────────────────────────
+	var hud = get_node_or_null("HUD")
+	if hud:
+		if is_debug_display_active:
+			var label = hud.get_node_or_null("DebugTunnelLabel")
+			if not label:
+				label = Label.new()
+				label.name = "DebugTunnelLabel"
+				label.anchor_left = 1.0
+				label.anchor_right = 1.0
+				label.anchor_top = 0.0
+				label.anchor_bottom = 0.0
+				label.offset_left = -320
+				label.offset_right = -20
+				label.offset_top = 20
+				label.offset_bottom = 60
+				label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				label.add_theme_font_size_override("font_size", 20)
+				label.add_theme_color_override("font_shadow_color", Color.BLACK)
+				label.add_theme_constant_override("shadow_offset_x", 2)
+				label.add_theme_constant_override("shadow_offset_y", 2)
+				hud.add_child(label)
+			
+			var road = get_node_or_null("/root/main/Road")
+			var player_x = active_body.global_position.x if is_instance_valid(active_body) else 0.0
+			var target_tunnel_x = INF
+			
+			if road:
+				# 1. First, check if there's any already spawned tunnel ahead of us
+				var tunnel_positions = road.get("_tunnel_positions")
+				if tunnel_positions is Array:
+					for tx in tunnel_positions:
+						if tx > player_x:
+							target_tunnel_x = min(target_tunnel_x, tx)
+				
+				# 2. If no spawned tunnel is ahead, estimate when the upcoming tunnel will spawn
+				if target_tunnel_x == INF:
+					var plan_x = road.get("next_planned_tunnel_x")
+					if plan_x is float:
+						var tunnel_is_queued = road.get("_tunnel_is_queued") == true
+						var mission_active = road.call("is_mission_or_event_active") == true
+						var chunk_width = road.get("chunk_width") if road.get("chunk_width") != null else 3000.0
+						
+						if tunnel_is_queued or (mission_active and player_x + 4500.0 >= plan_x):
+							var dest_x = road.call("_get_active_mission_destination_x")
+							if dest_x > 0.0:
+								# Spawns after mission ends plus 300m safety gap + view distance
+								var estimated_x = dest_x + 9000.0 + 4500.0
+								var chunk_idx = int(ceil(estimated_x / chunk_width))
+								target_tunnel_x = (chunk_idx + 0.5) * chunk_width
+							else:
+								var mission_end_x = road.get("_mission_end_x")
+								if mission_end_x is float and mission_end_x > 0.0:
+									var estimated_x = mission_end_x + 9000.0 + 4500.0
+									var chunk_idx = int(ceil(estimated_x / chunk_width))
+									target_tunnel_x = (chunk_idx + 0.5) * chunk_width
+						
+						# Fallback to standard planned coordinate if not queued
+						if target_tunnel_x == INF:
+							var chunk_idx = int(round(plan_x / chunk_width))
+							target_tunnel_x = (chunk_idx + 0.5) * chunk_width
+			
+			if target_tunnel_x == INF or target_tunnel_x <= player_x:
+				label.text = "Tunnel: -- m"
+			else:
+				var dist_meters = int(round((target_tunnel_x - player_x) / 30.0))
+				label.text = "Tunnel: %d m" % dist_meters
+		else:
+			var label = hud.get_node_or_null("DebugTunnelLabel")
+			if label:
+				label.queue_free()
 
 ## Calls each tyre's drive() method so the wheel handles its own physics.
 func _drive_wheels(delta: float, move_input: float, braking: bool) -> void:
@@ -399,6 +508,10 @@ func _input(event: InputEvent) -> void:
 						var norm = sqrt(-2.0 * log(u1)) * cos(TAU * u2)
 						var event_dist = clamp(550.0 + norm * 30.0, 500.0, 600.0)
 						timer_bar.call("setup", "Convoy", "🚚", Color(0.15, 0.42, 0.85), event_dist)
+			elif cheat_buffer.ends_with("stats"):
+				cheat_buffer = ""
+				is_debug_display_active = not is_debug_display_active
+				print("Cheat activated: debug tunnel distance (Active: ", is_debug_display_active, ")")
 			
 			elif cheat_buffer.ends_with("crusher"):
 				cheat_buffer = "" # clear buffer
@@ -978,6 +1091,119 @@ func _spawn_retry_menu(cause: String, distance: float) -> void:
 	get_tree().root.add_child(menu)
 	menu.call("show_death", cause, distance)
 
+func _spawn_journey_completed_menu() -> void:
+	var journey_menu_script = load("res://ui/journey_completed_menu.gd")
+	if not journey_menu_script:
+		push_error("[Truck] journey_completed_menu.gd not found!")
+		return
+	var menu = CanvasLayer.new()
+	menu.set_script(journey_menu_script)
+	menu.name = "JourneyCompletedMenu"
+	get_tree().root.add_child(menu)
+	menu.call("show_completed")
+
+func trigger_cinematic_mission_complete(mission_name: String, stats_text: String) -> void:
+	var hud = get_node_or_null("HUD")
+	if hud:
+		var old_top = hud.get_node_or_null("CinematicTopBar")
+		if old_top: old_top.queue_free()
+		var old_bottom = hud.get_node_or_null("CinematicBottomBar")
+		if old_bottom: old_bottom.queue_free()
+		
+		var top_bar = ColorRect.new()
+		top_bar.name = "CinematicTopBar"
+		top_bar.color = Color.BLACK
+		top_bar.anchor_left = 0.0
+		top_bar.anchor_right = 1.0
+		top_bar.anchor_top = 0.0
+		top_bar.anchor_bottom = 0.0
+		top_bar.offset_left = 0
+		top_bar.offset_right = 0
+		top_bar.offset_top = 0
+		top_bar.offset_bottom = 0
+		hud.add_child(top_bar)
+		
+		var bottom_bar = ColorRect.new()
+		bottom_bar.name = "CinematicBottomBar"
+		bottom_bar.color = Color.BLACK
+		bottom_bar.anchor_left = 0.0
+		bottom_bar.anchor_right = 1.0
+		bottom_bar.anchor_top = 1.0
+		bottom_bar.anchor_bottom = 1.0
+		bottom_bar.offset_left = 0
+		bottom_bar.offset_right = 0
+		bottom_bar.offset_top = 0
+		bottom_bar.offset_bottom = 0
+		hud.add_child(bottom_bar)
+		
+		var tween_bars = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween_bars.tween_property(top_bar, "offset_bottom", 90.0, 0.5)
+		tween_bars.tween_property(bottom_bar, "offset_top", -90.0, 0.5)
+		
+		var text_container = Control.new()
+		text_container.name = "CinematicMissionOverlay"
+		text_container.anchor_right = 1.0
+		text_container.anchor_bottom = 1.0
+		hud.add_child(text_container)
+		
+		var title = Label.new()
+		title.text = "[ %s ] COMPLETED" % mission_name.to_upper()
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title.anchor_left = 0.5
+		title.anchor_top = 0.4
+		title.anchor_right = 0.5
+		title.anchor_bottom = 0.4
+		title.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		title.grow_vertical = Control.GROW_DIRECTION_BOTH
+		title.add_theme_font_size_override("font_size", 42)
+		title.add_theme_color_override("font_color", Color.WHITE)
+		title.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		title.add_theme_constant_override("outline_size", 8)
+		title.modulate.a = 0.0
+		text_container.add_child(title)
+		
+		var subtitle = Label.new()
+		subtitle.text = stats_text
+		subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		subtitle.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		subtitle.anchor_left = 0.5
+		subtitle.anchor_top = 0.925
+		subtitle.anchor_right = 0.5
+		subtitle.anchor_bottom = 0.925
+		subtitle.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		subtitle.grow_vertical = Control.GROW_DIRECTION_BOTH
+		subtitle.add_theme_font_size_override("font_size", 18)
+		subtitle.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
+		subtitle.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+		subtitle.add_theme_constant_override("outline_size", 4)
+		subtitle.modulate.a = 0.0
+		text_container.add_child(subtitle)
+		
+		var tween_text = create_tween().set_parallel(true)
+		tween_text.tween_property(title, "modulate:a", 1.0, 0.6)
+		tween_text.tween_property(subtitle, "modulate:a", 1.0, 0.6)
+		
+		is_cinematic_mission_complete = true
+		
+		get_tree().create_timer(2.0).timeout.connect(func():
+			is_cinematic_mission_complete = false
+			
+			var tween_fade = create_tween().set_parallel(true)
+			tween_fade.tween_property(title, "modulate:a", 0.0, 0.4)
+			tween_fade.tween_property(subtitle, "modulate:a", 0.0, 0.4)
+			
+			var tween_retract = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+			tween_retract.tween_property(top_bar, "offset_bottom", 0.0, 0.6)
+			tween_retract.tween_property(bottom_bar, "offset_top", 0.0, 0.6)
+			
+			tween_retract.chain().tween_callback(func():
+				if is_instance_valid(top_bar): top_bar.queue_free()
+				if is_instance_valid(bottom_bar): bottom_bar.queue_free()
+				if is_instance_valid(text_container): text_container.queue_free()
+			)
+		)
+
 func respawn_at_crusher_start() -> void:
 	if is_respawning:
 		return
@@ -1202,3 +1428,87 @@ func respawn_at_crusher_start() -> void:
 		is_respawning = false
 		_dislocation_grace_timer = 0.5
 	)
+
+func start_tunnel_autopilot(target_x: float) -> void:
+	if is_tunnel_autopilot:
+		return
+	is_tunnel_autopilot = true
+	tunnel_target_x = target_x
+	has_completed_journey = false
+	
+	# Stop convoy/crusher/active event early if entering the tunnel
+	if is_autopilot:
+		end_active_event("Convoy")
+	var timer_bar = get_node_or_null("HUD/EventTimerBar")
+	if timer_bar and timer_bar.has_method("end_event"):
+		timer_bar.call("end_event")
+		
+	var road = get_node_or_null("/root/main/Road")
+	if road:
+		if road.get("is_convoy_active") == true:
+			road.call("end_active_event", "Convoy")
+		if road.has_method("end_active_event"):
+			road.call("end_active_event", "Crusher")
+			
+	# Set gear to Drive so motor works
+	if current_gear != Gear.DRIVE:
+		set_gear(Gear.DRIVE)
+		
+	# Trigger letterbox bars slide-in
+	var hud = get_node_or_null("HUD")
+	if hud:
+		var old_top = hud.get_node_or_null("CinematicTopBar")
+		if old_top: old_top.queue_free()
+		var old_bottom = hud.get_node_or_null("CinematicBottomBar")
+		if old_bottom: old_bottom.queue_free()
+		
+		cinematic_top_bar = ColorRect.new()
+		cinematic_top_bar.name = "CinematicTopBar"
+		cinematic_top_bar.color = Color.BLACK
+		cinematic_top_bar.anchor_left = 0.0
+		cinematic_top_bar.anchor_right = 1.0
+		cinematic_top_bar.anchor_top = 0.0
+		cinematic_top_bar.anchor_bottom = 0.0
+		cinematic_top_bar.offset_left = 0
+		cinematic_top_bar.offset_right = 0
+		cinematic_top_bar.offset_top = 0
+		cinematic_top_bar.offset_bottom = 0
+		hud.add_child(cinematic_top_bar)
+		
+		cinematic_bottom_bar = ColorRect.new()
+		cinematic_bottom_bar.name = "CinematicBottomBar"
+		cinematic_bottom_bar.color = Color.BLACK
+		cinematic_bottom_bar.anchor_left = 0.0
+		cinematic_bottom_bar.anchor_right = 1.0
+		cinematic_bottom_bar.anchor_top = 1.0
+		cinematic_bottom_bar.anchor_bottom = 1.0
+		cinematic_bottom_bar.offset_left = 0
+		cinematic_bottom_bar.offset_right = 0
+		cinematic_bottom_bar.offset_top = 0
+		cinematic_bottom_bar.offset_bottom = 0
+		hud.add_child(cinematic_bottom_bar)
+		
+		var tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween.tween_property(cinematic_top_bar, "offset_bottom", 100.0, 1.5)
+		tween.tween_property(cinematic_bottom_bar, "offset_top", -100.0, 1.5)
+
+func stop_tunnel_autopilot() -> void:
+	if not is_tunnel_autopilot:
+		return
+	is_tunnel_autopilot = false
+	
+	# Retract cinematic bars
+	var hud = get_node_or_null("HUD")
+	if hud:
+		var top_bar = hud.get_node_or_null("CinematicTopBar")
+		var bottom_bar = hud.get_node_or_null("CinematicBottomBar")
+		if top_bar or bottom_bar:
+			var tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+			if top_bar:
+				tween.tween_property(top_bar, "offset_bottom", 0.0, 1.5)
+			if bottom_bar:
+				tween.tween_property(bottom_bar, "offset_top", 0.0, 1.5)
+			tween.chain().tween_callback(func():
+				if top_bar and is_instance_valid(top_bar): top_bar.queue_free()
+				if bottom_bar and is_instance_valid(bottom_bar): bottom_bar.queue_free()
+			)

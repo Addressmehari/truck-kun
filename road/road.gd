@@ -1,7 +1,7 @@
 @tool
 extends StaticBody2D
 
-enum TerrainType { RUGGED, SMOOTH, BOTH, CUSTOM }
+enum TerrainType {RUGGED, SMOOTH, BOTH, CUSTOM}
 @export var road_length := 15000.0:
 	set(val):
 		road_length = val
@@ -259,10 +259,10 @@ func _apply_terrain_preset() -> void:
 	# BOTH does not set static parameters on the sliders, as they vary dynamically by distance.
 
 
-const TUNNEL_MIN_SPACING := 30000.0
+const TUNNEL_MIN_SPACING := 00.0
 
 # Dynamic tunnel spawning tracking
-var next_planned_tunnel_x: float = 30000.0
+var next_planned_tunnel_x: float = 90000.0 # Randomized between 1500m and 3000m at startup
 var _tunnel_is_queued: bool = false
 var _tunnel_positions: Array[float] = []
 var _was_mission_active: bool = false
@@ -404,7 +404,7 @@ func apply_active_biome() -> void:
 	var truck = get_node_or_null("../truck")
 	if truck:
 		if truck.has_method("set_silhouette_mode"):
-			truck.call("set_silhouette_mode", false)          # clear first
+			truck.call("set_silhouette_mode", false) # clear first
 			if biome.use_silhouette_truck:
 				truck.call("set_silhouette_mode", true, biome.truck_silhouette_color)
 		if truck.has_method("set_headlight_enabled"):
@@ -451,12 +451,8 @@ func prepare_next_biome() -> void:
 	show_next_biome_announcement(next_biome_name)
 
 func get_next_tunnel_spacing() -> float:
-	var biome = get_current_biome()
-	if biome:
-		if biome.is_water or biome.biome_name.contains("Silhouette"):
-			# 1000m to 1500m = 30000 to 45000 pixels
-			return randf_range(30000.0, 45000.0)
-	return 30000.0 # Default 1000m
+	# Random spacing between 1500m (45000px) and 3000m (90000px)
+	return randf_range(45000.0, 90000.0)
 
 func cycle_biome() -> void:
 	# Always reinitialize if we have fewer biomes than expected
@@ -670,9 +666,15 @@ func _ready() -> void:
 		var gs = get_node_or_null("/root/GameState")
 		if gs and gs.pending_road_seed != 0:
 			road_seed = gs.pending_road_seed
-			gs.pending_road_seed = 0   # consume it so next run is random again
+			gs.pending_road_seed = 0 # consume it so next run is random again
 			update_seed_offsets()
 			print("[Road] Using retry seed: ", road_seed)
+		
+		# Deterministically set the first tunnel position based on the seed
+		var init_rng = RandomNumberGenerator.new()
+		init_rng.seed = hash(road_seed + 1993)
+		next_planned_tunnel_x = init_rng.randf_range(45000.0, 90000.0)
+		print("[Road] First planned tunnel randomized to: ", int(next_planned_tunnel_x / 30.0), "m (X=", next_planned_tunnel_x, ")")
 		
 		# Free template nodes at runtime to avoid collision/visual duplication at the start
 		var col_poly = _get_collision_polygon()
@@ -785,21 +787,21 @@ func get_raw_base_road_height(x: float) -> float:
 				var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 1.0)
 				var blend = raw_shift * max_ruggedness
 				
-				active_mountain      = lerp(130.0, 220.0, blend)
-				active_long_hills    = lerp(60.0, 85.0, blend)
-				active_medium_waves  = lerp(35.0, 50.0, blend)
+				active_mountain = lerp(130.0, 220.0, blend)
+				active_long_hills = lerp(60.0, 85.0, blend)
+				active_medium_waves = lerp(35.0, 50.0, blend)
 				active_smooth_spikes = lerp(15.0, 65.0, blend)
-				active_sharp_dips    = lerp(8.0, 25.0, blend)
-				active_lil_spikes    = lerp(0.0, 18.0, blend)
-				active_small_bumps   = lerp(6.0, 12.0, blend)
+				active_sharp_dips = lerp(8.0, 25.0, blend)
+				active_lil_spikes = lerp(0.0, 18.0, blend)
+				active_small_bumps = lerp(6.0, 12.0, blend)
 			
-			var mountains     = sin((x + seed_offset_3 * 0.3 + seed_offset_1 * 0.7) * 0.0003) * active_mountain * mult
-			var long_hills    = sin((x + seed_offset_1) * 0.0007) * active_long_hills * mult
-			var medium_waves  = cos((x + seed_offset_2) * 0.0013) * active_medium_waves * mult
+			var mountains = sin((x + seed_offset_3 * 0.3 + seed_offset_1 * 0.7) * 0.0003) * active_mountain * mult
+			var long_hills = sin((x + seed_offset_1) * 0.0007) * active_long_hills * mult
+			var medium_waves = cos((x + seed_offset_2) * 0.0013) * active_medium_waves * mult
 			var smooth_spikes = sin((x + seed_offset_2 * 1.5 + seed_offset_3) * 0.006) * active_smooth_spikes * mult
-			var sharp_dips    = sin((x + seed_offset_2 * 0.6 + seed_offset_3) * 0.003) * active_sharp_dips * mult
-			var lil_spikes    = sin((x + seed_offset_1 * 2.1 + seed_offset_2) * 0.022) * active_lil_spikes * mult
-			var small_bumps   = sin((x + seed_offset_3) * 0.008) * active_small_bumps * mult
+			var sharp_dips = sin((x + seed_offset_2 * 0.6 + seed_offset_3) * 0.003) * active_sharp_dips * mult
+			var lil_spikes = sin((x + seed_offset_1 * 2.1 + seed_offset_2) * 0.022) * active_lil_spikes * mult
+			var small_bumps = sin((x + seed_offset_3) * 0.008) * active_small_bumps * mult
 			
 			var height = 42.0 + (mountains + long_hills + medium_waves + smooth_spikes + sharp_dips + lil_spikes + small_bumps)
 			base_h = lerp(42.0, height, factor)
@@ -828,7 +830,7 @@ func get_base_road_height(x: float) -> float:
 	var down_block = _get_down_block_in_range(x, block_flat_after + DOWN_TRANSITION)
 	if not down_block.is_empty():
 		var bx = down_block["x"]
-		var drop_amount = down_block["height"]  # How many pixels downward the cliff drops
+		var drop_amount = down_block["height"] # How many pixels downward the cliff drops
 		var flat_end = bx + block_flat_after
 		# Base (UP-block-only) offset at and after the cliff — stays the same since DOWN
 		# blocks no longer contribute to cumulative offset
@@ -842,7 +844,7 @@ func get_base_road_height(x: float) -> float:
 			var t = clamp((x - flat_end) / DOWN_TRANSITION, 0.0, 1.0)
 			var factor = t * t * (3.0 - 2.0 * t) # smoothstep
 			var landing_h = get_raw_base_road_height(bx) + base_offset + drop_amount
-			var natural_h  = get_raw_base_road_height(x)  + get_block_height_offset(x)
+			var natural_h = get_raw_base_road_height(x) + get_block_height_offset(x)
 			return lerp(landing_h, natural_h, factor)
 
 	var raw_h = get_raw_base_road_height(target_x)
@@ -936,6 +938,23 @@ func is_near_tunnel(x: float) -> bool:
 			return true
 	return false
 
+func is_in_tunnel_spawn_shield(x: float) -> bool:
+	# Check active/spawned tunnels
+	for tx in _tunnel_positions:
+		# Tunnel spans [tx - 1000, tx + 1000]
+		# 100m padding before is [tx - 4000, tx - 1000]
+		# Total blocked range is [tx - 4000, tx + 1000]
+		if x >= tx - 4000.0 and x <= tx + 1000.0:
+			return true
+			
+	# Also check the upcoming future tunnel to avoid race conditions with the coin spawner
+	var chunk_idx = int(round(next_planned_tunnel_x / chunk_width))
+	var future_tx = (chunk_idx + 0.5) * chunk_width
+	if x >= future_tx - 4000.0 and x <= future_tx + 1000.0:
+		return true
+		
+	return false
+
 func is_near_house(x: float) -> bool:
 	var check_dist = 1500.0
 	var min_chunk = int(floor((x - check_dist) / chunk_width))
@@ -1010,7 +1029,7 @@ func get_cumulative_offset_at_interval(interval_idx: int) -> float:
 		# DOWN blocks are handled locally in get_base_road_height — they must NOT
 		# pollute the global cumulative offset or the world drifts downward forever.
 		if block.get("type", "up") == "up":
-			current_block_contrib = -block["height"]
+			current_block_contrib = - block["height"]
 		
 	var offset = prev_offset + current_block_contrib
 	cumulative_offset_cache[interval_idx] = offset
@@ -1166,8 +1185,8 @@ func is_smooth_zone_at_x(x: float) -> bool:
 		var cycle_val = sin(dist * 0.00025 + road_seed * 0.07)
 		var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 1.0)
 		var blend = raw_shift * max_ruggedness
-		# blend < 0.25 is considered a smooth zone
-		return blend < 0.25
+		# blend < 0.50 is considered a smooth zone (relaxed from 0.25 for higher occurrence)
+		return blend < 0.50
 	return false
 
 # Deterministically get bridge details for a given chunk
@@ -1439,19 +1458,22 @@ func _update_tunnel_spawning(current_x: float) -> void:
 				_mission_end_x = current_x
 			# 300 meters = 9000 pixels
 			if current_x >= _mission_end_x + 9000.0:
-				# Spawn the tunnel in the next chunk ahead
 				var current_view_dist = get_current_view_distance()
 				var spawn_chunk = int(ceil((current_x + current_view_dist) / chunk_width))
 				var tx = (spawn_chunk + 0.5) * chunk_width
 				
-				_tunnel_positions.append(tx)
-				_tunnel_is_queued = false
-				next_planned_tunnel_x = tx + get_next_tunnel_spacing()
-				_mission_end_x = -1.0
-				
-				# Regenerate chunks immediately to apply the new tunnel
-				clear_road_geometry_caches()
-				regenerate_runtime_chunks()
+				# Spawn ONLY when distance is greater than 1500m
+				if tx > 45000.0:
+					_tunnel_positions.append(tx)
+					_tunnel_is_queued = false
+					next_planned_tunnel_x = tx + get_next_tunnel_spacing()
+					_mission_end_x = -1.0
+					
+					clear_road_geometry_caches()
+					regenerate_runtime_chunks()
+				else:
+					# Push _mission_end_x forward so we check again after moving 300px
+					_mission_end_x += 300.0
 	else:
 		var current_view_dist = get_current_view_distance()
 		if current_x + current_view_dist >= next_planned_tunnel_x:
@@ -1461,12 +1483,17 @@ func _update_tunnel_spawning(current_x: float) -> void:
 			else:
 				var chunk_idx = int(round(next_planned_tunnel_x / chunk_width))
 				var tx = (chunk_idx + 0.5) * chunk_width
-				_tunnel_positions.append(tx)
-				next_planned_tunnel_x = tx + get_next_tunnel_spacing()
 				
-				# Regenerate chunks immediately to apply the new tunnel
-				clear_road_geometry_caches()
-				regenerate_runtime_chunks()
+				# Spawn ONLY when distance is greater than 1500m
+				if tx > 45000.0:
+					_tunnel_positions.append(tx)
+					next_planned_tunnel_x = tx + get_next_tunnel_spacing()
+					
+					clear_road_geometry_caches()
+					regenerate_runtime_chunks()
+				else:
+					# Push the planned tunnel forward to the next chunk
+					next_planned_tunnel_x = tx + chunk_width
 
 func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint():
@@ -1481,6 +1508,7 @@ func _physics_process(_delta: float) -> void:
 	# Throttle chunk updates (check every 8 frames instead of every frame)
 	if Engine.get_physics_frames() % 8 == 0:
 		update_chunks(get_target_x())
+		_update_tunnel_spawning(get_target_x())
 		
 	update_active_chunks_geometry()
 
@@ -2230,6 +2258,13 @@ func create_chunk(i: int) -> void:
 		if not bridge_data.is_empty():
 			bridge_node = spawn_physics_bridge(i, bridge_data["x"], bridge_data["y"], bridge_data["width"])
 		
+	# Spawn tunnel if present at runtime
+	var tunnel_node = null
+	if not Engine.is_editor_hint():
+		var tunnel_data = get_tunnel_at_chunk(i)
+		if not tunnel_data.is_empty():
+			tunnel_node = spawn_tunnel_node(i, tunnel_data)
+
 	active_chunks[i] = {
 		"collision": col_poly,
 		"fill": fill,
@@ -2241,7 +2276,8 @@ func create_chunk(i: int) -> void:
 		"grass2": grass2,
 		"house": house_node,
 		"elevator": elevator_node,
-		"bridge": bridge_node
+		"bridge": bridge_node,
+		"tunnel": tunnel_node
 	}
 
 func destroy_chunk(i: int) -> void:
@@ -2306,7 +2342,7 @@ func spawn_crusher_on_next_chunk() -> void:
 				first_crusher_x = bridge_end + 400.0
 				zone_end_x = first_crusher_x + (num_crushers - 1) * spacing
 				print("[Road] Crusher start pushed past bridge to X=", first_crusher_x)
-				break  # one bridge per zone is the common case; a second pass isn't needed
+				break # one bridge per zone is the common case; a second pass isn't needed
 
 	# Define flat road zone boundaries to cover the entire sequence dynamically
 	crusher_flat_start_x = first_crusher_x - 300.0
