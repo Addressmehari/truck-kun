@@ -13,8 +13,14 @@ extends Node
 @export var despawn_trail: float = 600.0
 ## Chance (0-1) that the next slot gets a triple-coin cluster instead of single
 @export_range(0.0, 1.0, 0.05) var cluster_chance: float = 0.22
-## Chance (0-1) that the next slot spawns a petrol can instead of coins
+## Base chance (0-1) that the next slot spawns a petrol can instead of coins
 @export_range(0.0, 0.5, 0.02) var petrol_chance: float = 0.10
+## Minimum gap (pixels) since last petrol can spawn before another can spawn
+@export var min_petrol_spacing: float = 3000.0
+## Fuel ratio (0-1) below which we start spawning petrol cans
+@export var petrol_spawn_threshold: float = 0.70
+## Fuel ratio (0-1) below which we force spawn a petrol can if none are ahead
+@export var petrol_critical_threshold: float = 0.25
 ## Chance (0-1) that the next slot spawns a mystery box
 @export_range(0.0, 0.5, 0.01) var mystery_box_chance: float = 0.05
 ## Y offset above road surface so coins hover visibly
@@ -32,6 +38,7 @@ var _road: StaticBody2D
 var _chassis: RigidBody2D
 var _coins: Array[Node] = []       # live coin nodes
 var _next_spawn_x: float = 0.0     # world X where the next coin should appear
+var _last_petrol_spawn_x: float = -9999.0 # world X of the last petrol can spawn
 var _rng: RandomNumberGenerator
 var _was_event_active: bool = false
 var _cooldown_timer: float = 0.0
@@ -63,6 +70,8 @@ func _ready() -> void:
 		_next_spawn_x = _chassis.global_position.x + 300.0
 	else:
 		_next_spawn_x = 300.0
+
+	_last_petrol_spawn_x = _next_spawn_x
 
 	# Prime the pool
 	_fill_pool()
@@ -159,27 +168,52 @@ func _fill_pool() -> void:
 		if _road and _road.has_method("is_in_bridge_zone"):
 			in_bridge_zone = _road.call("is_in_bridge_zone", _next_spawn_x, 150.0)
 
+		# ── SMART PETROL CALCULATIONS ──
+		var spawn_petrol_here := false
+		var fuel_ratio := 1.0
+		var dist_since_last_petrol := 999999.0
+		var has_petrol_ahead := false
+
+		if _petrol_scene and not in_bridge_zone:
+			var hud_stats = get_node_or_null("/root/main/truck/HUD/HudStats")
+			if hud_stats and "petrol" in hud_stats and "petrol_max" in hud_stats:
+				var max_p = hud_stats.petrol_max
+				if max_p > 0.0:
+					fuel_ratio = hud_stats.petrol / max_p
+			
+			dist_since_last_petrol = _next_spawn_x - _last_petrol_spawn_x
+			has_petrol_ahead = _has_active_petrol_ahead(chassis_x)
+
+			# Emergency Force Spawn: if critically low on fuel (<25%) and no petrol can is ahead
+			if fuel_ratio < petrol_critical_threshold and not has_petrol_ahead:
+				if dist_since_last_petrol > 1200.0:
+					spawn_petrol_here = true
+					print("[CoinSpawner] EMERGENCY SPAWN: Fuel is critical (%.1f%%). Forcing petrol can spawn at X=%.1f" % [fuel_ratio * 100.0, _next_spawn_x])
+			# Normal/Smart spawning mode: fuel is below threshold
+			elif fuel_ratio < petrol_spawn_threshold:
+				if dist_since_last_petrol > min_petrol_spacing and not has_petrol_ahead:
+					# Scale chance dynamically based on fuel ratio (base_chance at threshold to 2.5x base_chance at critical)
+					var t = (petrol_spawn_threshold - fuel_ratio) / (petrol_spawn_threshold - petrol_critical_threshold)
+					t = clamp(t, 0.0, 1.0)
+					var dynamic_chance = lerp(petrol_chance, petrol_chance * 2.5, t)
+					
+					if _rng.randf() < dynamic_chance:
+						spawn_petrol_here = true
+						print("[CoinSpawner] SMART SPAWN: Fuel ratio %.2f, dynamic chance %.2f%%. Spawning petrol can at X=%.1f" % [fuel_ratio, dynamic_chance * 100.0, _next_spawn_x])
+
+		# ── Obstacle Selection ──
 		if not mystery_box_blocked and not in_bridge_zone and _mystery_box_scene and roll < mystery_box_chance:
 			# Mystery box — only when no active event and cooldown has expired
 			_spawn_mystery_box(_next_spawn_x)
 			ahead_count += 1
-		elif _petrol_scene and roll < mystery_box_chance + petrol_chance:
-			# Petrol can — probability band sits right after mystery box band
-			# When mystery boxes are blocked the whole roll range shifts down cleanly
-			var petrol_max = petrol_chance if mystery_box_blocked else mystery_box_chance + petrol_chance
-			if roll < petrol_max:
-				_spawn_petrol(_next_spawn_x)
-			else:
-				_spawn_coin(_next_spawn_x)
+		elif spawn_petrol_here:
+			# Petrol can — placed dynamically based on player's fuel state
+			_spawn_petrol(_next_spawn_x)
+			_last_petrol_spawn_x = _next_spawn_x
 			ahead_count += 1
-		elif roll < mystery_box_chance + petrol_chance + cluster_chance:
-			var cluster_max = petrol_chance + cluster_chance if mystery_box_blocked else mystery_box_chance + petrol_chance + cluster_chance
-			if roll < cluster_max:
-				_spawn_cluster(_next_spawn_x)
-				ahead_count += 3
-			else:
-				_spawn_coin(_next_spawn_x)
-				ahead_count += 1
+		elif _rng.randf() < cluster_chance:
+			_spawn_cluster(_next_spawn_x)
+			ahead_count += 3
 		else:
 			_spawn_coin(_next_spawn_x)
 			ahead_count += 1
@@ -230,3 +264,10 @@ func _spawn_mystery_box(world_x: float) -> void:
 		road_y = _road.call("get_road_height", world_x)
 	box.global_position = Vector2(world_x, road_y + hover_height - 15.0)
 	_coins.append(box) # reuse the same tracking array for lifecycle management
+
+# ── Helper to check if any active petrol can is spawned ahead of the player ─────
+func _has_active_petrol_ahead(chassis_x: float) -> bool:
+	for c in _coins:
+		if is_instance_valid(c) and c.is_in_group("petrol_cans") and c.global_position.x > chassis_x:
+			return true
+	return false

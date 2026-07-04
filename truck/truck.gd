@@ -43,6 +43,13 @@ extends Node2D
 ## Toggle ON to disable petrol consumption — useful for UI testing
 @export var unlimited_petrol: bool = false
 
+# ─── Dislocation Death ───────────────────────────────────────────────────────
+@export_group("Dislocation Death")
+## Enable dislocation death detection (if wheels/container separate too far)
+@export var dislocation_death_enabled: bool = true
+## Maximum distance (pixels) a wheel/trailer can deviate from its socket before triggering death
+@export var max_dislocation_distance: float = 110.0
+
 # ─── Internal runtime state ──────────────────────────────────────────────────
 var chassis: RigidBody2D
 var controls_locked: bool = false
@@ -82,6 +89,7 @@ var _flip_death_timer   := 0.0   # seconds chassis has been upside-down
 var _fuel_empty_timer   := 0.0   # seconds fuel has been at 0
 const FLIP_DEATH_DELAY  := 3.0   # upside-down for this long = death
 const FUEL_DEATH_DELAY  := 2.5   # empty for this long = death
+var _dislocation_grace_timer := 1.0 # grace period timer (seconds) to prevent dislocation checks on spawns/transitions
 
 func _ready() -> void:
 	chassis = get_node_or_null("chassis")
@@ -198,6 +206,9 @@ func update_shifter_visuals() -> void:
 	drv_btn.add_theme_font_size_override("font_size", 22)
 
 func _physics_process(delta: float) -> void:
+	if _dislocation_grace_timer > 0.0:
+		_dislocation_grace_timer -= delta
+
 	var active_body = boat if is_water_mode_active else chassis
 
 	# Simplified driving mechanics:
@@ -737,6 +748,7 @@ func set_water_mode(enabled: bool) -> void:
 			boat.set("is_active", true)
 	else:
 		print("Swapping to Truck vehicle (Land Biome)")
+		_dislocation_grace_timer = 1.0
 		
 		# Capture position/velocity from boat
 		var pos = Vector2.ZERO
@@ -873,6 +885,53 @@ func _check_death(delta: float) -> void:
 				return
 		else:
 			_fuel_empty_timer = 0.0
+
+	# ── Dislocation detection (land only) ─────────────────────────────────────
+	if not is_water_mode_active and dislocation_death_enabled and _dislocation_grace_timer <= 0.0 and not is_respawning:
+		var dislocated := false
+		var cause := "TRUCK DISLOCATED"
+
+		if is_instance_valid(chassis):
+			# 1. Check Container/Trailer connection
+			if is_instance_valid(container_body):
+				var anchor_chassis = chassis.to_global(Vector2(1, -28))
+				var anchor_container = container_body.to_global(Vector2(0, -27))
+				var dev_c = anchor_chassis.distance_to(anchor_container)
+				if dev_c > max_dislocation_distance:
+					dislocated = true
+					cause = "TRAILER DETACHED"
+					print("[Truck] Trailer dislocation detected (deviation: %.1f)" % dev_c)
+
+			# 2. Check Tyre 1 connection (front tyre on chassis)
+			if not dislocated and is_instance_valid(tyre_1):
+				var socket = chassis.to_global(Vector2(35, 10))
+				var dev_1 = tyre_1.global_position.distance_to(socket)
+				if dev_1 > max_dislocation_distance:
+					dislocated = true
+					cause = "WHEEL BROKE OFF"
+					print("[Truck] Tyre 1 dislocation detected (deviation: %.1f)" % dev_1)
+
+		# 3. Check Tyre 2 and Tyre 3 connections (tyres on container)
+		if not dislocated and is_instance_valid(container_body):
+			if is_instance_valid(tyre_2):
+				var socket = container_body.to_global(Vector2(-31, 10))
+				var dev_2 = tyre_2.global_position.distance_to(socket)
+				if dev_2 > max_dislocation_distance:
+					dislocated = true
+					cause = "WHEEL BROKE OFF"
+					print("[Truck] Tyre 2 dislocation detected (deviation: %.1f)" % dev_2)
+			
+			if not dislocated and is_instance_valid(tyre_3):
+				var socket = container_body.to_global(Vector2(-91, 10))
+				var dev_3 = tyre_3.global_position.distance_to(socket)
+				if dev_3 > max_dislocation_distance:
+					dislocated = true
+					cause = "WHEEL BROKE OFF"
+					print("[Truck] Tyre 3 dislocation detected (deviation: %.1f)" % dev_3)
+
+		if dislocated:
+			trigger_death(cause)
+			return
 
 func trigger_death(cause: String) -> void:
 	if is_dead:
@@ -1141,4 +1200,5 @@ func respawn_at_crusher_start() -> void:
 				body.angular_velocity = 0.0
 		controls_locked = false
 		is_respawning = false
+		_dislocation_grace_timer = 0.5
 	)

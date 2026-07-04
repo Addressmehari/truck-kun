@@ -117,7 +117,6 @@ horizontal_offset = 220.0
 
 [node name="truck" parent="." instance=ExtResource("1_truck")]
 position = Vector2(-10, -538)
-petrol_drain_rate = 17.5
 unlimited_petrol = false
 
 [node name="CoinSpawner" type="Node" parent="."]
