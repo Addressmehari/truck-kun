@@ -79,6 +79,18 @@ func _physics_process(delta: float) -> void:
 	if points_x.is_empty():
 		return
 		
+	# Dynamically update the bridge endpoint Ys to match the road surface (handles crusher/convoy flattening)
+	var road = get_parent()
+	if road and road.has_method("get_base_road_height"):
+		var current_start_y = road.call("get_base_road_height", start_pos.x)
+		var current_end_y = road.call("get_base_road_height", end_pos.x)
+		if abs(current_start_y - start_pos.y) > 0.1 or abs(current_end_y - end_pos.y) > 0.1:
+			start_pos.y = current_start_y
+			end_pos.y = current_end_y
+			for k in range(N):
+				var t = float(k) / float(N - 1)
+				base_y[k] = lerp(start_pos.y, end_pos.y, t)
+		
 	# Find all active vehicles in the scene tree
 	var active_vehicles = []
 	var main = get_node_or_null("/root/main")
