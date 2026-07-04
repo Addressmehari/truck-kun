@@ -262,7 +262,7 @@ func _apply_terrain_preset() -> void:
 const TUNNEL_MIN_SPACING := 00.0
 
 # Dynamic tunnel spawning tracking
-var next_planned_tunnel_x: float = 90000.0 # First tunnel planned at or after 3000m
+var next_planned_tunnel_x: float = 90000.0 # Randomized between 1500m and 3000m at startup
 var _tunnel_is_queued: bool = false
 var _tunnel_positions: Array[float] = []
 var _was_mission_active: bool = false
@@ -451,12 +451,8 @@ func prepare_next_biome() -> void:
 	show_next_biome_announcement(next_biome_name)
 
 func get_next_tunnel_spacing() -> float:
-	var biome = get_current_biome()
-	if biome:
-		if biome.is_water or biome.biome_name.contains("Silhouette"):
-			# 1000m to 1500m = 30000 to 45000 pixels
-			return randf_range(30000.0, 45000.0)
-	return 30000.0 # Default 1000m
+	# Random spacing between 1500m (45000px) and 3000m (90000px)
+	return randf_range(45000.0, 90000.0)
 
 func cycle_biome() -> void:
 	# Always reinitialize if we have fewer biomes than expected
@@ -673,6 +669,12 @@ func _ready() -> void:
 			gs.pending_road_seed = 0 # consume it so next run is random again
 			update_seed_offsets()
 			print("[Road] Using retry seed: ", road_seed)
+		
+		# Deterministically set the first tunnel position based on the seed
+		var init_rng = RandomNumberGenerator.new()
+		init_rng.seed = hash(road_seed + 1993)
+		next_planned_tunnel_x = init_rng.randf_range(45000.0, 90000.0)
+		print("[Road] First planned tunnel randomized to: ", int(next_planned_tunnel_x / 30.0), "m (X=", next_planned_tunnel_x, ")")
 		
 		# Free template nodes at runtime to avoid collision/visual duplication at the start
 		var col_poly = _get_collision_polygon()
