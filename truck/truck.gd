@@ -79,6 +79,7 @@ var is_tunnel_autopilot := false
 var is_debug_display_active := false
 var tunnel_target_x := 0.0
 var has_completed_journey := false
+var is_cinematic_mission_complete := false
 var cinematic_top_bar: ColorRect = null
 var cinematic_bottom_bar: ColorRect = null
 var truck_health := 100.0
@@ -1100,6 +1101,108 @@ func _spawn_journey_completed_menu() -> void:
 	menu.name = "JourneyCompletedMenu"
 	get_tree().root.add_child(menu)
 	menu.call("show_completed")
+
+func trigger_cinematic_mission_complete(mission_name: String, stats_text: String) -> void:
+	var hud = get_node_or_null("HUD")
+	if hud:
+		var old_top = hud.get_node_or_null("CinematicTopBar")
+		if old_top: old_top.queue_free()
+		var old_bottom = hud.get_node_or_null("CinematicBottomBar")
+		if old_bottom: old_bottom.queue_free()
+		
+		var top_bar = ColorRect.new()
+		top_bar.name = "CinematicTopBar"
+		top_bar.color = Color.BLACK
+		top_bar.anchor_left = 0.0
+		top_bar.anchor_right = 1.0
+		top_bar.anchor_top = 0.0
+		top_bar.anchor_bottom = 0.0
+		top_bar.offset_left = 0
+		top_bar.offset_right = 0
+		top_bar.offset_top = 0
+		top_bar.offset_bottom = 0
+		hud.add_child(top_bar)
+		
+		var bottom_bar = ColorRect.new()
+		bottom_bar.name = "CinematicBottomBar"
+		bottom_bar.color = Color.BLACK
+		bottom_bar.anchor_left = 0.0
+		bottom_bar.anchor_right = 1.0
+		bottom_bar.anchor_top = 1.0
+		bottom_bar.anchor_bottom = 1.0
+		bottom_bar.offset_left = 0
+		bottom_bar.offset_right = 0
+		bottom_bar.offset_top = 0
+		bottom_bar.offset_bottom = 0
+		hud.add_child(bottom_bar)
+		
+		var tween_bars = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween_bars.tween_property(top_bar, "offset_bottom", 90.0, 0.5)
+		tween_bars.tween_property(bottom_bar, "offset_top", -90.0, 0.5)
+		
+		var text_container = Control.new()
+		text_container.name = "CinematicMissionOverlay"
+		text_container.anchor_right = 1.0
+		text_container.anchor_bottom = 1.0
+		hud.add_child(text_container)
+		
+		var title = Label.new()
+		title.text = "[ %s ] COMPLETED" % mission_name.to_upper()
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title.anchor_left = 0.5
+		title.anchor_top = 0.4
+		title.anchor_right = 0.5
+		title.anchor_bottom = 0.4
+		title.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		title.grow_vertical = Control.GROW_DIRECTION_BOTH
+		title.add_theme_font_size_override("font_size", 42)
+		title.add_theme_color_override("font_color", Color.WHITE)
+		title.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		title.add_theme_constant_override("outline_size", 8)
+		title.modulate.a = 0.0
+		text_container.add_child(title)
+		
+		var subtitle = Label.new()
+		subtitle.text = stats_text
+		subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		subtitle.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		subtitle.anchor_left = 0.5
+		subtitle.anchor_top = 0.925
+		subtitle.anchor_right = 0.5
+		subtitle.anchor_bottom = 0.925
+		subtitle.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		subtitle.grow_vertical = Control.GROW_DIRECTION_BOTH
+		subtitle.add_theme_font_size_override("font_size", 18)
+		subtitle.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
+		subtitle.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+		subtitle.add_theme_constant_override("outline_size", 4)
+		subtitle.modulate.a = 0.0
+		text_container.add_child(subtitle)
+		
+		var tween_text = create_tween().set_parallel(true)
+		tween_text.tween_property(title, "modulate:a", 1.0, 0.6)
+		tween_text.tween_property(subtitle, "modulate:a", 1.0, 0.6)
+		
+		is_cinematic_mission_complete = true
+		
+		get_tree().create_timer(2.0).timeout.connect(func():
+			is_cinematic_mission_complete = false
+			
+			var tween_fade = create_tween().set_parallel(true)
+			tween_fade.tween_property(title, "modulate:a", 0.0, 0.4)
+			tween_fade.tween_property(subtitle, "modulate:a", 0.0, 0.4)
+			
+			var tween_retract = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+			tween_retract.tween_property(top_bar, "offset_bottom", 0.0, 0.6)
+			tween_retract.tween_property(bottom_bar, "offset_top", 0.0, 0.6)
+			
+			tween_retract.chain().tween_callback(func():
+				if is_instance_valid(top_bar): top_bar.queue_free()
+				if is_instance_valid(bottom_bar): bottom_bar.queue_free()
+				if is_instance_valid(text_container): text_container.queue_free()
+			)
+		)
 
 func respawn_at_crusher_start() -> void:
 	if is_respawning:

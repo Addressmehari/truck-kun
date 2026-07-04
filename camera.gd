@@ -25,9 +25,11 @@ func _physics_process(delta):
 		var truck = get_node_or_null("../truck")
 		var is_respawning = false
 		var has_completed = false
+		var is_cinematic_complete = false
 		if truck and is_instance_valid(truck):
 			is_respawning = truck.get("is_respawning") == true
 			has_completed = truck.get("has_completed_journey") == true
+			is_cinematic_complete = truck.get("is_cinematic_mission_complete") == true
 
 		# Determine target offset and zoom based on active event states
 		var active_offset = target_horizontal_offset
@@ -45,6 +47,10 @@ func _physics_process(delta):
 			active_offset = 0.0
 			v_offset = -20.0
 			active_zoom = Vector2(2.4, 2.4)
+		elif is_cinematic_complete:
+			active_offset = 60.0 # Center the truck slightly closer
+			v_offset = -30.0
+			active_zoom = Vector2(2.1, 2.1) # Zoom in a little bit
 			
 		# Interpolate horizontal offset dynamically
 		horizontal_offset = lerp(horizontal_offset, active_offset, 1.5 * delta)
@@ -60,11 +66,11 @@ func _physics_process(delta):
 		var zoom_speed = 5.0
 		if has_completed:
 			zoom_speed = 1.0 # Slowly zoom
+		elif is_cinematic_complete:
+			zoom_speed = 2.5 # Medium-slow zoom
 		else:
 			if not inside_tunnel:
 				if truck and truck.has_method("is_zoom_requested") and truck.is_zoom_requested():
 					target_zoom = zoomed_zoom
 			
 		zoom = zoom.lerp(target_zoom, zoom_speed * delta)
-
-

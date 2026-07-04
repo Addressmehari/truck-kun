@@ -434,7 +434,9 @@ func complete_delivery() -> void:
 		if not road.get("used_house_chunks").has(current_chunk):
 			road.get("used_house_chunks").append(current_chunk)
 		
-	show_delivery_completion_dialogue(actual_payout)
+	var truck = get_node_or_null("/root/main/truck")
+	if truck and truck.has_method("trigger_cinematic_mission_complete"):
+		truck.call("trigger_cinematic_mission_complete", "delivery", "Crates successfully delivered! | Earned: $%d" % actual_payout)
 	queue_redraw()
 
 func show_delivery_completion_dialogue(payout: int) -> void:
@@ -565,7 +567,10 @@ func complete_race(player_won: bool) -> void:
 		if not road.get("used_house_chunks").has(current_chunk):
 			road.get("used_house_chunks").append(current_chunk)
 		
-	show_race_completion_dialogue(player_won, actual_payout)
+	var truck = get_node_or_null("/root/main/truck")
+	if truck and truck.has_method("trigger_cinematic_mission_complete"):
+		var stats = "You won the race! | Earned: $%d" % actual_payout if player_won else "Opponent arrived first. | Earned: $%d" % actual_payout
+		truck.call("trigger_cinematic_mission_complete", "race", stats)
 	queue_redraw()
 
 func show_race_completion_dialogue(player_won: bool, payout: int) -> void:
@@ -667,7 +672,9 @@ func complete_towing() -> void:
 		if not road.get("used_house_chunks").has(current_chunk):
 			road.get("used_house_chunks").append(current_chunk)
 		
-	show_towing_completion_dialogue(towing_reward)
+	var truck = get_node_or_null("/root/main/truck")
+	if truck and truck.has_method("trigger_cinematic_mission_complete"):
+		truck.call("trigger_cinematic_mission_complete", "tow job", "Successfully towed vehicle! | Earned: $%d" % towing_reward)
 	queue_redraw()
 
 func show_towing_completion_dialogue(payout: int) -> void:
