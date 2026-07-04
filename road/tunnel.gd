@@ -14,6 +14,10 @@ func _on_body_entered(body: Node2D) -> void:
 		var camera = get_viewport().get_camera_2d()
 		if camera:
 			camera.set("inside_tunnel", true)
+			
+		var truck = body if body.name == "truck" else body.get_parent()
+		if truck and truck.has_method("start_tunnel_autopilot"):
+			truck.call("start_tunnel_autopilot", global_position.x)
 
 func _on_body_exited(body: Node2D) -> void:
 	if _is_player_body(body):

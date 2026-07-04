@@ -1,7 +1,7 @@
 @tool
 extends StaticBody2D
 
-enum TerrainType { RUGGED, SMOOTH, BOTH, CUSTOM }
+enum TerrainType {RUGGED, SMOOTH, BOTH, CUSTOM}
 @export var road_length := 15000.0:
 	set(val):
 		road_length = val
@@ -259,10 +259,10 @@ func _apply_terrain_preset() -> void:
 	# BOTH does not set static parameters on the sliders, as they vary dynamically by distance.
 
 
-const TUNNEL_MIN_SPACING := 30000.0
+const TUNNEL_MIN_SPACING := 00.0
 
 # Dynamic tunnel spawning tracking
-var next_planned_tunnel_x: float = 60000.0 # First tunnel planned at or after 2000m
+var next_planned_tunnel_x: float = 90000.0 # First tunnel planned at or after 3000m
 var _tunnel_is_queued: bool = false
 var _tunnel_positions: Array[float] = []
 var _was_mission_active: bool = false
@@ -404,7 +404,7 @@ func apply_active_biome() -> void:
 	var truck = get_node_or_null("../truck")
 	if truck:
 		if truck.has_method("set_silhouette_mode"):
-			truck.call("set_silhouette_mode", false)          # clear first
+			truck.call("set_silhouette_mode", false) # clear first
 			if biome.use_silhouette_truck:
 				truck.call("set_silhouette_mode", true, biome.truck_silhouette_color)
 		if truck.has_method("set_headlight_enabled"):
@@ -670,7 +670,7 @@ func _ready() -> void:
 		var gs = get_node_or_null("/root/GameState")
 		if gs and gs.pending_road_seed != 0:
 			road_seed = gs.pending_road_seed
-			gs.pending_road_seed = 0   # consume it so next run is random again
+			gs.pending_road_seed = 0 # consume it so next run is random again
 			update_seed_offsets()
 			print("[Road] Using retry seed: ", road_seed)
 		
@@ -785,21 +785,21 @@ func get_raw_base_road_height(x: float) -> float:
 				var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 1.0)
 				var blend = raw_shift * max_ruggedness
 				
-				active_mountain      = lerp(130.0, 220.0, blend)
-				active_long_hills    = lerp(60.0, 85.0, blend)
-				active_medium_waves  = lerp(35.0, 50.0, blend)
+				active_mountain = lerp(130.0, 220.0, blend)
+				active_long_hills = lerp(60.0, 85.0, blend)
+				active_medium_waves = lerp(35.0, 50.0, blend)
 				active_smooth_spikes = lerp(15.0, 65.0, blend)
-				active_sharp_dips    = lerp(8.0, 25.0, blend)
-				active_lil_spikes    = lerp(0.0, 18.0, blend)
-				active_small_bumps   = lerp(6.0, 12.0, blend)
+				active_sharp_dips = lerp(8.0, 25.0, blend)
+				active_lil_spikes = lerp(0.0, 18.0, blend)
+				active_small_bumps = lerp(6.0, 12.0, blend)
 			
-			var mountains     = sin((x + seed_offset_3 * 0.3 + seed_offset_1 * 0.7) * 0.0003) * active_mountain * mult
-			var long_hills    = sin((x + seed_offset_1) * 0.0007) * active_long_hills * mult
-			var medium_waves  = cos((x + seed_offset_2) * 0.0013) * active_medium_waves * mult
+			var mountains = sin((x + seed_offset_3 * 0.3 + seed_offset_1 * 0.7) * 0.0003) * active_mountain * mult
+			var long_hills = sin((x + seed_offset_1) * 0.0007) * active_long_hills * mult
+			var medium_waves = cos((x + seed_offset_2) * 0.0013) * active_medium_waves * mult
 			var smooth_spikes = sin((x + seed_offset_2 * 1.5 + seed_offset_3) * 0.006) * active_smooth_spikes * mult
-			var sharp_dips    = sin((x + seed_offset_2 * 0.6 + seed_offset_3) * 0.003) * active_sharp_dips * mult
-			var lil_spikes    = sin((x + seed_offset_1 * 2.1 + seed_offset_2) * 0.022) * active_lil_spikes * mult
-			var small_bumps   = sin((x + seed_offset_3) * 0.008) * active_small_bumps * mult
+			var sharp_dips = sin((x + seed_offset_2 * 0.6 + seed_offset_3) * 0.003) * active_sharp_dips * mult
+			var lil_spikes = sin((x + seed_offset_1 * 2.1 + seed_offset_2) * 0.022) * active_lil_spikes * mult
+			var small_bumps = sin((x + seed_offset_3) * 0.008) * active_small_bumps * mult
 			
 			var height = 42.0 + (mountains + long_hills + medium_waves + smooth_spikes + sharp_dips + lil_spikes + small_bumps)
 			base_h = lerp(42.0, height, factor)
@@ -828,7 +828,7 @@ func get_base_road_height(x: float) -> float:
 	var down_block = _get_down_block_in_range(x, block_flat_after + DOWN_TRANSITION)
 	if not down_block.is_empty():
 		var bx = down_block["x"]
-		var drop_amount = down_block["height"]  # How many pixels downward the cliff drops
+		var drop_amount = down_block["height"] # How many pixels downward the cliff drops
 		var flat_end = bx + block_flat_after
 		# Base (UP-block-only) offset at and after the cliff — stays the same since DOWN
 		# blocks no longer contribute to cumulative offset
@@ -842,7 +842,7 @@ func get_base_road_height(x: float) -> float:
 			var t = clamp((x - flat_end) / DOWN_TRANSITION, 0.0, 1.0)
 			var factor = t * t * (3.0 - 2.0 * t) # smoothstep
 			var landing_h = get_raw_base_road_height(bx) + base_offset + drop_amount
-			var natural_h  = get_raw_base_road_height(x)  + get_block_height_offset(x)
+			var natural_h = get_raw_base_road_height(x) + get_block_height_offset(x)
 			return lerp(landing_h, natural_h, factor)
 
 	var raw_h = get_raw_base_road_height(target_x)
@@ -1027,7 +1027,7 @@ func get_cumulative_offset_at_interval(interval_idx: int) -> float:
 		# DOWN blocks are handled locally in get_base_road_height — they must NOT
 		# pollute the global cumulative offset or the world drifts downward forever.
 		if block.get("type", "up") == "up":
-			current_block_contrib = -block["height"]
+			current_block_contrib = - block["height"]
 		
 	var offset = prev_offset + current_block_contrib
 	cumulative_offset_cache[interval_idx] = offset
@@ -1183,8 +1183,8 @@ func is_smooth_zone_at_x(x: float) -> bool:
 		var cycle_val = sin(dist * 0.00025 + road_seed * 0.07)
 		var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 1.0)
 		var blend = raw_shift * max_ruggedness
-		# blend < 0.25 is considered a smooth zone
-		return blend < 0.25
+		# blend < 0.50 is considered a smooth zone (relaxed from 0.25 for higher occurrence)
+		return blend < 0.50
 	return false
 
 # Deterministically get bridge details for a given chunk
@@ -1460,8 +1460,8 @@ func _update_tunnel_spawning(current_x: float) -> void:
 				var spawn_chunk = int(ceil((current_x + current_view_dist) / chunk_width))
 				var tx = (spawn_chunk + 0.5) * chunk_width
 				
-				# Spawn ONLY when distance is greater than 2000m AND road is in smooth state
-				if tx > 60000.0 and is_smooth_zone_at_x(tx):
+				# Spawn ONLY when distance is greater than 3000m
+				if tx > 90000.0:
 					_tunnel_positions.append(tx)
 					_tunnel_is_queued = false
 					next_planned_tunnel_x = tx + get_next_tunnel_spacing()
@@ -1482,8 +1482,8 @@ func _update_tunnel_spawning(current_x: float) -> void:
 				var chunk_idx = int(round(next_planned_tunnel_x / chunk_width))
 				var tx = (chunk_idx + 0.5) * chunk_width
 				
-				# Spawn ONLY when distance is greater than 2000m AND road is in smooth state
-				if tx > 60000.0 and is_smooth_zone_at_x(tx):
+				# Spawn ONLY when distance is greater than 3000m
+				if tx > 90000.0:
 					_tunnel_positions.append(tx)
 					next_planned_tunnel_x = tx + get_next_tunnel_spacing()
 					
@@ -2340,7 +2340,7 @@ func spawn_crusher_on_next_chunk() -> void:
 				first_crusher_x = bridge_end + 400.0
 				zone_end_x = first_crusher_x + (num_crushers - 1) * spacing
 				print("[Road] Crusher start pushed past bridge to X=", first_crusher_x)
-				break  # one bridge per zone is the common case; a second pass isn't needed
+				break # one bridge per zone is the common case; a second pass isn't needed
 
 	# Define flat road zone boundaries to cover the entire sequence dynamically
 	crusher_flat_start_x = first_crusher_x - 300.0

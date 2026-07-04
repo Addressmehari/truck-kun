@@ -75,6 +75,10 @@ var is_o_currently_holding: bool = false
 
 # Combat / Convoy Event State
 var is_autopilot := false
+var is_tunnel_autopilot := false
+var tunnel_target_x := 0.0
+var cinematic_top_bar: ColorRect = null
+var cinematic_bottom_bar: ColorRect = null
 var truck_health := 100.0
 var cheat_buffer := ""
 var convoy_spawn_timer := 0.0
@@ -211,12 +215,34 @@ func _physics_process(delta: float) -> void:
 
 	var active_body = boat if is_water_mode_active else chassis
 
-	# Simplified driving mechanics:
-	# "D" key (and W, UP, RIGHT) drives forward
-	# "A" key (and S, DOWN, LEFT) drives backward
 	var forward_pressed = false
 	var backward_pressed = false
-	if not controls_locked:
+	var is_braking = false
+	
+	if is_tunnel_autopilot:
+		var current_px = active_body.global_position.x if is_instance_valid(active_body) else 0.0
+		var dist_to_target = tunnel_target_x - current_px
+		
+		# Slowly drive to the center of the tunnel
+		if abs(dist_to_target) > 30.0:
+			if dist_to_target > 0:
+				forward_pressed = true
+				backward_pressed = false
+				if current_gear != Gear.DRIVE:
+					set_gear(Gear.DRIVE)
+			else:
+				forward_pressed = false
+				backward_pressed = true
+				if current_gear != Gear.REVERSE:
+					set_gear(Gear.REVERSE)
+		else:
+			# Stop at center
+			forward_pressed = false
+			backward_pressed = false
+			is_braking = true
+			if current_gear != Gear.PARK:
+				set_gear(Gear.PARK)
+	elif not controls_locked:
 		forward_pressed = Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_RIGHT)
 		backward_pressed = Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT)
 	
@@ -252,9 +278,13 @@ func _physics_process(delta: float) -> void:
 					active_enemies += 1
 			
 	var move_input = 0.0
-	var is_braking = false
 	
-	if controls_locked:
+	if is_tunnel_autopilot:
+		if forward_pressed and not backward_pressed:
+			move_input = 0.25 # Slow crawl forward
+		elif backward_pressed and not forward_pressed:
+			move_input = -0.25 # Slow crawl backward
+	elif controls_locked:
 		is_braking = true
 	else:
 		if forward_pressed and not backward_pressed:
@@ -353,8 +383,8 @@ func _physics_process(delta: float) -> void:
 		if is_instance_valid(container_body):
 			container_body.apply_torque(-tilt_input * air_tilt_power * 1.5)
 
-	# ── Death checks (skip during convoy/autopilot events) ─────────────────────
-	if not is_autopilot and not is_dead:
+	# ── Death checks (skip during convoy/autopilot/tunnel events) ─────────────
+	if not is_autopilot and not is_tunnel_autopilot and not is_dead:
 		_check_death(delta)
 
 ## Calls each tyre's drive() method so the wheel handles its own physics.
@@ -1202,3 +1232,86 @@ func respawn_at_crusher_start() -> void:
 		is_respawning = false
 		_dislocation_grace_timer = 0.5
 	)
+
+func start_tunnel_autopilot(target_x: float) -> void:
+	if is_tunnel_autopilot:
+		return
+	is_tunnel_autopilot = true
+	tunnel_target_x = target_x
+	
+	# Stop convoy/crusher/active event early if entering the tunnel
+	if is_autopilot:
+		end_active_event("Convoy")
+	var timer_bar = get_node_or_null("HUD/EventTimerBar")
+	if timer_bar and timer_bar.has_method("end_event"):
+		timer_bar.call("end_event")
+		
+	var road = get_node_or_null("/root/main/Road")
+	if road:
+		if road.get("is_convoy_active") == true:
+			road.call("end_active_event", "Convoy")
+		if road.has_method("end_active_event"):
+			road.call("end_active_event", "Crusher")
+			
+	# Set gear to Drive so motor works
+	if current_gear != Gear.DRIVE:
+		set_gear(Gear.DRIVE)
+		
+	# Trigger letterbox bars slide-in
+	var hud = get_node_or_null("HUD")
+	if hud:
+		var old_top = hud.get_node_or_null("CinematicTopBar")
+		if old_top: old_top.queue_free()
+		var old_bottom = hud.get_node_or_null("CinematicBottomBar")
+		if old_bottom: old_bottom.queue_free()
+		
+		cinematic_top_bar = ColorRect.new()
+		cinematic_top_bar.name = "CinematicTopBar"
+		cinematic_top_bar.color = Color.BLACK
+		cinematic_top_bar.anchor_left = 0.0
+		cinematic_top_bar.anchor_right = 1.0
+		cinematic_top_bar.anchor_top = 0.0
+		cinematic_top_bar.anchor_bottom = 0.0
+		cinematic_top_bar.offset_left = 0
+		cinematic_top_bar.offset_right = 0
+		cinematic_top_bar.offset_top = 0
+		cinematic_top_bar.offset_bottom = 0
+		hud.add_child(cinematic_top_bar)
+		
+		cinematic_bottom_bar = ColorRect.new()
+		cinematic_bottom_bar.name = "CinematicBottomBar"
+		cinematic_bottom_bar.color = Color.BLACK
+		cinematic_bottom_bar.anchor_left = 0.0
+		cinematic_bottom_bar.anchor_right = 1.0
+		cinematic_bottom_bar.anchor_top = 1.0
+		cinematic_bottom_bar.anchor_bottom = 1.0
+		cinematic_bottom_bar.offset_left = 0
+		cinematic_bottom_bar.offset_right = 0
+		cinematic_bottom_bar.offset_top = 0
+		cinematic_bottom_bar.offset_bottom = 0
+		hud.add_child(cinematic_bottom_bar)
+		
+		var tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween.tween_property(cinematic_top_bar, "offset_bottom", 100.0, 1.5)
+		tween.tween_property(cinematic_bottom_bar, "offset_top", -100.0, 1.5)
+
+func stop_tunnel_autopilot() -> void:
+	if not is_tunnel_autopilot:
+		return
+	is_tunnel_autopilot = false
+	
+	# Retract cinematic bars
+	var hud = get_node_or_null("HUD")
+	if hud:
+		var top_bar = hud.get_node_or_null("CinematicTopBar")
+		var bottom_bar = hud.get_node_or_null("CinematicBottomBar")
+		if top_bar or bottom_bar:
+			var tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+			if top_bar:
+				tween.tween_property(top_bar, "offset_bottom", 0.0, 1.5)
+			if bottom_bar:
+				tween.tween_property(bottom_bar, "offset_top", 0.0, 1.5)
+			tween.chain().tween_callback(func():
+				if top_bar and is_instance_valid(top_bar): top_bar.queue_free()
+				if bottom_bar and is_instance_valid(bottom_bar): bottom_bar.queue_free()
+			)

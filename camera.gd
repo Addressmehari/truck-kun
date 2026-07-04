@@ -47,11 +47,9 @@ func _physics_process(delta):
 			if not is_nan(target_pos.x) and not is_nan(target_pos.y):
 				global_position = global_position.lerp(target_pos, 10.0 * delta)
 		
-		# Smoothly interpolate zoom based on tunnel, towing, or zoom request
+		# Smoothly interpolate zoom based on towing or zoom request
 		var target_zoom = active_zoom
-		if inside_tunnel:
-			target_zoom = tunnel_zoom
-		else:
+		if not inside_tunnel:
 			if truck and truck.has_method("is_zoom_requested") and truck.is_zoom_requested():
 				target_zoom = zoomed_zoom
 			
