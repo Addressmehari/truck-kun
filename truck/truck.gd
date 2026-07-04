@@ -78,6 +78,7 @@ var is_autopilot := false
 var is_tunnel_autopilot := false
 var is_debug_display_active := false
 var tunnel_target_x := 0.0
+var has_completed_journey := false
 var cinematic_top_bar: ColorRect = null
 var cinematic_bottom_bar: ColorRect = null
 var truck_health := 100.0
@@ -243,6 +244,10 @@ func _physics_process(delta: float) -> void:
 			is_braking = true
 			if current_gear != Gear.PARK:
 				set_gear(Gear.PARK)
+				
+			if not has_completed_journey:
+				has_completed_journey = true
+				call_deferred("_spawn_journey_completed_menu")
 	elif not controls_locked:
 		forward_pressed = Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_RIGHT)
 		backward_pressed = Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT)
@@ -1085,6 +1090,17 @@ func _spawn_retry_menu(cause: String, distance: float) -> void:
 	get_tree().root.add_child(menu)
 	menu.call("show_death", cause, distance)
 
+func _spawn_journey_completed_menu() -> void:
+	var journey_menu_script = load("res://ui/journey_completed_menu.gd")
+	if not journey_menu_script:
+		push_error("[Truck] journey_completed_menu.gd not found!")
+		return
+	var menu = CanvasLayer.new()
+	menu.set_script(journey_menu_script)
+	menu.name = "JourneyCompletedMenu"
+	get_tree().root.add_child(menu)
+	menu.call("show_completed")
+
 func respawn_at_crusher_start() -> void:
 	if is_respawning:
 		return
@@ -1315,6 +1331,7 @@ func start_tunnel_autopilot(target_x: float) -> void:
 		return
 	is_tunnel_autopilot = true
 	tunnel_target_x = target_x
+	has_completed_journey = false
 	
 	# Stop convoy/crusher/active event early if entering the tunnel
 	if is_autopilot:
