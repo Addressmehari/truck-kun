@@ -50,6 +50,13 @@ extends Node2D
 ## Maximum distance (pixels) a wheel/trailer can deviate from its socket before triggering death
 @export var max_dislocation_distance: float = 110.0
 
+# ─── Visual Overrides ───────────────────────────────────────────────────────
+@export_group("Visual Overrides")
+## Enable silhouette mode on startup
+@export var is_silhouette := false
+## Custom color for the silhouette
+@export var silhouette_color := Color.BLACK
+
 # ─── Internal runtime state ──────────────────────────────────────────────────
 var chassis: RigidBody2D
 var controls_locked: bool = false
@@ -125,6 +132,9 @@ func _ready() -> void:
 		indicator.chassis = chassis
 		indicator.container_body = container_body
 		add_child(indicator)
+
+	if is_silhouette:
+		set_silhouette_mode(true, silhouette_color)
 
 func _apply_exports() -> void:
 	# Push suspension settings to chassis and container so they match the inspector

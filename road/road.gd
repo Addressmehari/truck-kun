@@ -403,10 +403,39 @@ func apply_active_biome() -> void:
 	# when transitioning from Silhouette → Grass or Silhouette → Water.
 	var truck = get_node_or_null("../truck")
 	if truck:
-		if truck.has_method("set_silhouette_mode"):
+		if Engine.is_editor_hint() or not truck.has_method("set_silhouette_mode"):
+			# Direct material application in editor (or if truck script isn't loaded)
+			var shader = load("res://road/silhouette.gdshader")
+			var mat: ShaderMaterial = null
+			if biome.use_silhouette_truck and shader:
+				mat = ShaderMaterial.new()
+				mat.shader = shader
+				mat.set_shader_parameter("active", true)
+				mat.set_shader_parameter("silhouette_color", biome.truck_silhouette_color)
+			
+			var chassis = truck.get_node_or_null("chassis")
+			if chassis:
+				chassis.set("material", mat)
+				var tyre1 = chassis.get_node_or_null("tyre-1")
+				if tyre1:
+					tyre1.set("material", mat)
+			var container = truck.get_node_or_null("container_body")
+			if container:
+				container.set("material", mat)
+				var backdoor = container.get_node_or_null("backdoor")
+				if backdoor:
+					backdoor.set("material", mat)
+				var tyre2 = container.get_node_or_null("tyre-2")
+				if tyre2:
+					tyre2.set("material", mat)
+				var tyre3 = container.get_node_or_null("tyre-3")
+				if tyre3:
+					tyre3.set("material", mat)
+		else:
 			truck.call("set_silhouette_mode", false) # clear first
 			if biome.use_silhouette_truck:
 				truck.call("set_silhouette_mode", true, biome.truck_silhouette_color)
+				
 		if truck.has_method("set_headlight_enabled"):
 			truck.call("set_headlight_enabled", biome.enable_headlight if "enable_headlight" in biome else false)
 		if truck.has_method("set_water_mode"):
