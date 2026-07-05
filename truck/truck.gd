@@ -243,8 +243,26 @@ func _physics_process(delta: float) -> void:
 			forward_pressed = false
 			backward_pressed = false
 			is_braking = true
-			if current_gear != Gear.PARK:
-				set_gear(Gear.PARK)
+			
+			# Zero out linear and angular velocities to stop the truck completely, without entering PARK mode
+			if is_instance_valid(chassis):
+				chassis.linear_velocity = Vector2.ZERO
+				chassis.angular_velocity = 0.0
+			if is_instance_valid(boat):
+				boat.linear_velocity = Vector2.ZERO
+				boat.angular_velocity = 0.0
+			if is_instance_valid(container_body):
+				container_body.linear_velocity = Vector2.ZERO
+				container_body.angular_velocity = 0.0
+			if is_instance_valid(tyre_1):
+				tyre_1.linear_velocity = Vector2.ZERO
+				tyre_1.angular_velocity = 0.0
+			if is_instance_valid(tyre_2):
+				tyre_2.linear_velocity = Vector2.ZERO
+				tyre_2.angular_velocity = 0.0
+			if is_instance_valid(tyre_3):
+				tyre_3.linear_velocity = Vector2.ZERO
+				tyre_3.angular_velocity = 0.0
 				
 			if not has_completed_journey:
 				has_completed_journey = true

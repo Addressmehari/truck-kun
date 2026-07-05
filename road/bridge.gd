@@ -24,7 +24,8 @@ func setup_nodes() -> void:
 		return # Already set up
 		
 	static_body = StaticBody2D.new()
-	static_body.collision_layer = 1
+	# Set collision layer to 3 (Layer 1: Player + Layer 2: Opponent) to match road collision setup
+	static_body.collision_layer = 3
 	static_body.collision_mask = 0
 	add_child(static_body)
 	
@@ -79,6 +80,8 @@ func _physics_process(delta: float) -> void:
 	if points_x.is_empty():
 		return
 		
+	var geom_changed = false
+		
 	# Dynamically update the bridge endpoint Ys to match the road surface (handles crusher/convoy flattening)
 	var road = get_parent()
 	if road and road.has_method("get_base_road_height"):
@@ -87,6 +90,7 @@ func _physics_process(delta: float) -> void:
 		if abs(current_start_y - start_pos.y) > 0.1 or abs(current_end_y - end_pos.y) > 0.1:
 			start_pos.y = current_start_y
 			end_pos.y = current_end_y
+			geom_changed = true
 			for k in range(N):
 				var t = float(k) / float(N - 1)
 				base_y[k] = lerp(start_pos.y, end_pos.y, t)
@@ -145,11 +149,16 @@ func _physics_process(delta: float) -> void:
 					target += max_local_sag * smooth_weight
 					
 		# Spring-Damper simulation
+		var old_def = deflection[k]
 		var force = -stiffness * (deflection[k] - target) - damping * vel[k]
 		vel[k] += force * delta
 		deflection[k] += vel[k] * delta
 		
-	_update_geometry()
+		if abs(deflection[k] - old_def) > 0.01:
+			geom_changed = true
+		
+	if geom_changed:
+		_update_geometry()
 
 func _update_geometry() -> void:
 	# Ensure nodes exist
@@ -177,17 +186,17 @@ func _update_geometry() -> void:
 	local_hr_pts.append(to_local(end_pos + Vector2(0, -22)))
 	handrail_line.points = local_hr_pts
 	
-	# 3. Update the single CollisionPolygon2D (adds a thick 12px flat collision deck)
+	# 3. Update the single CollisionPolygon2D (adds a thick 80px flat collision deck to prevent wheels from slipping through)
 	var col_poly_points = PackedVector2Array()
 	# Walk left-to-right along the top surface
 	for k in range(N):
 		col_poly_points.append(to_local(top_points[k]))
 		
-	# Walk right-to-left along the bottom boundary (12px thickness)
+	# Walk right-to-left along the bottom boundary (80px thickness)
 	for k in range(N - 1, -1, -1):
 		var rot = get_rotation_at(k)
 		var up_dir = Vector2.UP.rotated(rot)
-		col_poly_points.append(to_local(top_points[k] + up_dir * -12.0))
+		col_poly_points.append(to_local(top_points[k] + up_dir * -80.0))
 		
 	col_poly.polygon = col_poly_points
 	
