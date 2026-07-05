@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3 uid="uid://dmna3exd7lysk"]
+[gd_scene load_steps=19 format=3 uid="uid://dmna3exd7lysk"]
 
 [ext_resource type="PackedScene" uid="uid://y4vbinwdj2t8" path="res://truck/truck.tscn" id="1_truck"]
 [ext_resource type="Script" uid="uid://bt8r8k7o4sb33" path="res://camera.gd" id="2_camera_gd"]
@@ -12,6 +12,7 @@
 [ext_resource type="Shader" uid="uid://c48pma4wxoujm" path="res://road/sky_gradient.gdshader" id="6_dg77c"]
 [ext_resource type="Texture2D" uid="uid://dkavaf1mox28o" path="res://skyy.png" id="6_skyy"]
 [ext_resource type="Script" uid="uid://ce6qtiw4xjdcb" path="res://obstacles/coin_spawner.gd" id="7_coin_spawner_gd"]
+[ext_resource type="PackedScene" uid="uid://df7rii5p01qg" path="res://road/mock_tunnel.tscn" id="8_mock_tunnel"]
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_road"]
 
@@ -116,6 +117,9 @@ zoom = Vector2(1.75, 1.75)
 script = ExtResource("2_camera_gd")
 vertical_offset = -70.0
 horizontal_offset = 220.0
+
+[node name="MockTunnel" parent="." instance=ExtResource("8_mock_tunnel")]
+position = Vector2(-10, -6)
 
 [node name="truck" parent="." instance=ExtResource("1_truck")]
 position = Vector2(-10, -6)
