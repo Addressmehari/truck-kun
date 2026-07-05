@@ -276,7 +276,23 @@ func _physics_process(delta: float) -> void:
 				
 			if not has_completed_journey:
 				has_completed_journey = true
-				call_deferred("_spawn_journey_completed_menu")
+				var gs = get_node_or_null("/root/GameState")
+				if gs:
+					var hud_stats = get_node_or_null("HUD/HudStats")
+					if hud_stats:
+						gs.carryover_coins = hud_stats.coins
+						gs.carryover_distance_m = hud_stats.get("_distance_m")
+						gs.is_continuing = true
+					
+					# Assign a new random seed for the next scene
+					gs.pending_road_seed = randi()
+				
+				# Roll a 50/50 dice to select between Grass (main.tscn) and Silhouette (silhouette_main.tscn)
+				var target_scene = "res://main.tscn"
+				if randf() < 0.5:
+					target_scene = "res://silhouette_main.tscn"
+				
+				get_tree().change_scene_to_file(target_scene)
 	elif not controls_locked:
 		forward_pressed = Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_RIGHT)
 		backward_pressed = Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT)

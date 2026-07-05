@@ -480,8 +480,8 @@ func prepare_next_biome() -> void:
 	show_next_biome_announcement(next_biome_name)
 
 func get_next_tunnel_spacing() -> float:
-	# Random spacing between 1500m (45000px) and 3000m (90000px)
-	return randf_range(45000.0, 90000.0)
+	# Random spacing between 900m (27000px) and 1800m (54000px)
+	return randf_range(27000.0, 54000.0)
 
 func cycle_biome() -> void:
 	# Always reinitialize if we have fewer biomes than expected
@@ -702,7 +702,7 @@ func _ready() -> void:
 		# Deterministically set the first tunnel position based on the seed
 		var init_rng = RandomNumberGenerator.new()
 		init_rng.seed = hash(road_seed + 1993)
-		next_planned_tunnel_x = init_rng.randf_range(45000.0, 90000.0)
+		next_planned_tunnel_x = init_rng.randf_range(18000.0, 36000.0)
 		print("[Road] First planned tunnel randomized to: ", int(next_planned_tunnel_x / 30.0), "m (X=", next_planned_tunnel_x, ")")
 		
 		# Free template nodes at runtime to avoid collision/visual duplication at the start
@@ -1491,8 +1491,8 @@ func _update_tunnel_spawning(current_x: float) -> void:
 				var spawn_chunk = int(ceil((current_x + current_view_dist) / chunk_width))
 				var tx = (spawn_chunk + 0.5) * chunk_width
 				
-				# Spawn ONLY when distance is greater than 1500m
-				if tx > 45000.0:
+				# Spawn ONLY when distance is greater than 600m (18000px)
+				if tx > 18000.0:
 					_tunnel_positions.append(tx)
 					_tunnel_is_queued = false
 					next_planned_tunnel_x = tx + get_next_tunnel_spacing()
@@ -1513,8 +1513,8 @@ func _update_tunnel_spawning(current_x: float) -> void:
 				var chunk_idx = int(round(next_planned_tunnel_x / chunk_width))
 				var tx = (chunk_idx + 0.5) * chunk_width
 				
-				# Spawn ONLY when distance is greater than 1500m
-				if tx > 45000.0:
+				# Spawn ONLY when distance is greater than 600m (18000px)
+				if tx > 18000.0:
 					_tunnel_positions.append(tx)
 					next_planned_tunnel_x = tx + get_next_tunnel_spacing()
 					
