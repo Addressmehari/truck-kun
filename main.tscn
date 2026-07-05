@@ -68,7 +68,7 @@ shader_parameter/randomness = 0.85
 shader_parameter/pixel_size = 4.0
 shader_parameter/line_width = 32.0
 
-[node name="main2" type="Node2D"]
+[node name="main" type="Node2D"]
 
 [node name="ParallaxBackground" type="ParallaxBackground" parent="."]
 
