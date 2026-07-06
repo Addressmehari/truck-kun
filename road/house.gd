@@ -44,6 +44,7 @@ var click_timer := 0.0
 var was_ahead := true
 var cross_shake_timer := 0.0
 var approach_intensity := 0.0
+var elapsed_time := 0.0
 
 func _ready() -> void:
 	# Load font
@@ -356,6 +357,8 @@ func _process(delta: float) -> void:
 
 	if Engine.is_editor_hint():
 		return
+
+	elapsed_time += delta
 
 	# Smoothly interpolate hover progress
 	var target_hover = 1.0 if is_hovered else 0.0
