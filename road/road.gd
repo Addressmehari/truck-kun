@@ -220,6 +220,7 @@ var seed_offset_3 := 0.0
 # Dictionary to track runtime active chunks: { chunk_index: { "collision": Col, "fill": Fill, "line": Line } }
 var active_chunks := {}
 var block_cache := {}
+var block_metadata_cache := {}
 var cumulative_offset_cache := {}
 var tunnel_cache := {}
 var wave_physics_tick := 0
@@ -229,6 +230,7 @@ var _suppress_regen := false
 
 func clear_road_geometry_caches() -> void:
 	block_cache.clear()
+	block_metadata_cache.clear()
 	cumulative_offset_cache.clear()
 	tunnel_cache.clear()
 
@@ -403,10 +405,39 @@ func apply_active_biome() -> void:
 	# when transitioning from Silhouette → Grass or Silhouette → Water.
 	var truck = get_node_or_null("../truck")
 	if truck:
-		if truck.has_method("set_silhouette_mode"):
+		if Engine.is_editor_hint() or not truck.has_method("set_silhouette_mode"):
+			# Direct material application in editor (or if truck script isn't loaded)
+			var shader = load("res://road/silhouette.gdshader")
+			var mat: ShaderMaterial = null
+			if biome.use_silhouette_truck and shader:
+				mat = ShaderMaterial.new()
+				mat.shader = shader
+				mat.set_shader_parameter("active", true)
+				mat.set_shader_parameter("silhouette_color", biome.truck_silhouette_color)
+			
+			var chassis = truck.get_node_or_null("chassis")
+			if chassis:
+				chassis.set("material", mat)
+				var tyre1 = chassis.get_node_or_null("tyre-1")
+				if tyre1:
+					tyre1.set("material", mat)
+			var container = truck.get_node_or_null("container_body")
+			if container:
+				container.set("material", mat)
+				var backdoor = container.get_node_or_null("backdoor")
+				if backdoor:
+					backdoor.set("material", mat)
+				var tyre2 = container.get_node_or_null("tyre-2")
+				if tyre2:
+					tyre2.set("material", mat)
+				var tyre3 = container.get_node_or_null("tyre-3")
+				if tyre3:
+					tyre3.set("material", mat)
+		else:
 			truck.call("set_silhouette_mode", false) # clear first
 			if biome.use_silhouette_truck:
 				truck.call("set_silhouette_mode", true, biome.truck_silhouette_color)
+				
 		if truck.has_method("set_headlight_enabled"):
 			truck.call("set_headlight_enabled", biome.enable_headlight if "enable_headlight" in biome else false)
 		if truck.has_method("set_water_mode"):
@@ -451,8 +482,8 @@ func prepare_next_biome() -> void:
 	show_next_biome_announcement(next_biome_name)
 
 func get_next_tunnel_spacing() -> float:
-	# Random spacing between 1500m (45000px) and 3000m (90000px)
-	return randf_range(45000.0, 90000.0)
+	# Random spacing between 900m (27000px) and 1800m (54000px)
+	return randf_range(27000.0, 54000.0)
 
 func cycle_biome() -> void:
 	# Always reinitialize if we have fewer biomes than expected
@@ -673,7 +704,7 @@ func _ready() -> void:
 		# Deterministically set the first tunnel position based on the seed
 		var init_rng = RandomNumberGenerator.new()
 		init_rng.seed = hash(road_seed + 1993)
-		next_planned_tunnel_x = init_rng.randf_range(45000.0, 90000.0)
+		next_planned_tunnel_x = init_rng.randf_range(18000.0, 36000.0)
 		print("[Road] First planned tunnel randomized to: ", int(next_planned_tunnel_x / 30.0), "m (X=", next_planned_tunnel_x, ")")
 		
 		# Free template nodes at runtime to avoid collision/visual duplication at the start
@@ -767,7 +798,7 @@ func get_raw_base_road_height(x: float) -> float:
 			var factor = raw_factor * raw_factor * (3.0 - 2.0 * raw_factor)
 			
 			# Combine waves to create varied terrain, offset by seed
-			var mult = hill_amplitude_multiplier * get_convoy_multiplier(x)
+			var mult = hill_amplitude_multiplier * get_convoy_multiplier(x) * get_bridge_ruggedness_multiplier(x)
 			
 			var active_mountain = mountain_amplitude
 			var active_long_hills = long_hills_amplitude
@@ -964,12 +995,12 @@ func is_near_house(x: float) -> bool:
 			return true
 	return false
 
-func get_block_at_interval(idx: int) -> Dictionary:
+func get_block_metadata(idx: int) -> Dictionary:
 	if not enable_blocks or idx < 0:
 		return {}
 		
-	if block_cache.has(idx):
-		return block_cache[idx]
+	if block_metadata_cache.has(idx):
+		return block_metadata_cache[idx]
 		
 	var rng = RandomNumberGenerator.new()
 	rng.seed = hash(str(road_seed) + "_block_" + str(idx))
@@ -1000,14 +1031,35 @@ func get_block_at_interval(idx: int) -> Dictionary:
 	if not found:
 		spawn_x = rng.randf_range(min_x, max_x)
 		
+	# Randomly roll for block type (upward wall or downward drop)
+	var type_roll = rng.randf()
+	var type = "down" if type_roll < 0.5 else "up"
+	
+	var metadata = {
+		"x": spawn_x,
+		"type": type
+	}
+	block_metadata_cache[idx] = metadata
+	return metadata
+
+func get_block_at_interval(idx: int) -> Dictionary:
+	if not enable_blocks or idx < 0:
+		return {}
+		
+	if block_cache.has(idx):
+		return block_cache[idx]
+		
+	var metadata = get_block_metadata(idx)
+	if metadata.is_empty():
+		return {}
+		
+	var spawn_x = metadata["x"]
+	var type = metadata["type"]
+	
 	var raw_h_before = get_raw_base_road_height(spawn_x - block_flat_before)
 	var raw_h_after = get_raw_base_road_height(spawn_x)
 	var adjusted_height = block_height + max(0.0, raw_h_after - raw_h_before)
 	
-	# Randomly roll for block type (upward wall or downward drop)
-	var type_roll = rng.randf()
-	var type = "down" if type_roll < 0.5 else "up"
-		
 	var block_data = {
 		"x": spawn_x,
 		"height": adjusted_height,
@@ -1139,15 +1191,10 @@ func is_event_active() -> bool:
 				return true
 	return false
 
-# Deterministically get tunnel details for a given chunk
-func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
-	if tunnel_cache.has(chunk_index):
-		return tunnel_cache[chunk_index]
-		
-	# Avoid tunnels too close to spawn (within 1500 units)
+func has_tunnel_at_chunk(chunk_index: int) -> bool:
 	var spawn_buffer_chunks = int(ceil(1500.0 / chunk_width))
 	if abs(chunk_index) <= spawn_buffer_chunks:
-		return {}
+		return false
 		
 	var found_tx: float = -1.0
 	if Engine.is_editor_hint():
@@ -1161,18 +1208,79 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 				found_tx = tx
 				break
 				
-	if found_tx != -1.0:
-		var base_y = get_base_road_height(found_tx)
-		var tunnel_data = {
-			"x": found_tx,
-			"y": base_y,
-			"width": 2000.0,
-			"height": 320.0
-		}
-		tunnel_cache[chunk_index] = tunnel_data
-		return tunnel_data
+	return found_tx != -1.0
+
+func has_elevator_at_chunk(chunk_idx: int) -> bool:
+	if not enable_blocks:
+		return false
 		
-	return {}
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return false
+		
+	var start_x = chunk_idx * chunk_width
+	var end_x = (chunk_idx + 1) * chunk_width
+	
+	var start_interval = int(floor((start_x - 2000.0) / 20000.0))
+	var end_interval = int(floor((end_x + 2000.0) / 20000.0))
+	
+	for idx in range(max(0, start_interval), end_interval + 1):
+		var block = get_block_metadata(idx)
+		if not block.is_empty():
+			if block.get("type", "up") == "down":
+				continue
+			var block_x = block["x"]
+			var elev_x = block_x - 120.0
+			if elev_x >= start_x and elev_x < end_x:
+				return true
+	return false
+
+func has_bridge_at_chunk(chunk_index: int) -> bool:
+	if abs(chunk_index) <= 2:
+		return false
+	
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return false
+	
+	var center_x = (chunk_index + 0.5) * chunk_width
+	if not is_smooth_zone_at_x(center_x):
+		return false
+		
+	if abs(chunk_index) % 8 == 5:
+		if has_tunnel_at_chunk(chunk_index):
+			return false
+		if has_elevator_at_chunk(chunk_index):
+			return false
+		return true
+	return false
+
+# Deterministically get tunnel details for a given chunk
+func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
+	if tunnel_cache.has(chunk_index):
+		return tunnel_cache[chunk_index]
+		
+	if not has_tunnel_at_chunk(chunk_index):
+		return {}
+		
+	var found_tx: float = -1.0
+	if Engine.is_editor_hint():
+		found_tx = (chunk_index + 0.5) * chunk_width
+	else:
+		for tx in _tunnel_positions:
+			if tx >= chunk_index * chunk_width and tx < (chunk_index + 1) * chunk_width:
+				found_tx = tx
+				break
+				
+	var base_y = get_base_road_height(found_tx)
+	var tunnel_data = {
+		"x": found_tx,
+		"y": base_y,
+		"width": 2000.0,
+		"height": 320.0
+	}
+	tunnel_cache[chunk_index] = tunnel_data
+	return tunnel_data
 
 # Returns true when the terrain at world-x is in a smooth (low-ruggedness) zone.
 # Works for SMOOTH, and for BOTH mode by reading the same blend formula used in get_raw_base_road_height.
@@ -1191,37 +1299,33 @@ func is_smooth_zone_at_x(x: float) -> bool:
 
 # Deterministically get bridge details for a given chunk
 func get_bridge_at_chunk(chunk_index: int) -> Dictionary:
-	# Avoid bridge spawn near start
-	if abs(chunk_index) <= 2:
+	if not has_bridge_at_chunk(chunk_index):
 		return {}
-	
-	# Avoid bridge in water biome
-	var biome = get_current_biome()
-	if biome and biome.is_water:
-		return {}
-	
-	# Only spawn bridges during smooth terrain zones (SMOOTH mode, or BOTH mode in a smooth window)
-	var center_x = (chunk_index + 0.5) * chunk_width
-	if not is_smooth_zone_at_x(center_x):
-		return {}
-		
-	# Spawn a bridge every 8 chunks (e.g. chunk index % 8 == 5)
-	if abs(chunk_index) % 8 == 5:
-		# Check if there is an elevator or a tunnel at this chunk (to avoid overlap)
-		var tunnel = get_tunnel_at_chunk(chunk_index)
-		if not tunnel.is_empty():
-			return {}
-		var elev = get_elevator_data_for_chunk(chunk_index)
-		if not elev.is_empty():
-			return {}
 			
-		var base_y = get_base_road_height(center_x)
-		return {
-			"x": center_x,
-			"y": base_y,
-			"width": 700.0
-		}
-	return {}
+	var center_x = (chunk_index + 0.5) * chunk_width
+	var base_y = get_base_road_height(center_x)
+	return {
+		"x": center_x,
+		"y": base_y,
+		"width": 700.0
+	}
+
+# Smoothly dampens terrain ruggedness (hills/spikes) leading up to and out of bridges
+func get_bridge_ruggedness_multiplier(x: float) -> float:
+	var center_chunk = int(floor(x / chunk_width))
+	for ci in range(center_chunk - 1, center_chunk + 2):
+		if has_bridge_at_chunk(ci):
+			var bx = (ci + 0.5) * chunk_width
+			var bw = 700.0
+			var half_w = bw / 2.0
+			var dist_to_center = abs(x - bx)
+			if dist_to_center < half_w + 400.0:
+				if dist_to_center <= half_w:
+					return 0.0
+				else:
+					var t = (dist_to_center - half_w) / 400.0
+					return t * t * (3.0 - 2.0 * t) # smoothstep
+	return 1.0
 
 ## Returns true when world_x falls inside any bridge span (plus optional padding pixels on each side).
 ## Used by the crusher spawner and coin spawner to avoid placing obstacles/pickups in bridge canyons.
@@ -1252,7 +1356,8 @@ func get_road_height(x: float) -> float:
 			if abs(dist) < half_w:
 				# Smooth parabolic canyon profile
 				var factor = (cos((dist / half_w) * PI) + 1.0) / 2.0
-				return by + factor * 260.0
+				var baseline_y = lerp(get_base_road_height(x), by, factor)
+				return baseline_y + factor * 260.0
 
 	# Determine range of chunk indices that can physically influence the height at x
 	var max_influence = 2500.0 # Safe upper bound for half width (1000) + padding (200) + transition (800)
@@ -1462,8 +1567,8 @@ func _update_tunnel_spawning(current_x: float) -> void:
 				var spawn_chunk = int(ceil((current_x + current_view_dist) / chunk_width))
 				var tx = (spawn_chunk + 0.5) * chunk_width
 				
-				# Spawn ONLY when distance is greater than 1500m
-				if tx > 45000.0:
+				# Spawn ONLY when distance is greater than 600m (18000px)
+				if tx > 18000.0:
 					_tunnel_positions.append(tx)
 					_tunnel_is_queued = false
 					next_planned_tunnel_x = tx + get_next_tunnel_spacing()
@@ -1484,8 +1589,8 @@ func _update_tunnel_spawning(current_x: float) -> void:
 				var chunk_idx = int(round(next_planned_tunnel_x / chunk_width))
 				var tx = (chunk_idx + 0.5) * chunk_width
 				
-				# Spawn ONLY when distance is greater than 1500m
-				if tx > 45000.0:
+				# Spawn ONLY when distance is greater than 600m (18000px)
+				if tx > 18000.0:
 					_tunnel_positions.append(tx)
 					next_planned_tunnel_x = tx + get_next_tunnel_spacing()
 					

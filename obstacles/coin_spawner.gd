@@ -77,8 +77,13 @@ func _ready() -> void:
 	_fill_pool()
 
 func _physics_process(delta: float) -> void:
+	if not is_instance_valid(_road):
+		_road = get_node_or_null("/root/main/Road")
+		
 	if not is_instance_valid(_chassis):
-		return
+		_chassis = get_node_or_null("/root/main/truck/chassis")
+		if not is_instance_valid(_chassis):
+			return
 
 	# Decay cooldown timer
 	if _cooldown_timer > 0.0:

@@ -21,6 +21,7 @@ var _petrol_fill_amount: float = 0.0
 var chassis: RigidBody2D
 var _start_x: float = 0.0
 var _distance_m: float = 0.0
+var _distance_offset_m: float = 0.0
 var _best_distance_m: float = 0.0
 
 # Animation
@@ -56,6 +57,14 @@ func _ready() -> void:
 	# Load best distance from persistent save file
 	load_best_distance()
 
+	# Apply carryover statistics from GameState if transitioning to Silhouette Mode
+	var gs = get_node_or_null("/root/GameState")
+	if gs and gs.is_continuing:
+		coins = gs.carryover_coins
+		_distance_offset_m = gs.carryover_distance_m
+		_distance_m = _distance_offset_m
+		gs.is_continuing = false
+
 	# ── Responsive Safe-Zone Setup (1.2x Enlarged Layout) ─────────────
 	anchor_left = 0.0
 	anchor_top = 0.0
@@ -81,7 +90,7 @@ func _process(delta: float) -> void:
 	_elapsed += delta
 
 	if is_instance_valid(chassis):
-		var raw = (chassis.global_position.x - _start_x) / 30.0
+		var raw = (chassis.global_position.x - _start_x) / 30.0 + _distance_offset_m
 		_distance_m = max(_distance_m, raw)
 		if _distance_m > _best_distance_m:
 			# Show milestone pop-up ONLY when high score is beaten
