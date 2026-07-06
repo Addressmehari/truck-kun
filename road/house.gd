@@ -1115,10 +1115,13 @@ func _draw() -> void:
 
 # ─── Screen Space Notification Bubble Class ──────────────────────────────────
 class HouseNotificationBubble extends Control:
+	static var active_bubbles: Array = []
+
 	var house_type: String = ""
 	var house: Node2D = null
 	var distance_m: float = 0.0
 	var custom_font: Font = null
+	var follow_blend: float = 0.0
 	
 	var is_glitching := false
 	var glitch_timer := 0.0
@@ -1128,25 +1131,67 @@ class HouseNotificationBubble extends Control:
 	var shake_offset := Vector2.ZERO
 	
 	func _ready() -> void:
+		active_bubbles.append(self)
 		custom_minimum_size = Vector2(100, 100)
 		size = Vector2(100, 100)
-		_update_screen_position()
+		
+		# Position initially at the right-side dock
+		var screen_size = get_viewport_rect().size
+		position = Vector2(screen_size.x - 140.0, screen_size.y / 2.0 - 110.0)
 		
 		# Set pivot offset for bounce scale animations
 		pivot_offset = Vector2(50, 50)
 		scale = Vector2.ZERO
 		
+		if active_bubbles[0] != self:
+			visible = false
+			
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_EXIT_TREE:
+			active_bubbles.erase(self)
+		
 	func _update_screen_position() -> void:
+		if not is_instance_valid(house):
+			return
+			
 		var screen_size = get_viewport_rect().size
-		# Place it 140 pixels from the right edge, slightly above vertical center
-		position = Vector2(screen_size.x - 140.0, screen_size.y / 2.0 - 110.0)
+		var dock_pos = Vector2(screen_size.x - 140.0, screen_size.y / 2.0 - 110.0)
+		
+		# Convert house world coordinates to screen/canvas coordinates
+		var house_screen_pos = house.get_global_transform_with_canvas().origin
+		# Target position directly above the house (increased Y offset to 320 pixels for high clearance)
+		var house_pos = Vector2(house_screen_pos.x, house_screen_pos.y - 320.0)
+		
+		# Check if the house is within the screen viewport limits
+		var is_on_screen = house_screen_pos.x >= 0.0 and house_screen_pos.x < screen_size.x
+		var target_blend = 1.0 if is_on_screen else 0.0
+		
+		# Smoothly transition the blend factor, but follow position directly to remove trailing lag
+		var dt = get_process_delta_time()
+		follow_blend = lerp(follow_blend, target_blend, dt * 7.5)
+		
+		# Calculate actual position by blending from dock to house
+		position = dock_pos.lerp(house_pos, follow_blend)
 		
 	func trigger_glitch_vanish() -> void:
+		if not visible:
+			# If we are queued and not visible yet, delete immediately to avoid layout stutters
+			queue_free()
+			return
 		if not is_glitching:
 			is_glitching = true
 			glitch_timer = 0.3
 			
 	func _process(delta: float) -> void:
+		# Queue controller: only show and animate the first bubble in the list
+		if active_bubbles.size() > 0 and active_bubbles[0] == self:
+			if not visible:
+				visible = true
+				intro_progress = 0.0 # Trigger clean scale bounce on entry
+		else:
+			visible = false
+			return
+			
 		elapsed_time += delta
 		_update_screen_position()
 		
@@ -1160,7 +1205,7 @@ class HouseNotificationBubble extends Control:
 				var s = 1.0 + 0.35 * sin(t * PI * 2.5) * (1.0 - t)
 				scale = Vector2(s, s)
 			else:
-				# Active gentle scale pulse (alive and juicy!)
+				# Gentle heartbeat scale pulse
 				var s = 1.0 + 0.04 * sin(elapsed_time * 4.0)
 				scale = Vector2(s, s)
 		else:
@@ -1192,14 +1237,13 @@ class HouseNotificationBubble extends Control:
 			_draw_chevron(glow_color, Vector2.ZERO, Color(0.08, 0.09, 0.12, 0.88))
 
 	func _draw_chevron(glow: Color, offset: Vector2, bg: Color) -> void:
-		# Calculate animated bob_y if not glitching
 		var bob_y = 0.0
 		if not is_glitching:
 			bob_y = sin(elapsed_time * 5.0) * 5.0
 			
 		var center = Vector2(50, 50) + offset + Vector2(0.0, bob_y)
 		
-		# Define chevron vertices (arrow-like shape pointing right)
+		# Define chevron vertices
 		var p_tl = center + Vector2(-42, -35)
 		var p_tr = center + Vector2(20, -35)
 		var p_rp = center + Vector2(48, 0)
@@ -1227,6 +1271,28 @@ class HouseNotificationBubble extends Control:
 		])
 		draw_polyline(inner_pts + PackedVector2Array([inner_pts[0]]), Color(glow.r, glow.g, glow.b, 0.4), 1.5)
 		
+		# Smooth pointer rotation: points right at dock, rotates down when over the house
+		var screen_size = get_viewport_rect().size
+		var dock_x = screen_size.x - 140.0
+		var travel_dist = abs(position.x - dock_x)
+		var blend = clamp(travel_dist / 80.0, 0.0, 1.0)
+		var angle = lerp(0.0, PI / 2.0, blend)
+		
+		var local_tip = Vector2(47, 0)
+		var local_c1 = Vector2(35, -12)
+		var local_c2 = Vector2(35, 12)
+		
+		var tip_rot = local_tip.rotated(angle)
+		var c1_rot = local_c1.rotated(angle)
+		var c2_rot = local_c2.rotated(angle)
+		
+		var arrow_pts = PackedVector2Array([
+			center + c1_rot,
+			center + tip_rot,
+			center + c2_rot
+		])
+		draw_colored_polygon(arrow_pts, glow)
+		
 		_draw_symbol(glow, center)
 		
 		# Draw distance label
@@ -1241,44 +1307,35 @@ class HouseNotificationBubble extends Control:
 			draw_string(font_to_use, text_pos, dist_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.WHITE)
 
 	func _draw_symbol(glow: Color, center: Vector2) -> void:
-		# Add a subtle heartbeat pulse to the symbol size
 		var pulse_scale = 1.0
 		if not is_glitching:
 			pulse_scale = 1.0 + 0.08 * sin(elapsed_time * 6.0)
 			
 		match house_type:
 			"racing":
-				# Flag pole
 				draw_line(center + Vector2(-12, 12) * pulse_scale, center + Vector2(-12, -16) * pulse_scale, Color.WHITE, 2.5)
-				# Checkered flag pattern
 				var flag_rect = Rect2(center.x - 12 * pulse_scale, center.y - 16 * pulse_scale, 24 * pulse_scale, 16 * pulse_scale)
 				draw_rect(flag_rect, Color.WHITE, true)
 				
-				# Subdivide into 4 cells
 				var hw = 12 * pulse_scale
 				var hh = 8 * pulse_scale
 				draw_rect(Rect2(center.x - hw, center.y - 2 * hh, hw, hh), Color.BLACK, true)
 				draw_rect(Rect2(center.x, center.y - hh, hw, hh), Color.BLACK, true)
 				
-				# Glow outline
 				draw_rect(flag_rect, glow, false, 1.5)
 			"delivery":
-				# Draw stacked crates
-				# Crate 1 (bottom left)
 				var c1 = Rect2(center.x - 16 * pulse_scale, center.y - 2 * pulse_scale, 14 * pulse_scale, 14 * pulse_scale)
 				draw_rect(c1, Color(0.82, 0.53, 0.28), true)
 				draw_rect(c1, Color.WHITE, false, 1.8)
 				draw_line(c1.position, c1.position + c1.size, Color.WHITE, 1.2)
 				draw_line(c1.position + Vector2(0, c1.size.y), c1.position + Vector2(c1.size.x, 0), Color.WHITE, 1.2)
 				
-				# Crate 2 (top right)
 				var c2 = Rect2(center.x + 2 * pulse_scale, center.y - 12 * pulse_scale, 14 * pulse_scale, 14 * pulse_scale)
 				draw_rect(c2, Color(0.72, 0.43, 0.18), true)
 				draw_rect(c2, Color.WHITE, false, 1.8)
 				draw_line(c2.position, c2.position + c2.size, Color.WHITE, 1.2)
 				draw_line(c2.position + Vector2(0, c2.size.y), c2.position + Vector2(c2.size.x, 0), Color.WHITE, 1.2)
 			"towing":
-				# Two interlocking rings (link symbol)
 				var r = 8.5 * pulse_scale
 				draw_arc(center + Vector2(-6, -2) * pulse_scale, r, 0.0, TAU, 16, Color.WHITE, 2.5)
 				draw_arc(center + Vector2(6, 2) * pulse_scale, r, 0.0, TAU, 16, Color.WHITE, 2.5)
@@ -1292,14 +1349,10 @@ class HouseNotificationBubble extends Control:
 		var shift_x2 = randf_range(-16.0, 16.0) * t
 		var shift_y2 = randf_range(-6.0, 6.0) * t
 		
-		# Cyan channel
 		_draw_chevron(Color(0.0, 0.9, 1.0, 0.7), shift_x1 * Vector2.RIGHT + shift_y1 * Vector2.DOWN, Color(0.05, 0.06, 0.08, 0.5))
-		# Magenta channel
 		_draw_chevron(Color(1.0, 0.0, 0.8, 0.7), shift_x2 * Vector2.RIGHT + shift_y2 * Vector2.DOWN, Color(0.05, 0.06, 0.08, 0.5))
-		# Main chevron
 		_draw_chevron(glow, shake_offset, Color("#121318"))
 		
-		# Draw random color slice glitch bands
 		var slice_count = randi_range(4, 9)
 		for i in range(slice_count):
 			var sy = randf_range(0.0, 100.0)
