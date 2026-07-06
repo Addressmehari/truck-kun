@@ -37,6 +37,11 @@ var active_bubble: Control = null
 # Particles for Chimney smoke
 var smoke_particles: CPUParticles2D
 
+# Responsiveness state
+var is_hovered := false
+var hover_progress := 0.0
+var click_timer := 0.0
+
 func _ready() -> void:
 	# Load font
 	if ResourceLoader.exists("res://retro_font.ttf"):
@@ -113,10 +118,15 @@ func _ready() -> void:
 	else:
 		crate_count = rng.randi_range(2, 5)
 		reward_amount = crate_count * rng.randi_range(60, 100)
+		
+	# Connect mouse signals for responsiveness
+	mouse_entered.connect(func(): is_hovered = true)
+	mouse_exited.connect(func(): is_hovered = false)
 
 
 func _input_event(viewport: Viewport, event: InputEvent, shape_idx: int) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		click_timer = 0.25
 		open_dialogue()
 
 func open_dialogue() -> void:
@@ -338,11 +348,28 @@ func open_dialogue() -> void:
 	hud.add_child(dialogue_box)
 
 func _process(delta: float) -> void:
-	if is_delivery_target or is_racing_target or is_towing_target:
+	if is_delivery_target or is_racing_target or is_towing_target or hover_progress > 0.01 or click_timer > 0.0:
 		queue_redraw()
 
 	if Engine.is_editor_hint():
 		return
+
+	# Smoothly interpolate hover progress
+	var target_hover = 1.0 if is_hovered else 0.0
+	hover_progress = lerp(hover_progress, target_hover, delta * 15.0)
+	
+	# Apply click squish
+	var target_scale = Vector2(1.0, 1.0)
+	if hover_progress > 0.0:
+		target_scale = Vector2(1.0 + hover_progress * 0.05, 1.0 + hover_progress * 0.05)
+		
+	if click_timer > 0.0:
+		click_timer -= delta
+		var t = click_timer / 0.25
+		target_scale.y -= sin(t * PI) * 0.12
+		target_scale.x += sin(t * PI) * 0.08
+		
+	scale = lerp(scale, target_scale, delta * 20.0)
 
 	# Handle screen-space notification bubble
 	var truck = get_node_or_null("/root/main/truck")
@@ -778,8 +805,8 @@ func _draw() -> void:
 		var beam_color = Color("#3b3f4d") # Dark timber / iron beams
 		var shutter_color = Color("#7a8296") # Metallic shutter door base
 		var shutter_line_color = Color("#4b505f") # Darker shutter groove color
-		var neon_cyan = Color("#00f0ff") # Electric blue trim
-		var neon_pink = Color("#ff007f") # Laser pink sign glow
+		var neon_cyan = Color("#00f0ff").lerp(Color("#e0ffff"), hover_progress * 0.3) # Electric blue trim
+		var neon_pink = Color("#ff007f").lerp(Color("#ffb6c1"), hover_progress * 0.3) # Laser pink sign glow
 		var hazard_yellow = Color("#ffd200") # Classic industrial warning yellow
 		var hazard_black = Color("#15161a") # Contrast dark black
 		var tire_rubber = Color("#141416") # Dark tire rubber
@@ -852,7 +879,7 @@ func _draw() -> void:
 		var roof_color = Color("#5a6268") # Corrugated galvanized steel
 		var bay_bg = Color("#1e2120") # Dark interior bay
 		var beam_color = Color("#3e4441") # Dark steel structural beams
-		var neon_amber = Color("#ffaa00") # Flashing light amber glow
+		var neon_amber = Color("#ffaa00").lerp(Color("#fff5cc"), hover_progress * 0.35) # Flashing light amber glow
 		var hazard_yellow = Color("#ffd200") # Yellow warning accents
 		var hazard_black = Color("#15161a") # Contrast dark black
 		var car_rust = Color("#8a5a44") # Rusty chassis brown-red
@@ -885,9 +912,10 @@ func _draw() -> void:
 		# 4. Service Office/Window (on the right side)
 		var office_rect = Rect2(15, -55, 45, 45)
 		draw_rect(office_rect, beam_color.lightened(0.1), true)
-		# Cozy yellow lighting from office window
+		# Cozy yellow lighting from office window (brightens on hover)
 		var win_rect = Rect2(20, -50, 35, 25)
-		draw_rect(win_rect, Color("#ffea79"), true)
+		var window_glow_color = Color("#ffea79").lerp(Color.WHITE, hover_progress * 0.45)
+		draw_rect(win_rect, window_glow_color, true)
 		draw_line(Vector2(37.5, -50), Vector2(37.5, -25), beam_color, 1.5)
 		draw_line(Vector2(20, -37.5), Vector2(55, -37.5), beam_color, 1.5)
 		
@@ -908,9 +936,12 @@ func _draw() -> void:
 		draw_rect(Rect2(31.5, -100, 12, 4), Color("#333333"), true)
 		# Amber glass
 		draw_circle(beacon_pos + Vector2(0, -7), 5.0, neon_amber)
-		# Light glow/pulses
-		var pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
-		draw_circle(beacon_pos + Vector2(0, -7), 18.0 * pulse, Color("#ff9f00", 0.18 * pulse))
+		# Light glow/pulses (flashes faster and glows wider on hover)
+		var pulse_speed = 0.008 + hover_progress * 0.007
+		var pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * pulse_speed)
+		var glow_rad = (18.0 + hover_progress * 10.0) * pulse
+		var glow_strength = (0.18 + hover_progress * 0.12) * pulse
+		draw_circle(beacon_pos + Vector2(0, -7), glow_rad, Color("#ff9f00", glow_strength))
 		
 		# 7. Big Tow Hook Sign above the service bay (X=-25, Y=-72)
 		var sign_center = Vector2(-25, -72)
@@ -947,7 +978,7 @@ func _draw() -> void:
 		var roof_color = Color(0.72, 0.22, 0.12) # Brick red tiles
 		var roof_trim_color = Color(0.48, 0.14, 0.08) # Darker roof eaves outline
 		var door_color = Color(0.45, 0.28, 0.18) # Warm arched wood door
-		var window_glow_color = Color(1.0, 0.85, 0.35) # Cozy interior light glow
+		var window_glow = Color(1.0, 0.85, 0.35).lerp(Color("#fffbe0"), hover_progress * 0.5) # Cozy interior light glow (heats up on hover)
 		var chimney_color = Color(0.42, 0.42, 0.45) # Grey stonework chimney
 		
 		# 1. Chimney (drawn behind the wall & roof)
@@ -1014,21 +1045,21 @@ func _draw() -> void:
 		# 6. Glowing Windows (Yellow with pane grids)
 		# Left window
 		var win_l_rect = Rect2(-42, -36, 20, 20)
-		draw_rect(win_l_rect, window_glow_color, true)
+		draw_rect(win_l_rect, window_glow, true)
 		draw_rect(win_l_rect, dark_beam_color, false, 2.0)
 		draw_line(Vector2(-32, -36), Vector2(-32, -16), dark_beam_color, 1.5)
 		draw_line(Vector2(-42, -26), Vector2(-22, -26), dark_beam_color, 1.5)
 		
 		# Right window
 		var win_r_rect = Rect2(22, -36, 20, 20)
-		draw_rect(win_r_rect, window_glow_color, true)
+		draw_rect(win_r_rect, window_glow, true)
 		draw_rect(win_r_rect, dark_beam_color, false, 2.0)
 		draw_line(Vector2(32, -36), Vector2(32, -16), dark_beam_color, 1.5)
 		draw_line(Vector2(22, -26), Vector2(42, -26), dark_beam_color, 1.5)
 
 		# 7. Attic Circular Window (center of roof gable)
 		var attic_pos = Vector2(0, -108)
-		draw_circle(attic_pos, 9.0, window_glow_color)
+		draw_circle(attic_pos, 9.0, window_glow)
 		draw_circle(attic_pos, 9.0, dark_beam_color, false, 2.0)
 		draw_line(attic_pos - Vector2(9, 0), attic_pos + Vector2(9, 0), dark_beam_color, 1.5)
 		draw_line(attic_pos - Vector2(0, 9), attic_pos + Vector2(0, 9), dark_beam_color, 1.5)
