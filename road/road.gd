@@ -1157,7 +1157,7 @@ func end_active_event(event_name: String) -> void:
 	if event_name == "Convoy":
 		is_convoy_active = false
 		has_convoy_ended = true
-		convoy_end_x = get_target_x()
+		convoy_end_x = get_target_x() + 500.0
 		convoy_auto_end_x = -1.0
 		clear_road_geometry_caches()
 		regenerate_runtime_chunks()
@@ -1231,9 +1231,36 @@ func has_elevator_at_chunk(chunk_idx: int) -> bool:
 				continue
 			var block_x = block["x"]
 			var elev_x = block_x - 120.0
+			
+			if crusher_flat_start_x != 0.0 and crusher_flat_end_x != 0.0:
+				if elev_x >= crusher_flat_start_x - 100.0 and elev_x <= crusher_flat_end_x + 100.0:
+					return false
+					
 			if elev_x >= start_x and elev_x < end_x:
 				return true
 	return false
+
+func get_next_upcoming_elevator(from_x: float, max_dist: float) -> Dictionary:
+	if not enable_blocks:
+		return {}
+	var biome = get_current_biome()
+	if biome and biome.is_water:
+		return {}
+		
+	var start_interval = int(floor(from_x / 20000.0))
+	var end_interval = start_interval + 2
+	for idx in range(start_interval, end_interval + 1):
+		var block = get_block_at_interval(idx)
+		if not block.is_empty() and block.get("type", "up") == "up":
+			var block_x = block["x"]
+			var elev_x = block_x - 120.0
+			if elev_x > from_x and (elev_x - from_x) <= max_dist:
+				return {
+					"block_x": block_x,
+					"elev_x": elev_x,
+					"block_idx": idx
+				}
+	return {}
 
 func has_bridge_at_chunk(chunk_index: int) -> bool:
 	if abs(chunk_index) <= 2:
@@ -1312,18 +1339,23 @@ func get_bridge_at_chunk(chunk_index: int) -> Dictionary:
 
 # Smoothly dampens terrain ruggedness (hills/spikes) leading up to and out of bridges
 func get_bridge_ruggedness_multiplier(x: float) -> float:
-	var center_chunk = int(floor(x / chunk_width))
-	for ci in range(center_chunk - 1, center_chunk + 2):
+	var bw = 700.0
+	var half_w = bw / 2.0
+	var transition_length = clamp(chunk_width * 0.5, 400.0, 1500.0)
+	var max_influence = half_w + transition_length
+	
+	var min_ci = int(floor((x - max_influence) / chunk_width))
+	var max_ci = int(floor((x + max_influence) / chunk_width))
+	
+	for ci in range(min_ci, max_ci + 1):
 		if has_bridge_at_chunk(ci):
 			var bx = (ci + 0.5) * chunk_width
-			var bw = 700.0
-			var half_w = bw / 2.0
 			var dist_to_center = abs(x - bx)
-			if dist_to_center < half_w + 400.0:
+			if dist_to_center < max_influence:
 				if dist_to_center <= half_w:
 					return 0.0
 				else:
-					var t = (dist_to_center - half_w) / 400.0
+					var t = (dist_to_center - half_w) / transition_length
 					return t * t * (3.0 - 2.0 * t) # smoothstep
 	return 1.0
 
@@ -1748,6 +1780,12 @@ func get_elevator_data_for_chunk(chunk_idx: int) -> Dictionary:
 				continue
 			var block_x = block["x"]
 			var elev_x = block_x - 120.0 # Elevator sits before the upward wall
+			
+			if crusher_flat_start_x != 0.0 and crusher_flat_end_x != 0.0:
+				if elev_x >= crusher_flat_start_x - 100.0 and elev_x <= crusher_flat_end_x + 100.0:
+					print("[Road] Suppressing elevator at X = ", elev_x, " because it overlaps with active crusher zone [", crusher_flat_start_x, ", ", crusher_flat_end_x, "]")
+					return {}
+					
 			if elev_x >= start_x and elev_x < end_x:
 				var y_before = get_road_height(block_x - 0.01)
 				var y_after = get_road_height(block_x)
@@ -2192,6 +2230,8 @@ func create_chunk(i: int) -> void:
 		if not block.is_empty():
 			var block_x = block["x"]
 			var y_before = get_road_height(block_x - 0.01)
+			if x == start_x and block_x > start_x:
+				surface_points.append(Vector2(start_x, y_before))
 			surface_points.append(Vector2(block_x, y_before))
 			var y_after = get_road_height(block_x)
 			surface_points.append(Vector2(block_x, y_after))
@@ -2421,6 +2461,13 @@ func spawn_crusher_on_next_chunk() -> void:
 	var num_crushers = randi_range(3, 8)
 	var first_crusher_x = player_x + 800.0
 	var spacing = 400.0
+	
+	# Check if caught slight before elevator zone (within 5000.0 pixels)
+	var upcoming_elev = get_next_upcoming_elevator(player_x, 5000.0)
+	if not upcoming_elev.is_empty():
+		var block_x = upcoming_elev["block_x"]
+		first_crusher_x = block_x + 400.0
+		print("[Road] Mystery box caught slight before elevator zone. Moving crusher spawning to the top of the elevator at X = ", first_crusher_x)
 	
 	# If delivery or tow is active, cap crushers so zone ends before destination
 	var dest_x = _get_active_mission_destination_x()

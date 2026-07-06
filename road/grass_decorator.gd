@@ -219,6 +219,10 @@ func rebuild_grass() -> void:
 					continue
 				var segment_dir = segment_vector / segment_length
 				
+				# Skip spawning grass on vertical cliffs or very steep slopes
+				if abs(segment_dir.y) > 0.75:
+					continue
+				
 				var dist = rng.randf_range(0.0, min_space)
 				while dist < segment_length:
 					var t = dist / segment_length
@@ -295,6 +299,10 @@ func rebuild_grass() -> void:
 					continue
 					
 				var segment_dir = segment_vector / segment_length
+				
+				# Skip spawning grass on vertical cliffs or very steep slopes
+				if abs(segment_dir.y) > 0.75:
+					continue
 				
 				# Calculate local road curvature (slope change) to detect straight sections
 				var prev_idx = i - 1 if i > 0 else 0
@@ -471,6 +479,10 @@ func rebuild_grass() -> void:
 					continue
 					
 				var segment_dir = segment_vector / segment_length
+				
+				# Skip spawning grass on vertical cliffs or very steep slopes
+				if abs(segment_dir.y) > 0.75:
+					continue
 				var normal = Vector2(-segment_dir.y, segment_dir.x).normalized()
 				
 				var dist = rng.randf_range(0.0, grass_spacing)
