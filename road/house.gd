@@ -31,6 +31,9 @@ var custom_font: Font
 var opponent_name: String = ""
 
 
+# Notification bubble instance
+var active_bubble: Control = null
+
 # Particles for Chimney smoke
 var smoke_particles: CPUParticles2D
 
@@ -117,6 +120,10 @@ func _input_event(viewport: Viewport, event: InputEvent, shape_idx: int) -> void
 		open_dialogue()
 
 func open_dialogue() -> void:
+	if is_instance_valid(active_bubble):
+		active_bubble.trigger_glitch_vanish()
+		active_bubble = null
+		
 	if has_accepted:
 		return
 		
@@ -313,9 +320,49 @@ func open_dialogue() -> void:
 		
 	hud.add_child(dialogue_box)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if is_delivery_target or is_racing_target or is_towing_target:
 		queue_redraw()
+
+	if Engine.is_editor_hint():
+		return
+
+	# Handle screen-space notification bubble
+	var truck = get_node_or_null("/root/main/truck")
+	if is_instance_valid(truck):
+		var active_body = truck.boat if truck.get("is_water_mode_active") else truck.chassis
+		if is_instance_valid(active_body):
+			var truck_x = active_body.global_position.x
+			var dist_x = global_position.x - truck_x
+			
+			# 100 meters = 3000 pixels (since 30 pixels = 1 meter)
+			if dist_x > 0.0 and dist_x <= 3000.0:
+				var should_show = false
+				if not has_accepted:
+					should_show = true
+				elif is_delivery_target or is_racing_target or is_towing_target:
+					should_show = true
+					
+				if should_show and not is_instance_valid(active_bubble):
+					var hud = truck.get_node_or_null("HUD")
+					if hud:
+						active_bubble = HouseNotificationBubble.new()
+						active_bubble.house_type = house_type
+						active_bubble.house = self
+						active_bubble.custom_font = custom_font
+						hud.add_child(active_bubble)
+						print("[House] Spawned notification bubble for house_type: ", house_type, " at dist: ", dist_x)
+			
+			if is_instance_valid(active_bubble):
+				active_bubble.distance_m = dist_x / 30.0
+				if dist_x <= 0.0:
+					print("[House] Crossed house. Triggering glitch vanish for bubble.")
+					active_bubble.trigger_glitch_vanish()
+					active_bubble = null
+
+func _exit_tree() -> void:
+	if is_instance_valid(active_bubble):
+		active_bubble.queue_free()
 
 func spawn_crates(count: int) -> void:
 	var crate_scene = load("res://obstacles/crate.tscn")
@@ -1064,3 +1111,208 @@ func _draw() -> void:
 			var txt_size = font_to_use.get_string_size(txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
 			draw_rect(Rect2(-txt_size.x / 2.0 - 6, -37, txt_size.x + 12, 18), Color(0, 0, 0, 0.6), true)
 			draw_string(font_to_use, Vector2(-txt_size.x / 2.0, -24), txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, line_color)
+
+
+# ─── Screen Space Notification Bubble Class ──────────────────────────────────
+class HouseNotificationBubble extends Control:
+	var house_type: String = ""
+	var house: Node2D = null
+	var distance_m: float = 0.0
+	var custom_font: Font = null
+	
+	var is_glitching := false
+	var glitch_timer := 0.0
+	
+	var intro_progress := 0.0
+	var elapsed_time := 0.0
+	var shake_offset := Vector2.ZERO
+	
+	func _ready() -> void:
+		custom_minimum_size = Vector2(100, 100)
+		size = Vector2(100, 100)
+		_update_screen_position()
+		
+		# Set pivot offset for bounce scale animations
+		pivot_offset = Vector2(50, 50)
+		scale = Vector2.ZERO
+		
+	func _update_screen_position() -> void:
+		var screen_size = get_viewport_rect().size
+		# Place it 140 pixels from the right edge, slightly above vertical center
+		position = Vector2(screen_size.x - 140.0, screen_size.y / 2.0 - 110.0)
+		
+	func trigger_glitch_vanish() -> void:
+		if not is_glitching:
+			is_glitching = true
+			glitch_timer = 0.3
+			
+	func _process(delta: float) -> void:
+		elapsed_time += delta
+		_update_screen_position()
+		
+		if not is_glitching:
+			# Alive rotation sway
+			rotation = sin(elapsed_time * 3.5) * 0.05
+			
+			if intro_progress < 1.0:
+				intro_progress = min(1.0, intro_progress + delta * 2.5) # Scale up over 0.4s
+				var t = intro_progress
+				var s = 1.0 + 0.35 * sin(t * PI * 2.5) * (1.0 - t)
+				scale = Vector2(s, s)
+			else:
+				# Active gentle scale pulse (alive and juicy!)
+				var s = 1.0 + 0.04 * sin(elapsed_time * 4.0)
+				scale = Vector2(s, s)
+		else:
+			glitch_timer -= delta
+			if glitch_timer <= 0.0:
+				queue_free()
+				return
+			
+			# Heavy shake during glitch
+			shake_offset = Vector2(randf_range(-15.0, 15.0), randf_range(-15.0, 15.0))
+			var gs = glitch_timer / 0.3
+			scale = Vector2(gs, gs)
+			
+		queue_redraw()
+		
+	func _draw() -> void:
+		var glow_color := Color.WHITE
+		match house_type:
+			"racing":
+				glow_color = Color("#ff007f") # Laser pink
+			"delivery":
+				glow_color = Color("#00ff66") # Neon green
+			"towing":
+				glow_color = Color("#ff9f00") # Safety amber
+				
+		if is_glitching:
+			_draw_glitch(glow_color)
+		else:
+			_draw_chevron(glow_color, Vector2.ZERO, Color(0.08, 0.09, 0.12, 0.88))
+
+	func _draw_chevron(glow: Color, offset: Vector2, bg: Color) -> void:
+		# Calculate animated bob_y if not glitching
+		var bob_y = 0.0
+		if not is_glitching:
+			bob_y = sin(elapsed_time * 5.0) * 5.0
+			
+		var center = Vector2(50, 50) + offset + Vector2(0.0, bob_y)
+		
+		# Define chevron vertices (arrow-like shape pointing right)
+		var p_tl = center + Vector2(-42, -35)
+		var p_tr = center + Vector2(20, -35)
+		var p_rp = center + Vector2(48, 0)
+		var p_br = center + Vector2(20, 35)
+		var p_bl = center + Vector2(-42, 35)
+		var p_li = center + Vector2(-28, 0)
+		var pts = PackedVector2Array([p_tl, p_tr, p_rp, p_br, p_bl, p_li])
+		
+		# Draw solid body
+		draw_colored_polygon(pts, bg)
+		
+		# Pulse border glow alpha
+		var pulse_glow = Color(glow.r, glow.g, glow.b, 0.8 + 0.2 * sin(elapsed_time * 7.0))
+		# Draw outer glow border
+		draw_polyline(pts + PackedVector2Array([p_tl]), pulse_glow, 3.5)
+		
+		# Draw inner accent border
+		var inner_pts = PackedVector2Array([
+			center + Vector2(-36, -29),
+			center + Vector2(17, -29),
+			center + Vector2(41, 0),
+			center + Vector2(17, 29),
+			center + Vector2(-36, 29),
+			center + Vector2(-24, 0)
+		])
+		draw_polyline(inner_pts + PackedVector2Array([inner_pts[0]]), Color(glow.r, glow.g, glow.b, 0.4), 1.5)
+		
+		_draw_symbol(glow, center)
+		
+		# Draw distance label
+		var dist_text = str(int(distance_m)) + "m"
+		var font_to_use = custom_font if custom_font else ThemeDB.fallback_font
+		if font_to_use:
+			var txt_size = font_to_use.get_string_size(dist_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
+			var text_pos = Vector2(center.x - txt_size.x / 2.0, center.y + 55)
+			
+			var back_rect = Rect2(center.x - txt_size.x / 2.0 - 5, center.y + 42, txt_size.x + 10, 18)
+			draw_rect(back_rect, Color(0, 0, 0, 0.65), true)
+			draw_string(font_to_use, text_pos, dist_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.WHITE)
+
+	func _draw_symbol(glow: Color, center: Vector2) -> void:
+		# Add a subtle heartbeat pulse to the symbol size
+		var pulse_scale = 1.0
+		if not is_glitching:
+			pulse_scale = 1.0 + 0.08 * sin(elapsed_time * 6.0)
+			
+		match house_type:
+			"racing":
+				# Flag pole
+				draw_line(center + Vector2(-12, 12) * pulse_scale, center + Vector2(-12, -16) * pulse_scale, Color.WHITE, 2.5)
+				# Checkered flag pattern
+				var flag_rect = Rect2(center.x - 12 * pulse_scale, center.y - 16 * pulse_scale, 24 * pulse_scale, 16 * pulse_scale)
+				draw_rect(flag_rect, Color.WHITE, true)
+				
+				# Subdivide into 4 cells
+				var hw = 12 * pulse_scale
+				var hh = 8 * pulse_scale
+				draw_rect(Rect2(center.x - hw, center.y - 2 * hh, hw, hh), Color.BLACK, true)
+				draw_rect(Rect2(center.x, center.y - hh, hw, hh), Color.BLACK, true)
+				
+				# Glow outline
+				draw_rect(flag_rect, glow, false, 1.5)
+			"delivery":
+				# Draw stacked crates
+				# Crate 1 (bottom left)
+				var c1 = Rect2(center.x - 16 * pulse_scale, center.y - 2 * pulse_scale, 14 * pulse_scale, 14 * pulse_scale)
+				draw_rect(c1, Color(0.82, 0.53, 0.28), true)
+				draw_rect(c1, Color.WHITE, false, 1.8)
+				draw_line(c1.position, c1.position + c1.size, Color.WHITE, 1.2)
+				draw_line(c1.position + Vector2(0, c1.size.y), c1.position + Vector2(c1.size.x, 0), Color.WHITE, 1.2)
+				
+				# Crate 2 (top right)
+				var c2 = Rect2(center.x + 2 * pulse_scale, center.y - 12 * pulse_scale, 14 * pulse_scale, 14 * pulse_scale)
+				draw_rect(c2, Color(0.72, 0.43, 0.18), true)
+				draw_rect(c2, Color.WHITE, false, 1.8)
+				draw_line(c2.position, c2.position + c2.size, Color.WHITE, 1.2)
+				draw_line(c2.position + Vector2(0, c2.size.y), c2.position + Vector2(c2.size.x, 0), Color.WHITE, 1.2)
+			"towing":
+				# Two interlocking rings (link symbol)
+				var r = 8.5 * pulse_scale
+				draw_arc(center + Vector2(-6, -2) * pulse_scale, r, 0.0, TAU, 16, Color.WHITE, 2.5)
+				draw_arc(center + Vector2(6, 2) * pulse_scale, r, 0.0, TAU, 16, Color.WHITE, 2.5)
+				draw_arc(center + Vector2(-6, -2) * pulse_scale, r, -PI/4.0, PI*0.75, 16, glow, 1.2)
+				draw_arc(center + Vector2(6, 2) * pulse_scale, r, PI*0.75, PI*1.75, 16, glow, 1.2)
+
+	func _draw_glitch(glow: Color) -> void:
+		var t = glitch_timer / 0.3
+		var shift_x1 = randf_range(-16.0, 16.0) * t
+		var shift_y1 = randf_range(-6.0, 6.0) * t
+		var shift_x2 = randf_range(-16.0, 16.0) * t
+		var shift_y2 = randf_range(-6.0, 6.0) * t
+		
+		# Cyan channel
+		_draw_chevron(Color(0.0, 0.9, 1.0, 0.7), shift_x1 * Vector2.RIGHT + shift_y1 * Vector2.DOWN, Color(0.05, 0.06, 0.08, 0.5))
+		# Magenta channel
+		_draw_chevron(Color(1.0, 0.0, 0.8, 0.7), shift_x2 * Vector2.RIGHT + shift_y2 * Vector2.DOWN, Color(0.05, 0.06, 0.08, 0.5))
+		# Main chevron
+		_draw_chevron(glow, shake_offset, Color("#121318"))
+		
+		# Draw random color slice glitch bands
+		var slice_count = randi_range(4, 9)
+		for i in range(slice_count):
+			var sy = randf_range(0.0, 100.0)
+			var sh = randf_range(2.0, 10.0)
+			var sx = randf_range(-30.0, 30.0)
+			var sw = randf_range(30.0, 140.0)
+			var col = Color.WHITE
+			var r = randf()
+			if r < 0.33:
+				col = Color("#ff007f")
+			elif r < 0.66:
+				col = Color("#00f0ff")
+			else:
+				col = Color("#ffd200")
+			
+			draw_rect(Rect2(sx + shake_offset.x, sy + shake_offset.y, sw, sh), col, true)
