@@ -349,7 +349,36 @@ func _physics_process(delta: float) -> void:
 	else:
 		if forward_pressed and not backward_pressed:
 			if current_gear != Gear.PARK:
-				move_input = autopilot_throttle if is_autopilot else 1.0
+				if is_autopilot:
+					var throttle = autopilot_throttle
+					if is_instance_valid(active_body):
+						var truck_x = active_body.global_position.x
+						var closest_elev: Node2D = null
+						var min_dist := 999999.0
+						for elev in get_tree().get_nodes_in_group("elevators"):
+							if is_instance_valid(elev) and not elev.get("is_opponent_elevator"):
+								var ex = elev.global_position.x
+								var dist = ex - truck_x
+								if dist > -150.0 and dist < min_dist:
+									min_dist = dist
+									closest_elev = elev
+						
+						if closest_elev:
+							# Smoothly slow down as we approach the elevator platform
+							if min_dist > 50.0 and min_dist <= 300.0:
+								var t = (min_dist - 50.0) / 250.0
+								throttle = lerp(0.25, autopilot_throttle, t)
+							# Wait / crawl on the elevator platform until it reaches target height
+							elif min_dist >= -150.0 and min_dist <= 50.0:
+								var target_y = closest_elev.start_y - closest_elev.travel_height
+								var current_y = closest_elev.global_position.y
+								if abs(current_y - target_y) > 5.0:
+									throttle = 0.05
+								else:
+									throttle = autopilot_throttle
+					move_input = throttle
+				else:
+					move_input = 1.0
 		elif backward_pressed and not forward_pressed:
 			if current_gear != Gear.PARK:
 				move_input = -1.0

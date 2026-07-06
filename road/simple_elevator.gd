@@ -31,6 +31,7 @@ var fall_timer := 0.0
 
 func _ready() -> void:
 	if not Engine.is_editor_hint():
+		add_to_group("elevators")
 		start_y = global_position.y
 		target_y = start_y
 		
