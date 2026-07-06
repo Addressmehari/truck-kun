@@ -75,4 +75,6 @@ func _on_retry() -> void:
 		gs.is_continuing = false
 		gs.carryover_coins = 0
 		gs.carryover_distance_m = 0.0
-	get_tree().change_scene_to_file("res://main.tscn")
+		gs.transition_to_scene("res://main.tscn")
+	else:
+		get_tree().change_scene_to_file("res://main.tscn")

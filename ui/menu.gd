@@ -68,7 +68,11 @@ func _draw() -> void:
 
 func _on_level_pressed(level_num: int) -> void:
 	if level_num == 1:
-		get_tree().change_scene_to_file("res://main.tscn")
+		var gs = get_node_or_null("/root/GameState")
+		if gs:
+			gs.transition_to_scene("res://main.tscn")
+		else:
+			get_tree().change_scene_to_file("res://main.tscn")
 
 func _on_button_mouse_entered(btn: Button) -> void:
 	btn.pivot_offset = btn.size / 2.0

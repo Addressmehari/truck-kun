@@ -292,7 +292,10 @@ func _physics_process(delta: float) -> void:
 				if randf() < 0.5:
 					target_scene = "res://silhouette_main.tscn"
 				
-				get_tree().change_scene_to_file(target_scene)
+				if gs:
+					gs.transition_to_scene(target_scene)
+				else:
+					get_tree().change_scene_to_file(target_scene)
 	elif not controls_locked:
 		forward_pressed = Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_RIGHT)
 		backward_pressed = Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT)
