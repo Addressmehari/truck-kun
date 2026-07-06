@@ -1159,8 +1159,8 @@ class HouseNotificationBubble extends Control:
 		
 		# Convert house world coordinates to screen/canvas coordinates
 		var house_screen_pos = house.get_global_transform_with_canvas().origin
-		# Target position directly above the house (increased Y offset to 320 pixels for high clearance)
-		var house_pos = Vector2(house_screen_pos.x, house_screen_pos.y - 320.0)
+		# Target position directly above the house (shifted left by 40 pixels, raised to 360 pixels high)
+		var house_pos = Vector2(house_screen_pos.x - 40.0, house_screen_pos.y - 360.0)
 		
 		# Check if the house is within the screen viewport limits
 		var is_on_screen = house_screen_pos.x >= 0.0 and house_screen_pos.x < screen_size.x
@@ -1199,15 +1199,18 @@ class HouseNotificationBubble extends Control:
 			# Alive rotation sway
 			rotation = sin(elapsed_time * 3.5) * 0.05
 			
+			# Dynamic scale up factor when floating over the house (scale up to 1.28x)
+			var scale_multiplier = lerp(1.0, 1.28, follow_blend)
+			
 			if intro_progress < 1.0:
 				intro_progress = min(1.0, intro_progress + delta * 2.5) # Scale up over 0.4s
 				var t = intro_progress
 				var s = 1.0 + 0.35 * sin(t * PI * 2.5) * (1.0 - t)
-				scale = Vector2(s, s)
+				scale = Vector2(s, s) * scale_multiplier
 			else:
 				# Gentle heartbeat scale pulse
 				var s = 1.0 + 0.04 * sin(elapsed_time * 4.0)
-				scale = Vector2(s, s)
+				scale = Vector2(s, s) * scale_multiplier
 		else:
 			glitch_timer -= delta
 			if glitch_timer <= 0.0:
@@ -1243,14 +1246,29 @@ class HouseNotificationBubble extends Control:
 			
 		var center = Vector2(50, 50) + offset + Vector2(0.0, bob_y)
 		
-		# Define chevron vertices
+		# Define chevron corners
 		var p_tl = center + Vector2(-42, -35)
 		var p_tr = center + Vector2(20, -35)
 		var p_rp = center + Vector2(48, 0)
 		var p_br = center + Vector2(20, 35)
 		var p_bl = center + Vector2(-42, 35)
 		var p_li = center + Vector2(-28, 0)
-		var pts = PackedVector2Array([p_tl, p_tr, p_rp, p_br, p_bl, p_li])
+		var corners = [p_tl, p_tr, p_rp, p_br, p_bl, p_li]
+		
+		# Generate 36 points for smooth outer perimeter morphing
+		var raw_chevron_pts = PackedVector2Array()
+		for s in range(6):
+			var p1 = corners[s]
+			var p2 = corners[(s + 1) % 6]
+			for j in range(6):
+				raw_chevron_pts.append(p1.lerp(p2, j / 6.0))
+				
+		var R = 38.0
+		var pts = PackedVector2Array()
+		for i in range(36):
+			var chev_pt = raw_chevron_pts[i]
+			var circ_pt = center + (chev_pt - center).normalized() * R
+			pts.append(chev_pt.lerp(circ_pt, follow_blend))
 		
 		# Draw solid body
 		draw_colored_polygon(pts, bg)
@@ -1258,20 +1276,36 @@ class HouseNotificationBubble extends Control:
 		# Pulse border glow alpha
 		var pulse_glow = Color(glow.r, glow.g, glow.b, 0.8 + 0.2 * sin(elapsed_time * 7.0))
 		# Draw outer glow border
-		draw_polyline(pts + PackedVector2Array([p_tl]), pulse_glow, 3.5)
+		draw_polyline(pts + PackedVector2Array([pts[0]]), pulse_glow, 3.5)
 		
-		# Draw inner accent border
-		var inner_pts = PackedVector2Array([
+		# Define inner chevron corners
+		var inner_corners = [
 			center + Vector2(-36, -29),
 			center + Vector2(17, -29),
 			center + Vector2(41, 0),
 			center + Vector2(17, 29),
 			center + Vector2(-36, 29),
 			center + Vector2(-24, 0)
-		])
+		]
+		
+		var raw_inner_pts = PackedVector2Array()
+		for s in range(6):
+			var p1 = inner_corners[s]
+			var p2 = inner_corners[(s + 1) % 6]
+			for j in range(6):
+				raw_inner_pts.append(p1.lerp(p2, j / 6.0))
+				
+		var inner_R = R - 8.0
+		var inner_pts = PackedVector2Array()
+		for i in range(36):
+			var chev_inner = raw_inner_pts[i]
+			var circ_inner = center + (chev_inner - center).normalized() * inner_R
+			inner_pts.append(chev_inner.lerp(circ_inner, follow_blend))
+		
+		# Draw inner accent border
 		draw_polyline(inner_pts + PackedVector2Array([inner_pts[0]]), Color(glow.r, glow.g, glow.b, 0.4), 1.5)
 		
-		# Smooth pointer rotation: points right at dock, rotates down when over the house
+		# Smooth pointer rotation and fade out
 		var screen_size = get_viewport_rect().size
 		var dock_x = screen_size.x - 140.0
 		var travel_dist = abs(position.x - dock_x)
@@ -1291,7 +1325,8 @@ class HouseNotificationBubble extends Control:
 			center + tip_rot,
 			center + c2_rot
 		])
-		draw_colored_polygon(arrow_pts, glow)
+		var arrow_alpha = clamp(1.0 - follow_blend, 0.0, 1.0)
+		draw_colored_polygon(arrow_pts, Color(glow.r, glow.g, glow.b, glow.a * arrow_alpha))
 		
 		_draw_symbol(glow, center)
 		
