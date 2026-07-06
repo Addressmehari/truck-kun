@@ -41,6 +41,8 @@ var smoke_particles: CPUParticles2D
 var is_hovered := false
 var hover_progress := 0.0
 var click_timer := 0.0
+var has_crossed := false
+var cross_shake_timer := 0.0
 
 func _ready() -> void:
 	# Load font
@@ -348,7 +350,7 @@ func open_dialogue() -> void:
 	hud.add_child(dialogue_box)
 
 func _process(delta: float) -> void:
-	if is_delivery_target or is_racing_target or is_towing_target or hover_progress > 0.01 or click_timer > 0.0:
+	if is_delivery_target or is_racing_target or is_towing_target or hover_progress > 0.01 or click_timer > 0.0 or cross_shake_timer > 0.0:
 		queue_redraw()
 
 	if Engine.is_editor_hint():
@@ -358,7 +360,7 @@ func _process(delta: float) -> void:
 	var target_hover = 1.0 if is_hovered else 0.0
 	hover_progress = lerp(hover_progress, target_hover, delta * 15.0)
 	
-	# Apply click squish
+	# Apply click squish and wind shake physics
 	var target_scale = Vector2(1.0, 1.0)
 	if hover_progress > 0.0:
 		target_scale = Vector2(1.0 + hover_progress * 0.05, 1.0 + hover_progress * 0.05)
@@ -368,6 +370,17 @@ func _process(delta: float) -> void:
 		var t = click_timer / 0.25
 		target_scale.y -= sin(t * PI) * 0.12
 		target_scale.x += sin(t * PI) * 0.08
+		
+	if cross_shake_timer > 0.0:
+		cross_shake_timer -= delta
+		var t = 1.0 - cross_shake_timer
+		# Wobble rotation and wind compression
+		rotation = sin(t * PI * 10.0) * 0.06 * exp(-t * 3.5)
+		var scale_wobble = sin(t * PI * 8.0) * 0.08 * exp(-t * 4.0)
+		target_scale.y += scale_wobble
+		target_scale.x -= scale_wobble
+	else:
+		rotation = 0.0
 		
 	scale = lerp(scale, target_scale, delta * 20.0)
 
@@ -399,7 +412,11 @@ func _process(delta: float) -> void:
 			
 			if is_instance_valid(active_bubble):
 				active_bubble.distance_m = dist_x / 30.0
-				if dist_x <= 0.0:
+				
+			if dist_x <= 0.0 and not has_crossed:
+				has_crossed = true
+				cross_shake_timer = 1.0
+				if is_instance_valid(active_bubble):
 					print("[House] Crossed house. Triggering glitch vanish for bubble.")
 					active_bubble.trigger_glitch_vanish()
 					active_bubble = null
@@ -798,6 +815,11 @@ func show_towing_completion_dialogue(payout: int) -> void:
 	hud.add_child(dialogue_box)
 
 func _draw() -> void:
+	# Strobe flash on crossing
+	var flash_boost = 1.0
+	if cross_shake_timer > 0.0 and int(cross_shake_timer * 30.0) % 2 == 0:
+		flash_boost = 1.6
+
 	if house_type == "racing":
 		# Design the racing garage house using premium vector graphics
 		# Colors
@@ -805,8 +827,8 @@ func _draw() -> void:
 		var beam_color = Color("#3b3f4d") # Dark timber / iron beams
 		var shutter_color = Color("#7a8296") # Metallic shutter door base
 		var shutter_line_color = Color("#4b505f") # Darker shutter groove color
-		var neon_cyan = Color("#00f0ff").lerp(Color("#e0ffff"), hover_progress * 0.3) # Electric blue trim
-		var neon_pink = Color("#ff007f").lerp(Color("#ffb6c1"), hover_progress * 0.3) # Laser pink sign glow
+		var neon_cyan = Color("#00f0ff").lerp(Color("#e0ffff"), hover_progress * 0.3) * flash_boost # Electric blue trim
+		var neon_pink = Color("#ff007f").lerp(Color("#ffb6c1"), hover_progress * 0.3) * flash_boost # Laser pink sign glow
 		var hazard_yellow = Color("#ffd200") # Classic industrial warning yellow
 		var hazard_black = Color("#15161a") # Contrast dark black
 		var tire_rubber = Color("#141416") # Dark tire rubber
@@ -879,7 +901,7 @@ func _draw() -> void:
 		var roof_color = Color("#5a6268") # Corrugated galvanized steel
 		var bay_bg = Color("#1e2120") # Dark interior bay
 		var beam_color = Color("#3e4441") # Dark steel structural beams
-		var neon_amber = Color("#ffaa00").lerp(Color("#fff5cc"), hover_progress * 0.35) # Flashing light amber glow
+		var neon_amber = Color("#ffaa00").lerp(Color("#fff5cc"), hover_progress * 0.35) * flash_boost # Flashing light amber glow
 		var hazard_yellow = Color("#ffd200") # Yellow warning accents
 		var hazard_black = Color("#15161a") # Contrast dark black
 		var car_rust = Color("#8a5a44") # Rusty chassis brown-red
@@ -914,7 +936,7 @@ func _draw() -> void:
 		draw_rect(office_rect, beam_color.lightened(0.1), true)
 		# Cozy yellow lighting from office window (brightens on hover)
 		var win_rect = Rect2(20, -50, 35, 25)
-		var window_glow_color = Color("#ffea79").lerp(Color.WHITE, hover_progress * 0.45)
+		var window_glow_color = Color("#ffea79").lerp(Color.WHITE, hover_progress * 0.45) * flash_boost
 		draw_rect(win_rect, window_glow_color, true)
 		draw_line(Vector2(37.5, -50), Vector2(37.5, -25), beam_color, 1.5)
 		draw_line(Vector2(20, -37.5), Vector2(55, -37.5), beam_color, 1.5)
@@ -978,7 +1000,7 @@ func _draw() -> void:
 		var roof_color = Color(0.72, 0.22, 0.12) # Brick red tiles
 		var roof_trim_color = Color(0.48, 0.14, 0.08) # Darker roof eaves outline
 		var door_color = Color(0.45, 0.28, 0.18) # Warm arched wood door
-		var window_glow = Color(1.0, 0.85, 0.35).lerp(Color("#fffbe0"), hover_progress * 0.5) # Cozy interior light glow (heats up on hover)
+		var window_glow = Color(1.0, 0.85, 0.35).lerp(Color("#fffbe0"), hover_progress * 0.5) * flash_boost # Cozy interior light glow (heats up on hover)
 		var chimney_color = Color(0.42, 0.42, 0.45) # Grey stonework chimney
 		
 		# 1. Chimney (drawn behind the wall & roof)
