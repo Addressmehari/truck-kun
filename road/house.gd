@@ -120,10 +120,6 @@ func _input_event(viewport: Viewport, event: InputEvent, shape_idx: int) -> void
 		open_dialogue()
 
 func open_dialogue() -> void:
-	if is_instance_valid(active_bubble):
-		active_bubble.trigger_glitch_vanish()
-		active_bubble = null
-		
 	if has_accepted:
 		return
 		
@@ -171,6 +167,9 @@ func open_dialogue() -> void:
 			var on_accept = func():
 				print("[House] Racing Contract Accepted: $%d reward" % reward_amount)
 				has_accepted = true
+				if is_instance_valid(active_bubble):
+					active_bubble.trigger_accept_vanish()
+					active_bubble = null
 				
 				# Setup racing target in road script
 				if road:
@@ -194,6 +193,9 @@ func open_dialogue() -> void:
 				
 			var on_decline = func():
 				has_declined = true
+				if is_instance_valid(active_bubble):
+					active_bubble.trigger_decline_vanish()
+					active_bubble = null
 				dialogue_box.call("close_dialogue")
 				
 			dialogue_box.call("setup", offer_text, [
@@ -219,6 +221,9 @@ func open_dialogue() -> void:
 			var on_accept = func():
 				print("[House] Towing Contract Accepted: $%d reward" % reward_amount)
 				has_accepted = true
+				if is_instance_valid(active_bubble):
+					active_bubble.trigger_accept_vanish()
+					active_bubble = null
 				
 				# Setup towing target in road script
 				if road:
@@ -244,6 +249,9 @@ func open_dialogue() -> void:
 				
 			var on_decline = func():
 				has_declined = true
+				if is_instance_valid(active_bubble):
+					active_bubble.trigger_decline_vanish()
+					active_bubble = null
 				dialogue_box.call("close_dialogue")
 				
 			dialogue_box.call("setup", offer_text, [
@@ -270,6 +278,9 @@ func open_dialogue() -> void:
 			var on_accept = func():
 				print("[House] Contract Accepted: %d crates, $%d reward" % [crate_count, reward_amount])
 				has_accepted = true
+				if is_instance_valid(active_bubble):
+					active_bubble.trigger_accept_vanish()
+					active_bubble = null
 				
 				# Setup delivery target in road script
 				if road:
@@ -294,6 +305,9 @@ func open_dialogue() -> void:
 				
 			var on_decline = func():
 				has_declined = true
+				if is_instance_valid(active_bubble):
+					active_bubble.trigger_decline_vanish()
+					active_bubble = null
 				dialogue_box.call("close_dialogue")
 				
 			dialogue_box.call("setup", offer_text, [
@@ -308,6 +322,9 @@ func open_dialogue() -> void:
 			], contract_meta)
 	else:
 		var on_close = func():
+			if is_instance_valid(active_bubble):
+				active_bubble.trigger_glitch_vanish()
+				active_bubble = null
 			dialogue_box.call("close_dialogue")
 			
 		var closing_text = "No more races." if house_type == "racing" else ("No tow jobs." if house_type == "towing" else "No more orders.")
@@ -338,7 +355,7 @@ func _process(delta: float) -> void:
 			# 100 meters = 3000 pixels (since 30 pixels = 1 meter)
 			if dist_x > 0.0 and dist_x <= 3000.0:
 				var should_show = false
-				if not has_accepted:
+				if not has_accepted and not has_declined:
 					should_show = true
 				elif is_delivery_target or is_racing_target or is_towing_target:
 					should_show = true
@@ -1123,8 +1140,12 @@ class HouseNotificationBubble extends Control:
 	var custom_font: Font = null
 	var follow_blend: float = 0.0
 	
-	var is_glitching := false
-	var glitch_timer := 0.0
+	var vanish_state := 0 # 0: normal, 1: glitch/crossed, 2: accepted checkmark, 3: declined cross
+	var vanish_timer := 0.0
+	
+	var is_glitching: bool:
+		get:
+			return vanish_state == 1
 	
 	var intro_progress := 0.0
 	var elapsed_time := 0.0
@@ -1132,20 +1153,23 @@ class HouseNotificationBubble extends Control:
 	
 	func _ready() -> void:
 		active_bubbles.append(self)
-		custom_minimum_size = Vector2(100, 100)
-		size = Vector2(100, 100)
+		custom_minimum_size = Vector2(120, 120)
+		size = Vector2(120, 120)
 		
-		# Position initially at the right-side dock
+		# Position initially at the right-side dock (160 pixels from right for larger bubble)
 		var screen_size = get_viewport_rect().size
-		position = Vector2(screen_size.x - 140.0, screen_size.y / 2.0 - 110.0)
 		
-		# Set pivot offset for bounce scale animations
-		pivot_offset = Vector2(50, 50)
+		# Calculate Y offset based on position in queue to stack them
+		var dock_y = screen_size.y / 2.0 - 120.0
+		var idx = active_bubbles.find(self)
+		if idx > 0:
+			dock_y += idx * 130.0
+		position = Vector2(screen_size.x - 160.0, dock_y)
+		
+		# Set pivot offset for bounce scale animations (centered for 120x120)
+		pivot_offset = Vector2(60, 60)
 		scale = Vector2.ZERO
 		
-		if active_bubbles[0] != self:
-			visible = false
-			
 	func _notification(what: int) -> void:
 		if what == NOTIFICATION_EXIT_TREE:
 			active_bubbles.erase(self)
@@ -1155,12 +1179,21 @@ class HouseNotificationBubble extends Control:
 			return
 			
 		var screen_size = get_viewport_rect().size
-		var dock_pos = Vector2(screen_size.x - 140.0, screen_size.y / 2.0 - 110.0)
+		
+		# Shift down for subsequent active bubbles in the queue to stack them
+		var dock_y = screen_size.y / 2.0 - 120.0
+		var idx = active_bubbles.find(self)
+		if idx > 0:
+			dock_y += idx * 130.0
+			
+		var dock_pos = Vector2(screen_size.x - 160.0, dock_y)
 		
 		# Convert house world coordinates to screen/canvas coordinates
 		var house_screen_pos = house.get_global_transform_with_canvas().origin
-		# Target position directly above the house (shifted left by 40 pixels, raised to 360 pixels high)
-		var house_pos = Vector2(house_screen_pos.x - 40.0, house_screen_pos.y - 360.0)
+		# Target position directly above the house (shifted left by 50 pixels)
+		# For racing houses, float 50 pixels higher (410px offset vs 360px offset)
+		var height_offset = -410.0 if house_type == "racing" else -360.0
+		var house_pos = Vector2(house_screen_pos.x - 50.0, house_screen_pos.y + height_offset)
 		
 		# Check if the house is within the screen viewport limits
 		var is_on_screen = house_screen_pos.x >= 0.0 and house_screen_pos.x < screen_size.x
@@ -1178,24 +1211,35 @@ class HouseNotificationBubble extends Control:
 			# If we are queued and not visible yet, delete immediately to avoid layout stutters
 			queue_free()
 			return
-		if not is_glitching:
-			is_glitching = true
-			glitch_timer = 0.3
+		if vanish_state == 0:
+			vanish_state = 1
+			vanish_timer = 0.3
+			
+	func trigger_accept_vanish() -> void:
+		if not visible:
+			queue_free()
+			return
+		if vanish_state == 0:
+			vanish_state = 2
+			vanish_timer = 0.5
+			
+	func trigger_decline_vanish() -> void:
+		if not visible:
+			queue_free()
+			return
+		if vanish_state == 0:
+			vanish_state = 3
+			vanish_timer = 0.5
 			
 	func _process(delta: float) -> void:
-		# Queue controller: only show and animate the first bubble in the list
-		if active_bubbles.size() > 0 and active_bubbles[0] == self:
-			if not visible:
-				visible = true
-				intro_progress = 0.0 # Trigger clean scale bounce on entry
-		else:
-			visible = false
-			return
+		if not visible:
+			visible = true
+			intro_progress = 0.0 # Trigger clean scale bounce on entry
 			
 		elapsed_time += delta
 		_update_screen_position()
 		
-		if not is_glitching:
+		if vanish_state == 0:
 			# Alive rotation sway
 			rotation = sin(elapsed_time * 3.5) * 0.05
 			
@@ -1212,47 +1256,68 @@ class HouseNotificationBubble extends Control:
 				var s = 1.0 + 0.04 * sin(elapsed_time * 4.0)
 				scale = Vector2(s, s) * scale_multiplier
 		else:
-			glitch_timer -= delta
-			if glitch_timer <= 0.0:
+			vanish_timer -= delta
+			if vanish_timer <= 0.0:
 				queue_free()
 				return
 			
-			# Heavy shake during glitch
-			shake_offset = Vector2(randf_range(-15.0, 15.0), randf_range(-15.0, 15.0))
-			var gs = glitch_timer / 0.3
-			scale = Vector2(gs, gs)
+			var scale_multiplier = lerp(1.0, 1.28, follow_blend)
+			if vanish_state == 1:
+				# Heavy shake during glitch
+				shake_offset = Vector2(randf_range(-15.0, 15.0), randf_range(-15.0, 15.0))
+				var gs = vanish_timer / 0.3
+				scale = Vector2(gs, gs)
+			elif vanish_state == 2:
+				# Ticking checkmark scale pulse
+				var t = (0.5 - vanish_timer) / 0.5
+				var s = 1.0 - t
+				if t < 0.3:
+					s = 1.0 + sin(t / 0.3 * PI) * 0.25
+				scale = Vector2(s, s) * scale_multiplier
+				rotation = sin(elapsed_time * 15.0) * 0.02
+			elif vanish_state == 3:
+				# Heavy shake / rotation for decline
+				shake_offset = Vector2(randf_range(-8.0, 8.0), randf_range(-8.0, 8.0))
+				var t = (0.5 - vanish_timer) / 0.5
+				var s = 1.0 - t
+				scale = Vector2(s, s) * scale_multiplier
+				rotation = sin(elapsed_time * 20.0) * 0.05
 			
 		queue_redraw()
 		
 	func _draw() -> void:
 		var glow_color := Color.WHITE
+		var bg_color := Color(0.08, 0.09, 0.12, 0.9)
 		match house_type:
 			"racing":
-				glow_color = Color("#ff007f") # Laser pink
+				glow_color = Color("#FF2A85") # Hot Sunset Pink/Crimson
+				bg_color = Color("#170912", 0.92) # Tinted plum-black
 			"delivery":
-				glow_color = Color("#00ff66") # Neon green
+				glow_color = Color("#00F5D4") # Electric Mint Teal
+				bg_color = Color("#091714", 0.92) # Tinted spruce-black
 			"towing":
-				glow_color = Color("#ff9f00") # Safety amber
+				glow_color = Color("#FF9F1C") # Cyber Apricot Orange
+				bg_color = Color("#171209", 0.92) # Tinted bronze-black
 				
 		if is_glitching:
 			_draw_glitch(glow_color)
 		else:
-			_draw_chevron(glow_color, Vector2.ZERO, Color(0.08, 0.09, 0.12, 0.88))
+			_draw_chevron(glow_color, Vector2.ZERO, bg_color)
 
 	func _draw_chevron(glow: Color, offset: Vector2, bg: Color) -> void:
 		var bob_y = 0.0
 		if not is_glitching:
 			bob_y = sin(elapsed_time * 5.0) * 5.0
 			
-		var center = Vector2(50, 50) + offset + Vector2(0.0, bob_y)
+		var center = Vector2(60, 60) + offset + Vector2(0.0, bob_y)
 		
-		# Define chevron corners
-		var p_tl = center + Vector2(-42, -35)
-		var p_tr = center + Vector2(20, -35)
-		var p_rp = center + Vector2(48, 0)
-		var p_br = center + Vector2(20, 35)
-		var p_bl = center + Vector2(-42, 35)
-		var p_li = center + Vector2(-28, 0)
+		# Define chevron corners (scaled for 120x120 control dimensions)
+		var p_tl = center + Vector2(-50, -42)
+		var p_tr = center + Vector2(24, -42)
+		var p_rp = center + Vector2(58, 0)
+		var p_br = center + Vector2(24, 42)
+		var p_bl = center + Vector2(-50, 42)
+		var p_li = center + Vector2(-34, 0)
 		var corners = [p_tl, p_tr, p_rp, p_br, p_bl, p_li]
 		
 		# Generate 36 points for smooth outer perimeter morphing
@@ -1263,7 +1328,7 @@ class HouseNotificationBubble extends Control:
 			for j in range(6):
 				raw_chevron_pts.append(p1.lerp(p2, j / 6.0))
 				
-		var R = 38.0
+		var R = 46.0
 		var pts = PackedVector2Array()
 		for i in range(36):
 			var chev_pt = raw_chevron_pts[i]
@@ -1278,14 +1343,14 @@ class HouseNotificationBubble extends Control:
 		# Draw outer glow border
 		draw_polyline(pts + PackedVector2Array([pts[0]]), pulse_glow, 3.5)
 		
-		# Define inner chevron corners
+		# Define inner chevron corners (scaled)
 		var inner_corners = [
-			center + Vector2(-36, -29),
-			center + Vector2(17, -29),
-			center + Vector2(41, 0),
-			center + Vector2(17, 29),
-			center + Vector2(-36, 29),
-			center + Vector2(-24, 0)
+			center + Vector2(-43, -35),
+			center + Vector2(20, -35),
+			center + Vector2(49, 0),
+			center + Vector2(20, 35),
+			center + Vector2(-43, 35),
+			center + Vector2(-29, 0)
 		]
 		
 		var raw_inner_pts = PackedVector2Array()
@@ -1295,7 +1360,7 @@ class HouseNotificationBubble extends Control:
 			for j in range(6):
 				raw_inner_pts.append(p1.lerp(p2, j / 6.0))
 				
-		var inner_R = R - 8.0
+		var inner_R = R - 9.0
 		var inner_pts = PackedVector2Array()
 		for i in range(36):
 			var chev_inner = raw_inner_pts[i]
@@ -1303,18 +1368,18 @@ class HouseNotificationBubble extends Control:
 			inner_pts.append(chev_inner.lerp(circ_inner, follow_blend))
 		
 		# Draw inner accent border
-		draw_polyline(inner_pts + PackedVector2Array([inner_pts[0]]), Color(glow.r, glow.g, glow.b, 0.4), 1.5)
+		draw_polyline(inner_pts + PackedVector2Array([inner_pts[0]]), Color(glow.r, glow.g, glow.b, 0.35), 1.5)
 		
 		# Smooth pointer rotation and fade out
 		var screen_size = get_viewport_rect().size
-		var dock_x = screen_size.x - 140.0
+		var dock_x = screen_size.x - 160.0
 		var travel_dist = abs(position.x - dock_x)
 		var blend = clamp(travel_dist / 80.0, 0.0, 1.0)
 		var angle = lerp(0.0, PI / 2.0, blend)
 		
-		var local_tip = Vector2(47, 0)
-		var local_c1 = Vector2(35, -12)
-		var local_c2 = Vector2(35, 12)
+		var local_tip = Vector2(57, 0)
+		var local_c1 = Vector2(43, -14)
+		var local_c2 = Vector2(43, 14)
 		
 		var tip_rot = local_tip.rotated(angle)
 		var c1_rot = local_c1.rotated(angle)
@@ -1328,16 +1393,32 @@ class HouseNotificationBubble extends Control:
 		var arrow_alpha = clamp(1.0 - follow_blend, 0.0, 1.0)
 		draw_colored_polygon(arrow_pts, Color(glow.r, glow.g, glow.b, glow.a * arrow_alpha))
 		
-		_draw_symbol(glow, center)
+		if vanish_state == 2:
+			# Draw checkmark (ticking)
+			var tick_color = Color("#00FF66") if int(elapsed_time * 25.0) % 2 == 0 else Color.WHITE
+			var tick_pts = PackedVector2Array([
+				center + Vector2(-16, 2),
+				center + Vector2(-4, 12),
+				center + Vector2(18, -12)
+			])
+			draw_polyline(tick_pts, tick_color, 6.0, true)
+		elif vanish_state == 3:
+			# Draw cross (decline)
+			var cross_color = Color("#FF2A85") if int(elapsed_time * 25.0) % 2 == 0 else Color.WHITE
+			var c_size = 14.0
+			draw_line(center + Vector2(-c_size, -c_size), center + Vector2(c_size, c_size), cross_color, 6.0, true)
+			draw_line(center + Vector2(c_size, -c_size), center + Vector2(-c_size, c_size), cross_color, 6.0, true)
+		else:
+			_draw_symbol(glow, center)
 		
 		# Draw distance label
 		var dist_text = str(int(distance_m)) + "m"
 		var font_to_use = custom_font if custom_font else ThemeDB.fallback_font
 		if font_to_use:
 			var txt_size = font_to_use.get_string_size(dist_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
-			var text_pos = Vector2(center.x - txt_size.x / 2.0, center.y + 55)
+			var text_pos = Vector2(center.x - txt_size.x / 2.0, center.y + 65)
 			
-			var back_rect = Rect2(center.x - txt_size.x / 2.0 - 5, center.y + 42, txt_size.x + 10, 18)
+			var back_rect = Rect2(center.x - txt_size.x / 2.0 - 5, center.y + 52, txt_size.x + 10, 18)
 			draw_rect(back_rect, Color(0, 0, 0, 0.65), true)
 			draw_string(font_to_use, text_pos, dist_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.WHITE)
 
@@ -1348,59 +1429,74 @@ class HouseNotificationBubble extends Control:
 			
 		match house_type:
 			"racing":
-				draw_line(center + Vector2(-12, 12) * pulse_scale, center + Vector2(-12, -16) * pulse_scale, Color.WHITE, 2.5)
-				var flag_rect = Rect2(center.x - 12 * pulse_scale, center.y - 16 * pulse_scale, 24 * pulse_scale, 16 * pulse_scale)
-				draw_rect(flag_rect, Color.WHITE, true)
+				var symbol_color = Color("#FFE3EC") # Lavender blush (matching pink)
+				var text_black = Color("#1A0710")
+				# Flag pole
+				draw_line(center + Vector2(-14, 14) * pulse_scale, center + Vector2(-14, -18) * pulse_scale, symbol_color, 2.5)
+				# Checkered flag pattern
+				var flag_rect = Rect2(center.x - 14 * pulse_scale, center.y - 18 * pulse_scale, 28 * pulse_scale, 18 * pulse_scale)
+				draw_rect(flag_rect, symbol_color, true)
 				
-				var hw = 12 * pulse_scale
-				var hh = 8 * pulse_scale
-				draw_rect(Rect2(center.x - hw, center.y - 2 * hh, hw, hh), Color.BLACK, true)
-				draw_rect(Rect2(center.x, center.y - hh, hw, hh), Color.BLACK, true)
+				var hw = 14 * pulse_scale
+				var hh = 9 * pulse_scale
+				draw_rect(Rect2(center.x - hw, center.y - 2 * hh, hw, hh), text_black, true)
+				draw_rect(Rect2(center.x, center.y - hh, hw, hh), text_black, true)
 				
 				draw_rect(flag_rect, glow, false, 1.5)
 			"delivery":
-				var c1 = Rect2(center.x - 16 * pulse_scale, center.y - 2 * pulse_scale, 14 * pulse_scale, 14 * pulse_scale)
-				draw_rect(c1, Color(0.82, 0.53, 0.28), true)
-				draw_rect(c1, Color.WHITE, false, 1.8)
-				draw_line(c1.position, c1.position + c1.size, Color.WHITE, 1.2)
-				draw_line(c1.position + Vector2(0, c1.size.y), c1.position + Vector2(c1.size.x, 0), Color.WHITE, 1.2)
+				var box_wood_1 = Color("#DDA15E") # Custom Warm Oak
+				var box_wood_2 = Color("#BC6C25") # Custom Deep Cedar
+				var outline_col = Color("#F4F6F6")
 				
-				var c2 = Rect2(center.x + 2 * pulse_scale, center.y - 12 * pulse_scale, 14 * pulse_scale, 14 * pulse_scale)
-				draw_rect(c2, Color(0.72, 0.43, 0.18), true)
-				draw_rect(c2, Color.WHITE, false, 1.8)
-				draw_line(c2.position, c2.position + c2.size, Color.WHITE, 1.2)
-				draw_line(c2.position + Vector2(0, c2.size.y), c2.position + Vector2(c2.size.x, 0), Color.WHITE, 1.2)
+				# Crate 1 (bottom left)
+				var c1 = Rect2(center.x - 18 * pulse_scale, center.y - 2 * pulse_scale, 16 * pulse_scale, 16 * pulse_scale)
+				draw_rect(c1, box_wood_1, true)
+				draw_rect(c1, outline_col, false, 1.8)
+				draw_line(c1.position, c1.position + c1.size, outline_col, 1.2)
+				draw_line(c1.position + Vector2(0, c1.size.y), c1.position + Vector2(c1.size.x, 0), outline_col, 1.2)
+				
+				# Crate 2 (top right)
+				var c2 = Rect2(center.x + 2 * pulse_scale, center.y - 14 * pulse_scale, 16 * pulse_scale, 16 * pulse_scale)
+				draw_rect(c2, box_wood_2, true)
+				draw_rect(c2, outline_col, false, 1.8)
+				draw_line(c2.position, c2.position + c2.size, outline_col, 1.2)
+				draw_line(c2.position + Vector2(0, c2.size.y), c2.position + Vector2(c2.size.x, 0), outline_col, 1.2)
 			"towing":
-				var r = 8.5 * pulse_scale
-				draw_arc(center + Vector2(-6, -2) * pulse_scale, r, 0.0, TAU, 16, Color.WHITE, 2.5)
-				draw_arc(center + Vector2(6, 2) * pulse_scale, r, 0.0, TAU, 16, Color.WHITE, 2.5)
-				draw_arc(center + Vector2(-6, -2) * pulse_scale, r, -PI/4.0, PI*0.75, 16, glow, 1.2)
-				draw_arc(center + Vector2(6, 2) * pulse_scale, r, PI*0.75, PI*1.75, 16, glow, 1.2)
+				var gold_link = Color("#FFE8A3")
+				var silver_link = Color("#E3EAEB")
+				var r = 10.0 * pulse_scale
+				# Interlocking rings
+				draw_arc(center + Vector2(-7, -2) * pulse_scale, r, 0.0, TAU, 16, gold_link, 2.5)
+				draw_arc(center + Vector2(7, 2) * pulse_scale, r, 0.0, TAU, 16, silver_link, 2.5)
+				draw_arc(center + Vector2(-7, -2) * pulse_scale, r, -PI/4.0, PI*0.75, 16, glow, 1.2)
+				draw_arc(center + Vector2(7, 2) * pulse_scale, r, PI*0.75, PI*1.75, 16, glow, 1.2)
 
 	func _draw_glitch(glow: Color) -> void:
-		var t = glitch_timer / 0.3
+		var t = vanish_timer / 0.3
 		var shift_x1 = randf_range(-16.0, 16.0) * t
 		var shift_y1 = randf_range(-6.0, 6.0) * t
 		var shift_x2 = randf_range(-16.0, 16.0) * t
 		var shift_y2 = randf_range(-6.0, 6.0) * t
 		
-		_draw_chevron(Color(0.0, 0.9, 1.0, 0.7), shift_x1 * Vector2.RIGHT + shift_y1 * Vector2.DOWN, Color(0.05, 0.06, 0.08, 0.5))
-		_draw_chevron(Color(1.0, 0.0, 0.8, 0.7), shift_x2 * Vector2.RIGHT + shift_y2 * Vector2.DOWN, Color(0.05, 0.06, 0.08, 0.5))
+		# Custom glitch backdrop color
+		var glitch_bg = Color(0.04, 0.05, 0.07, 0.6)
+		_draw_chevron(Color(0.0, 0.9, 1.0, 0.7), shift_x1 * Vector2.RIGHT + shift_y1 * Vector2.DOWN, glitch_bg)
+		_draw_chevron(Color(1.0, 0.0, 0.8, 0.7), shift_x2 * Vector2.RIGHT + shift_y2 * Vector2.DOWN, glitch_bg)
 		_draw_chevron(glow, shake_offset, Color("#121318"))
 		
 		var slice_count = randi_range(4, 9)
 		for i in range(slice_count):
-			var sy = randf_range(0.0, 100.0)
+			var sy = randf_range(0.0, 120.0)
 			var sh = randf_range(2.0, 10.0)
 			var sx = randf_range(-30.0, 30.0)
-			var sw = randf_range(30.0, 140.0)
+			var sw = randf_range(30.0, 160.0)
 			var col = Color.WHITE
 			var r = randf()
 			if r < 0.33:
-				col = Color("#ff007f")
+				col = Color("#FF2A85")
 			elif r < 0.66:
-				col = Color("#00f0ff")
+				col = Color("#00F5D4")
 			else:
-				col = Color("#ffd200")
+				col = Color("#FF9F1C")
 			
 			draw_rect(Rect2(sx + shake_offset.x, sy + shake_offset.y, sw, sh), col, true)
