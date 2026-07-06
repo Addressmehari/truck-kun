@@ -82,7 +82,8 @@ var is_o_currently_holding: bool = false
 
 # Combat / Convoy Event State
 var is_autopilot := false
-var is_tunnel_autopilot := false
+var is_in_tunnel_transition := false
+var is_exiting_tunnel_transition := false
 var is_debug_display_active := false
 var tunnel_target_x := 0.0
 var has_completed_journey := false
@@ -135,6 +136,20 @@ func _ready() -> void:
 
 	if is_silhouette:
 		set_silhouette_mode(true, silhouette_color)
+
+	# Initialize mock tunnel visibility and exit autopilot on biome transitions
+	var gs = get_node_or_null("/root/GameState")
+	var mock_tunnel = get_parent().get_node_or_null("MockTunnel")
+	if mock_tunnel:
+		if gs and gs.get("is_biome_transition") == true:
+			mock_tunnel.visible = true
+		else:
+			# Hide mock tunnel at start of game
+			mock_tunnel.visible = false
+			
+	if gs and gs.get("is_biome_transition") == true:
+		start_tunnel_exit_transition()
+		gs.set("is_biome_transition", false)
 
 func _apply_exports() -> void:
 	# Push suspension settings to chassis and container so they match the inspector
@@ -232,29 +247,21 @@ func _physics_process(delta: float) -> void:
 	var backward_pressed = false
 	var is_braking = false
 	
-	if is_tunnel_autopilot:
+	if not controls_locked:
+		forward_pressed = Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_RIGHT)
+		backward_pressed = Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT)
+	
+	if is_in_tunnel_transition:
 		var current_px = active_body.global_position.x if is_instance_valid(active_body) else 0.0
-		var dist_to_target = tunnel_target_x - current_px
-		
-		# Slowly drive to the center of the tunnel
-		if abs(dist_to_target) > 30.0:
-			if dist_to_target > 0:
-				forward_pressed = true
-				backward_pressed = false
-				if current_gear != Gear.DRIVE:
-					set_gear(Gear.DRIVE)
-			else:
-				forward_pressed = false
-				backward_pressed = true
-				if current_gear != Gear.REVERSE:
-					set_gear(Gear.REVERSE)
-		else:
-			# Stop at center
+		# Trigger scene transition when player drives past the center of the tunnel
+		if current_px >= tunnel_target_x:
+			is_in_tunnel_transition = false
+			controls_locked = true
 			forward_pressed = false
 			backward_pressed = false
 			is_braking = true
 			
-			# Zero out linear and angular velocities to stop the truck completely, without entering PARK mode
+			# Zero out linear and angular velocities to stop the truck completely
 			if is_instance_valid(chassis):
 				chassis.linear_velocity = Vector2.ZERO
 				chassis.angular_velocity = 0.0
@@ -283,6 +290,7 @@ func _physics_process(delta: float) -> void:
 						gs.carryover_coins = hud_stats.coins
 						gs.carryover_distance_m = hud_stats.get("_distance_m")
 						gs.is_continuing = true
+						gs.is_biome_transition = true
 					
 					# Assign a new random seed for the next scene
 					gs.pending_road_seed = randi()
@@ -296,9 +304,12 @@ func _physics_process(delta: float) -> void:
 					gs.transition_to_scene(target_scene)
 				else:
 					get_tree().change_scene_to_file(target_scene)
-	elif not controls_locked:
-		forward_pressed = Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_RIGHT)
-		backward_pressed = Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_LEFT)
+	elif is_exiting_tunnel_transition:
+		var current_px = active_body.global_position.x if is_instance_valid(active_body) else 0.0
+		# Once the player drives the truck out of the mock tunnel
+		if current_px >= 800.0:
+			is_exiting_tunnel_transition = false
+			stop_tunnel_transition()
 	
 	# Apply dynamic reward velocity boost after convoy event completes
 	if boost_timer > 0.0:
@@ -333,12 +344,7 @@ func _physics_process(delta: float) -> void:
 			
 	var move_input = 0.0
 	
-	if is_tunnel_autopilot:
-		if forward_pressed and not backward_pressed:
-			move_input = 0.25 # Slow crawl forward
-		elif backward_pressed and not forward_pressed:
-			move_input = -0.25 # Slow crawl backward
-	elif controls_locked:
+	if controls_locked:
 		is_braking = true
 	else:
 		if forward_pressed and not backward_pressed:
@@ -438,7 +444,7 @@ func _physics_process(delta: float) -> void:
 			container_body.apply_torque(-tilt_input * air_tilt_power * 1.5)
 
 	# ── Death checks (skip during convoy/autopilot/tunnel events) ─────────────
-	if not is_autopilot and not is_tunnel_autopilot and not is_dead:
+	if not is_autopilot and not is_in_tunnel_transition and not is_exiting_tunnel_transition and not is_dead:
 		_check_death(delta)
 
 	# ── Debug Tunnel Distance Display ─────────────────────────────────────────
@@ -1476,10 +1482,64 @@ func respawn_at_crusher_start() -> void:
 		_dislocation_grace_timer = 0.5
 	)
 
-func start_tunnel_autopilot(target_x: float) -> void:
-	if is_tunnel_autopilot:
+func start_tunnel_exit_transition() -> void:
+	if is_exiting_tunnel_transition:
 		return
-	is_tunnel_autopilot = true
+	is_exiting_tunnel_transition = true
+	has_completed_journey = false
+	
+	# Stop convoy/crusher/active event early if exiting the tunnel
+	if is_autopilot:
+		end_active_event("Convoy")
+	var timer_bar = get_node_or_null("HUD/EventTimerBar")
+	if timer_bar and timer_bar.has_method("end_event"):
+		timer_bar.call("end_event")
+		
+	var road = get_node_or_null("/root/main/Road")
+	if road:
+		if road.get("is_convoy_active") == true:
+			road.call("end_active_event", "Convoy")
+		if road.has_method("end_active_event"):
+			road.call("end_active_event", "Crusher")
+			
+	# Trigger letterbox bars immediately at full size
+	var hud = get_node_or_null("HUD")
+	if hud:
+		var old_top = hud.get_node_or_null("CinematicTopBar")
+		if old_top: old_top.queue_free()
+		var old_bottom = hud.get_node_or_null("CinematicBottomBar")
+		if old_bottom: old_bottom.queue_free()
+		
+		cinematic_top_bar = ColorRect.new()
+		cinematic_top_bar.name = "CinematicTopBar"
+		cinematic_top_bar.color = Color.BLACK
+		cinematic_top_bar.anchor_left = 0.0
+		cinematic_top_bar.anchor_right = 1.0
+		cinematic_top_bar.anchor_top = 0.0
+		cinematic_top_bar.anchor_bottom = 0.0
+		cinematic_top_bar.offset_left = 0
+		cinematic_top_bar.offset_right = 0
+		cinematic_top_bar.offset_top = 0
+		cinematic_top_bar.offset_bottom = 100.0
+		hud.add_child(cinematic_top_bar)
+		
+		cinematic_bottom_bar = ColorRect.new()
+		cinematic_bottom_bar.name = "CinematicBottomBar"
+		cinematic_bottom_bar.color = Color.BLACK
+		cinematic_bottom_bar.anchor_left = 0.0
+		cinematic_bottom_bar.anchor_right = 1.0
+		cinematic_bottom_bar.anchor_top = 1.0
+		cinematic_bottom_bar.anchor_bottom = 1.0
+		cinematic_bottom_bar.offset_left = 0
+		cinematic_bottom_bar.offset_right = 0
+		cinematic_bottom_bar.offset_top = -100.0
+		cinematic_bottom_bar.offset_bottom = 0
+		hud.add_child(cinematic_bottom_bar)
+
+func start_tunnel_transition(target_x: float) -> void:
+	if is_in_tunnel_transition:
+		return
+	is_in_tunnel_transition = true
 	tunnel_target_x = target_x
 	has_completed_journey = false
 	
@@ -1497,10 +1557,6 @@ func start_tunnel_autopilot(target_x: float) -> void:
 		if road.has_method("end_active_event"):
 			road.call("end_active_event", "Crusher")
 			
-	# Set gear to Drive so motor works
-	if current_gear != Gear.DRIVE:
-		set_gear(Gear.DRIVE)
-		
 	# Trigger letterbox bars slide-in
 	var hud = get_node_or_null("HUD")
 	if hud:
@@ -1539,11 +1595,7 @@ func start_tunnel_autopilot(target_x: float) -> void:
 		tween.tween_property(cinematic_top_bar, "offset_bottom", 100.0, 1.5)
 		tween.tween_property(cinematic_bottom_bar, "offset_top", -100.0, 1.5)
 
-func stop_tunnel_autopilot() -> void:
-	if not is_tunnel_autopilot:
-		return
-	is_tunnel_autopilot = false
-	
+func stop_tunnel_transition() -> void:
 	# Retract cinematic bars
 	var hud = get_node_or_null("HUD")
 	if hud:

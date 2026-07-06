@@ -8,6 +8,7 @@ var pending_road_seed: int = 0
 
 # Carryover state for transitioning to Silhouette Mode
 var is_continuing: bool = false
+var is_biome_transition: bool = false
 var carryover_coins: int = 0
 var carryover_distance_m: float = 0.0
 
