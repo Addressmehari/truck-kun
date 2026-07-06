@@ -114,7 +114,7 @@ position = Vector2(2, 0)
 zoom = Vector2(1.75, 1.75)
 script = ExtResource("2_camera_gd")
 vertical_offset = -70.0
-horizontal_offset = 220.0
+horizontal_offset = 300.0
 
 [node name="MockTunnel" parent="." instance=ExtResource("8_mock_tunnel")]
 position = Vector2(-5, 3)

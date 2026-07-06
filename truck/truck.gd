@@ -715,7 +715,7 @@ func end_active_event(event_name: String) -> void:
 		# Restore camera
 		var camera = get_node_or_null("/root/main/Camera2D")
 		if camera:
-			camera.set("target_horizontal_offset", 220.0)
+			camera.set("target_horizontal_offset", 300.0)
 				
 		# Clean up Health Bar
 		if chassis:
@@ -997,7 +997,7 @@ func set_water_mode(enabled: bool) -> void:
 		if enabled:
 			camera.set("target_horizontal_offset", 340.0) # Move boat more to the left side of the screen
 		else:
-			camera.set("target_horizontal_offset", -250.0 if is_autopilot else 220.0)
+			camera.set("target_horizontal_offset", -250.0 if is_autopilot else 300.0)
 		
 	var coin_spawner = get_node_or_null("/root/main/CoinSpawner")
 	if coin_spawner:

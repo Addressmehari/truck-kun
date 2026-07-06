@@ -7,10 +7,10 @@ var target: Node2D
 @export var zoomed_zoom := Vector2(2.6, 2.6)
 @export var tunnel_zoom := Vector2(3.2, 3.2) # Zoomed in closer for the tunnel
 @export var vertical_offset := -50.0 # Vertical offset from target (negative moves camera up)
-@export var horizontal_offset := 260.0 # Horizontal offset from target (positive moves camera right, placing truck on the left)
+@export var horizontal_offset := 300.0 # Horizontal offset from target (positive moves camera right, placing truck on the left)
 
 var inside_tunnel := false
-var target_horizontal_offset := 260.0
+var target_horizontal_offset := 300.0
 
 func _ready():
 	if target_path:
