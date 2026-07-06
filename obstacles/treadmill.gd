@@ -33,12 +33,18 @@ func _physics_process(delta: float) -> void:
 	if not is_instance_valid(_chassis):
 		_chassis = get_node_or_null("/root/main/truck/chassis")
 	if is_instance_valid(_chassis):
-		if global_position.x < _chassis.global_position.x - 1200.0:
+		var dist_x = global_position.x - _chassis.global_position.x
+		if dist_x < -1200.0:
 			queue_free()
 			return
-			
-	time_elapsed += delta
-	queue_redraw()
+		
+		# Optimization: Only update and redraw when near the player (within 1200px)
+		if abs(dist_x) < 1200.0:
+			time_elapsed += delta
+			queue_redraw()
+	else:
+		time_elapsed += delta
+		queue_redraw()
 
 func _draw() -> void:
 	var half_w = width / 2.0

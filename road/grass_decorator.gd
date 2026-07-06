@@ -68,6 +68,7 @@ var density_multiplier := 1.0 :
 var time := 0.0
 var wind_speed := 3.0
 var wind_amplitude := 6.0
+var is_dirty := false
 
 # Foreground overlay node instance
 var foreground: ForegroundNode = null
@@ -100,7 +101,8 @@ func _ready() -> void:
 	foreground.z_index = 5 # Higher than truck (default 0)
 	add_child(foreground)
 	
-	rebuild_grass()
+	if is_dirty:
+		rebuild_grass()
 
 func _process(delta: float) -> void:
 	time += delta
@@ -177,6 +179,11 @@ func get_local_road_height(x: float) -> float:
 
 # Pre-computes all grass blades, flowers, or sprites once when points or road changes
 func rebuild_grass() -> void:
+	if not is_inside_tree():
+		is_dirty = true
+		return
+	is_dirty = false
+	
 	blades.clear()
 	flowers.clear()
 	sprites.clear()
