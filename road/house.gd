@@ -41,8 +41,9 @@ var smoke_particles: CPUParticles2D
 var is_hovered := false
 var hover_progress := 0.0
 var click_timer := 0.0
-var has_crossed := false
+var was_ahead := true
 var cross_shake_timer := 0.0
+var approach_intensity := 0.0
 
 func _ready() -> void:
 	# Load font
@@ -350,7 +351,7 @@ func open_dialogue() -> void:
 	hud.add_child(dialogue_box)
 
 func _process(delta: float) -> void:
-	if is_delivery_target or is_racing_target or is_towing_target or hover_progress > 0.01 or click_timer > 0.0 or cross_shake_timer > 0.0:
+	if is_delivery_target or is_racing_target or is_towing_target or hover_progress > 0.01 or click_timer > 0.0 or cross_shake_timer > 0.0 or approach_intensity > 0.0:
 		queue_redraw()
 
 	if Engine.is_editor_hint():
@@ -360,7 +361,7 @@ func _process(delta: float) -> void:
 	var target_hover = 1.0 if is_hovered else 0.0
 	hover_progress = lerp(hover_progress, target_hover, delta * 15.0)
 	
-	# Apply click squish and wind shake physics
+	# Apply click squish
 	var target_scale = Vector2(1.0, 1.0)
 	if hover_progress > 0.0:
 		target_scale = Vector2(1.0 + hover_progress * 0.05, 1.0 + hover_progress * 0.05)
@@ -370,21 +371,9 @@ func _process(delta: float) -> void:
 		var t = click_timer / 0.25
 		target_scale.y -= sin(t * PI) * 0.12
 		target_scale.x += sin(t * PI) * 0.08
-		
-	if cross_shake_timer > 0.0:
-		cross_shake_timer -= delta
-		var t = 1.0 - cross_shake_timer
-		# Wobble rotation and wind compression
-		rotation = sin(t * PI * 10.0) * 0.06 * exp(-t * 3.5)
-		var scale_wobble = sin(t * PI * 8.0) * 0.08 * exp(-t * 4.0)
-		target_scale.y += scale_wobble
-		target_scale.x -= scale_wobble
-	else:
-		rotation = 0.0
-		
-	scale = lerp(scale, target_scale, delta * 20.0)
 
-	# Handle screen-space notification bubble
+	# Check truck distance for approach rumble and crossing trigger
+	var local_approach_intensity := 0.0
 	var truck = get_node_or_null("/root/main/truck")
 	if is_instance_valid(truck):
 		var active_body = truck.boat if truck.get("is_water_mode_active") else truck.chassis
@@ -392,6 +381,22 @@ func _process(delta: float) -> void:
 			var truck_x = active_body.global_position.x
 			var dist_x = global_position.x - truck_x
 			
+			# Ground rumble shake builds up from 600px (20m) down to 0px
+			if dist_x > 0.0 and dist_x <= 600.0:
+				local_approach_intensity = (600.0 - dist_x) / 600.0 # 0.0 to 1.0
+			
+			# Handle tracking crossing triggers (supporting multi-cross by reversing)
+			if dist_x > 0.0:
+				was_ahead = true
+			elif dist_x <= 0.0 and was_ahead:
+				was_ahead = false
+				cross_shake_timer = 1.0
+				if is_instance_valid(active_bubble):
+					print("[House] Crossed house. Triggering glitch vanish for bubble.")
+					active_bubble.trigger_glitch_vanish()
+					active_bubble = null
+
+			# Handle screen-space notification bubble spawning
 			# 100 meters = 3000 pixels (since 30 pixels = 1 meter)
 			if dist_x > 0.0 and dist_x <= 3000.0:
 				var should_show = false
@@ -412,14 +417,31 @@ func _process(delta: float) -> void:
 			
 			if is_instance_valid(active_bubble):
 				active_bubble.distance_m = dist_x / 30.0
-				
-			if dist_x <= 0.0 and not has_crossed:
-				has_crossed = true
-				cross_shake_timer = 1.0
-				if is_instance_valid(active_bubble):
-					print("[House] Crossed house. Triggering glitch vanish for bubble.")
-					active_bubble.trigger_glitch_vanish()
-					active_bubble = null
+
+	approach_intensity = local_approach_intensity
+
+	# Apply shake/rumble physical offsets
+	if cross_shake_timer > 0.0:
+		cross_shake_timer -= delta
+		var t = 1.0 - cross_shake_timer
+		# Wobble rotation and wind compression (decaying)
+		rotation = sin(t * PI * 10.0) * 0.06 * exp(-t * 3.5)
+		var scale_wobble = sin(t * PI * 8.0) * 0.08 * exp(-t * 4.0)
+		target_scale.y += scale_wobble
+		target_scale.x -= scale_wobble
+	elif approach_intensity > 0.0:
+		# Approach ground rumble: builds up frequency and amplitude as truck approaches
+		var speed_factor = lerp(8.0, 24.0, approach_intensity)
+		var amp_factor = approach_intensity * 0.035
+		rotation = sin(elapsed_time * speed_factor) * amp_factor
+		
+		var scale_amp = approach_intensity * 0.04
+		target_scale.y += sin(elapsed_time * speed_factor * 1.2) * scale_amp
+		target_scale.x -= sin(elapsed_time * speed_factor * 1.2) * scale_amp
+	else:
+		rotation = 0.0
+		
+	scale = lerp(scale, target_scale, delta * 20.0)
 
 func _exit_tree() -> void:
 	if is_instance_valid(active_bubble):
@@ -815,10 +837,18 @@ func show_towing_completion_dialogue(payout: int) -> void:
 	hud.add_child(dialogue_box)
 
 func _draw() -> void:
-	# Strobe flash on crossing
+	# Strobe flash on crossing / approach rumble
 	var flash_boost = 1.0
-	if cross_shake_timer > 0.0 and int(cross_shake_timer * 30.0) % 2 == 0:
-		flash_boost = 1.6
+	if cross_shake_timer > 0.0:
+		if int(cross_shake_timer * 30.0) % 2 == 0:
+			flash_boost = 1.6
+	elif approach_intensity > 0.0:
+		# Dynamic flickering that increases in speed as the truck gets closer
+		var flicker_speed = 0.01 + approach_intensity * 0.03
+		var flicker = sin(Time.get_ticks_msec() * flicker_speed)
+		if flicker > 0.2:
+			# Light up windows slightly on flicker peak
+			flash_boost = lerp(1.0, 1.3, approach_intensity)
 
 	if house_type == "racing":
 		# Design the racing garage house using premium vector graphics
