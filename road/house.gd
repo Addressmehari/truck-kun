@@ -31,6 +31,9 @@ var custom_font: Font
 var opponent_name: String = ""
 
 
+# Notification bubble instance
+var active_bubble: Control = null
+
 # Particles for Chimney smoke
 var smoke_particles: CPUParticles2D
 
@@ -117,6 +120,10 @@ func _input_event(viewport: Viewport, event: InputEvent, shape_idx: int) -> void
 		open_dialogue()
 
 func open_dialogue() -> void:
+	if is_instance_valid(active_bubble):
+		active_bubble.trigger_glitch_vanish()
+		active_bubble = null
+		
 	if has_accepted:
 		return
 		
@@ -313,9 +320,41 @@ func open_dialogue() -> void:
 		
 	hud.add_child(dialogue_box)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if is_delivery_target or is_racing_target or is_towing_target:
 		queue_redraw()
+
+	if Engine.is_editor_hint():
+		return
+
+	# Handle screen-space notification bubble
+	var truck = get_node_or_null("/root/main/truck")
+	if is_instance_valid(truck):
+		var active_body = truck.boat if truck.get("is_water_mode_active") else truck.chassis
+		if is_instance_valid(active_body):
+			var truck_x = active_body.global_position.x
+			var dist_x = global_position.x - truck_x
+			
+			# 100 meters = 3000 pixels (since 30 pixels = 1 meter)
+			if dist_x > 0.0 and dist_x <= 3000.0:
+				if not is_instance_valid(active_bubble) and not has_accepted:
+					var hud = truck.get_node_or_null("HUD")
+					if hud:
+						active_bubble = HouseNotificationBubble.new()
+						active_bubble.house_type = house_type
+						active_bubble.house = self
+						active_bubble.custom_font = custom_font
+						hud.add_child(active_bubble)
+			
+			if is_instance_valid(active_bubble):
+				active_bubble.distance_m = dist_x / 30.0
+				if dist_x <= 0.0:
+					active_bubble.trigger_glitch_vanish()
+					active_bubble = null
+
+func _exit_tree() -> void:
+	if is_instance_valid(active_bubble):
+		active_bubble.queue_free()
 
 func spawn_crates(count: int) -> void:
 	var crate_scene = load("res://obstacles/crate.tscn")
@@ -1064,3 +1103,186 @@ func _draw() -> void:
 			var txt_size = font_to_use.get_string_size(txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
 			draw_rect(Rect2(-txt_size.x / 2.0 - 6, -37, txt_size.x + 12, 18), Color(0, 0, 0, 0.6), true)
 			draw_string(font_to_use, Vector2(-txt_size.x / 2.0, -24), txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, line_color)
+
+
+# ─── Screen Space Notification Bubble Class ──────────────────────────────────
+class HouseNotificationBubble extends Control:
+	var house_type: String = ""
+	var house: Node2D = null
+	var distance_m: float = 0.0
+	var custom_font: Font = null
+	
+	var is_glitching := false
+	var glitch_timer := 0.0
+	
+	var intro_progress := 0.0
+	var elapsed_time := 0.0
+	var shake_offset := Vector2.ZERO
+	
+	func _ready() -> void:
+		# Position the bubble on the right side of the screen
+		anchor_left = 1.0
+		anchor_top = 0.5
+		anchor_right = 1.0
+		anchor_bottom = 0.5
+		
+		# Position relative to right-center, slightly offset left and up
+		custom_minimum_size = Vector2(80, 80)
+		size = Vector2(80, 80)
+		position = Vector2(-120, -100)
+		
+		# Set pivot offset for bounce scale animations
+		pivot_offset = Vector2(40, 40)
+		scale = Vector2.ZERO
+		
+	func trigger_glitch_vanish() -> void:
+		if not is_glitching:
+			is_glitching = true
+			glitch_timer = 0.3
+			
+	func _process(delta: float) -> void:
+		elapsed_time += delta
+		
+		if not is_glitching:
+			if intro_progress < 1.0:
+				intro_progress = min(1.0, intro_progress + delta * 2.5) # Scale up over 0.4s
+				var t = intro_progress
+				var s = 1.0 + 0.35 * sin(t * PI * 2.5) * (1.0 - t)
+				scale = Vector2(s, s)
+			else:
+				scale = Vector2.ONE
+		else:
+			glitch_timer -= delta
+			if glitch_timer <= 0.0:
+				queue_free()
+				return
+			
+			# Heavy shake during glitch
+			shake_offset = Vector2(randf_range(-15.0, 15.0), randf_range(-15.0, 15.0))
+			var gs = glitch_timer / 0.3
+			scale = Vector2(gs, gs)
+			
+		queue_redraw()
+		
+	func _draw() -> void:
+		var glow_color := Color.WHITE
+		match house_type:
+			"racing":
+				glow_color = Color("#ff007f") # Laser pink
+			"delivery":
+				glow_color = Color("#00ff66") # Neon green
+			"towing":
+				glow_color = Color("#ff9f00") # Safety amber
+				
+		if is_glitching:
+			_draw_glitch(glow_color)
+		else:
+			_draw_bubble(glow_color, Vector2.ZERO, Color(0.08, 0.09, 0.12, 0.85))
+
+	func _draw_bubble(glow: Color, offset: Vector2, bg: Color) -> void:
+		var center = Vector2(40, 40) + offset
+		
+		# Draw backing squircle (rounded rectangle)
+		var rect = Rect2(center.x - 36, center.y - 36, 72, 72)
+		var style = StyleBoxFlat.new()
+		style.bg_color = bg
+		style.border_width_left = 3
+		style.border_width_top = 3
+		style.border_width_right = 3
+		style.border_width_bottom = 3
+		style.border_color = glow
+		style.corner_radius_top_left = 18
+		style.corner_radius_top_right = 18
+		style.corner_radius_bottom_left = 18
+		style.corner_radius_bottom_right = 18
+		style.shadow_color = Color(glow.r, glow.g, glow.b, 0.25)
+		style.shadow_size = 8
+		
+		draw_style_box(style, rect)
+		
+		# Draw pointer arrow pointing right
+		var arrow_pts = PackedVector2Array([
+			Vector2(center.x + 35, center.y - 12),
+			Vector2(center.x + 47, center.y),
+			Vector2(center.x + 35, center.y + 12)
+		])
+		draw_colored_polygon(arrow_pts, glow)
+		
+		_draw_symbol(glow, center)
+		
+		# Draw distance label
+		var dist_text = str(int(distance_m)) + "m"
+		var font_to_use = custom_font if custom_font else ThemeDB.fallback_font
+		if font_to_use:
+			var txt_size = font_to_use.get_string_size(dist_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
+			var text_pos = Vector2(center.x - txt_size.x / 2.0, center.y + 58)
+			
+			var back_rect = Rect2(center.x - txt_size.x / 2.0 - 5, center.y + 45, txt_size.x + 10, 18)
+			draw_rect(back_rect, Color(0, 0, 0, 0.6), true)
+			draw_string(font_to_use, text_pos, dist_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.WHITE)
+
+	func _draw_symbol(glow: Color, center: Vector2) -> void:
+		match house_type:
+			"racing":
+				# Flag pole
+				draw_line(center + Vector2(-12, 12), center + Vector2(-12, -16), Color.WHITE, 2.5)
+				# Checkered flag pattern (4 squares grid)
+				var flag_rect = Rect2(center.x - 12, center.y - 16, 24, 16)
+				draw_rect(flag_rect, Color.WHITE, true)
+				draw_rect(Rect2(center.x - 12, center.y - 16, 12, 8), Color.BLACK, true)
+				draw_rect(Rect2(center.x, center.y - 8, 12, 8), Color.BLACK, true)
+				# Glow outline
+				draw_rect(flag_rect, glow, false, 1.5)
+			"delivery":
+				# Crate 1 (bottom left)
+				var c1 = Rect2(center.x - 16, center.y - 3, 14, 14)
+				draw_rect(c1, Color(0.82, 0.53, 0.28), true)
+				draw_rect(c1, Color.WHITE, false, 1.8)
+				draw_line(Vector2(center.x - 16, center.y - 3), Vector2(center.x - 2, center.y + 11), Color.WHITE, 1.2)
+				draw_line(Vector2(center.x - 2, center.y - 3), Vector2(center.x - 16, center.y + 11), Color.WHITE, 1.2)
+				
+				# Crate 2 (top right)
+				var c2 = Rect2(center.x + 2, center.y - 13, 14, 14)
+				draw_rect(c2, Color(0.72, 0.43, 0.18), true)
+				draw_rect(c2, Color.WHITE, false, 1.8)
+				draw_line(Vector2(center.x + 2, center.y - 13), Vector2(center.x + 16, center.y + 1), Color.WHITE, 1.2)
+				draw_line(Vector2(center.x + 16, center.y - 13), Vector2(center.x + 2, center.y + 1), Color.WHITE, 1.2)
+			"towing":
+				# Two interlocking rings (link symbol)
+				draw_arc(center + Vector2(-6, -2), 8.0, 0.0, TAU, 16, Color.WHITE, 2.5)
+				draw_arc(center + Vector2(6, 2), 8.0, 0.0, TAU, 16, Color.WHITE, 2.5)
+				# Glow accent
+				draw_arc(center + Vector2(-6, -2), 8.0, -PI/4.0, PI*0.75, 16, glow, 1.2)
+				draw_arc(center + Vector2(6, 2), 8.0, PI*0.75, PI*1.75, 16, glow, 1.2)
+
+	func _draw_glitch(glow: Color) -> void:
+		var t = glitch_timer / 0.3
+		var shift_x1 = randf_range(-14.0, 14.0) * t
+		var shift_y1 = randf_range(-6.0, 6.0) * t
+		var shift_x2 = randf_range(-14.0, 14.0) * t
+		var shift_y2 = randf_range(-6.0, 6.0) * t
+		
+		# Cyan channel
+		_draw_bubble(Color(0.0, 0.94, 1.0, 0.65), shake_offset + Vector2(shift_x1, shift_y1), Color(0.08, 0.09, 0.12, 0.4))
+		# Magenta channel
+		_draw_bubble(Color(1.0, 0.0, 0.85, 0.65), shake_offset + Vector2(shift_x2, shift_y2), Color(0.08, 0.09, 0.12, 0.4))
+		# Main bubble
+		_draw_bubble(glow, shake_offset, Color(0.08, 0.09, 0.12, 0.85))
+		
+		# Draw random color slice glitch bands
+		var slice_count = randi_range(3, 7)
+		for i in range(slice_count):
+			var sy = randf_range(0.0, 80.0)
+			var sh = randf_range(3.0, 12.0)
+			var sx = randf_range(-25.0, 25.0)
+			var sw = randf_range(40.0, 120.0)
+			var col = Color.WHITE
+			var r = randf()
+			if r < 0.33:
+				col = Color("#ff007f")
+			elif r < 0.66:
+				col = Color("#00f0ff")
+			else:
+				col = Color("#ffd200")
+			
+			draw_rect(Rect2(sx + shake_offset.x, sy + shake_offset.y, sw, sh), col, true)
