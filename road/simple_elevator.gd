@@ -113,6 +113,7 @@ func update_elevator_state() -> void:
 		var has_chassis = false
 		var has_container = false
 		var has_boat = false
+		var has_towed_car = false
 		
 		for b in bodies:
 			if b.name == "boat":
@@ -121,8 +122,18 @@ func update_elevator_state() -> void:
 				has_chassis = true
 			elif b.name == "container_body":
 				has_container = true
+			elif b.name == "TowedCar":
+				has_towed_car = true
 				
-		active = has_boat or (has_chassis and has_container)
+		var road_node = get_node_or_null("/root/main/Road")
+		var is_towing = false
+		if road_node and road_node.get("is_towing_active"):
+			is_towing = true
+			
+		if is_towing:
+			active = has_boat or (has_chassis and has_container and has_towed_car)
+		else:
+			active = has_boat or (has_chassis and has_container)
 	
 	if active:
 		is_waiting_to_fall = false
@@ -148,6 +159,14 @@ func _on_body_exited(body: Node2D) -> void:
 func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
+		
+	# Dynamically check tow mission to scale width and check towed car presence
+	var road_node = get_node_or_null("/root/main/Road")
+	if road_node:
+		var is_towing = road_node.get("is_towing_active")
+		var target_width = 400.0 if is_towing else 200.0
+		if not is_opponent_elevator and width != target_width:
+			width = target_width
 		
 	if is_waiting_to_fall:
 		fall_timer -= delta
