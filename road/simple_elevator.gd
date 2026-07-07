@@ -55,10 +55,15 @@ func _ready() -> void:
 	update_layout()
 
 func update_layout() -> void:
+	# Keep right edge at +100.0 for non-opponent elevator to align with cliff walls
+	var offset_x := 0.0
+	if not is_opponent_elevator:
+		offset_x = 100.0 - width / 2.0
+
 	var cr = get_node_or_null("ColorRect")
 	if cr:
 		cr.size = Vector2(width, height)
-		cr.position = Vector2(-width / 2.0, -height / 2.0)
+		cr.position = Vector2(-width / 2.0 + offset_x, -height / 2.0)
 		if is_opponent_elevator:
 			cr.color = Color(0.8, 0.1, 0.4) # Neon Pink
 		else:
@@ -83,7 +88,7 @@ func update_layout() -> void:
 			rect = RectangleShape2D.new()
 			shape_node.shape = rect
 		rect.size = Vector2(width, height)
-		shape_node.position = Vector2.ZERO
+		shape_node.position = Vector2(offset_x, 0.0)
 		
 	var area_node = get_node_or_null("Area2D")
 	var area_shape = get_node_or_null("Area2D/CollisionShape2D")
@@ -93,7 +98,7 @@ func update_layout() -> void:
 			rect = RectangleShape2D.new()
 			area_shape.shape = rect
 		rect.size = Vector2(width - 20.0, 30.0)
-		area_shape.position = Vector2(0.0, -15.0 - height / 2.0)
+		area_shape.position = Vector2(offset_x, -15.0 - height / 2.0)
 
 func update_elevator_state() -> void:
 	if not area:
