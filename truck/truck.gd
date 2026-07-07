@@ -465,12 +465,27 @@ func _physics_process(delta: float) -> void:
 			tyre_2.angular_velocity = synced
 			tyre_3.angular_velocity = synced
 
-	# Apply air tilting torque (active in mid-air or balance controls)
+	# Apply air tilting (active in mid-air or balance controls)
 	if tilt_input != 0.0 and not is_water_mode_active:
-		if is_instance_valid(chassis):
-			chassis.apply_torque(-tilt_input * air_tilt_power)
-		if is_instance_valid(container_body):
-			container_body.apply_torque(-tilt_input * air_tilt_power * 1.5)
+		var is_in_air = true
+		if is_instance_valid(tyre_1) and tyre_1.get_colliding_bodies().size() > 0:
+			is_in_air = false
+		if is_instance_valid(tyre_2) and tyre_2.get_colliding_bodies().size() > 0:
+			is_in_air = false
+		if is_instance_valid(tyre_3) and tyre_3.get_colliding_bodies().size() > 0:
+			is_in_air = false
+			
+		if is_in_air:
+			# Snappy, reliable air control: directly adjust angular velocity
+			var target_rot_speed = -tilt_input * 3.5 # rad/s
+			if is_instance_valid(chassis):
+				chassis.angular_velocity = lerp(chassis.angular_velocity, target_rot_speed, delta * 8.0)
+			if is_instance_valid(container_body):
+				container_body.angular_velocity = lerp(container_body.angular_velocity, target_rot_speed, delta * 8.0)
+		else:
+			# On the ground, we can still apply a smaller torque to help with weight transfer/wheelies
+			if is_instance_valid(chassis):
+				chassis.apply_torque(-tilt_input * air_tilt_power * 0.5)
 
 	# ── Death checks (skip during convoy/autopilot/tunnel events) ─────────────
 	if not is_autopilot and not is_in_tunnel_transition and not is_exiting_tunnel_transition and not is_dead:
