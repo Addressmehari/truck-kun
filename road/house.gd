@@ -1127,20 +1127,39 @@ func _draw() -> void:
 		var pad_rect = Rect2(-pad_w / 2.0, -pad_h / 2.0, pad_w, pad_h)
 		
 		var pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
-		var glow_color = Color("#00ff66", 0.2 + 0.15 * pulse)
 		var line_color = Color("#00ff66", 0.7 + 0.3 * pulse)
 		
-		# Draw glowing pad
-		draw_rect(pad_rect, glow_color, true)
-		draw_rect(pad_rect, line_color, false, 2.0)
+		# Draw solid black shadow pad on ground
+		var shadow_rect = Rect2(pad_rect.position + Vector2(3, 3), pad_rect.size)
+		draw_rect(shadow_rect, Color.BLACK, true)
+		
+		# Draw solid delivery landing zone pad
+		draw_rect(pad_rect, Color("#00ff66"), true)
+		draw_rect(pad_rect, Color.BLACK, false, 3.0)
 		
 		# Draw target details
 		var font_to_use = custom_font if custom_font else ThemeDB.fallback_font
 		if font_to_use:
 			var txt = "DELIVER HERE (%d/%d)" % [crates_delivered, crates_needed]
 			var txt_size = font_to_use.get_string_size(txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
-			# Draw background label backing for readability
-			draw_rect(Rect2(-txt_size.x / 2.0 - 6, -37, txt_size.x + 12, 18), Color(0, 0, 0, 0.6), true)
+			var back_rect = Rect2(-txt_size.x / 2.0 - 6, -37, txt_size.x + 12, 18)
+			
+			# Draw background label shadow
+			var shadow_sb = StyleBoxFlat.new()
+			shadow_sb.bg_color = Color.BLACK
+			shadow_sb.set_corner_radius_all(6)
+			draw_style_box(shadow_sb, Rect2(back_rect.position + Vector2(2, 2), back_rect.size))
+			
+			# Draw solid comic backing box
+			var sb = StyleBoxFlat.new()
+			sb.bg_color = Color("#1e1e24")
+			sb.border_color = Color.BLACK
+			sb.set_border_width_all(1.5)
+			sb.set_corner_radius_all(6)
+			draw_style_box(sb, back_rect)
+			
+			# Draw text with shadow offset
+			draw_string(font_to_use, Vector2(-txt_size.x / 2.0, -24) + Vector2(1, 1), txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.BLACK)
 			draw_string(font_to_use, Vector2(-txt_size.x / 2.0, -24), txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, line_color)
 
 	# 9. Racing Finish Zone Overlay
@@ -1151,12 +1170,11 @@ func _draw() -> void:
 		var pad_rect = Rect2(-pad_w / 2.0, -pad_h / 2.0, pad_w, pad_h)
 		
 		var pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
-		var glow_color = Color("#ff007f", 0.2 + 0.15 * pulse)
 		var line_color = Color("#ff007f", 0.7 + 0.3 * pulse)
 		
-		# Draw glowing pad
-		draw_rect(pad_rect, glow_color, true)
-		draw_rect(pad_rect, line_color, false, 2.0)
+		# Draw solid black shadow pad on ground
+		var shadow_rect = Rect2(pad_rect.position + Vector2(3, 3), pad_rect.size)
+		draw_rect(shadow_rect, Color.BLACK, true)
 		
 		# Draw checkered patterns inside the finish line pad
 		var check_w = 10.0
@@ -1169,13 +1187,32 @@ func _draw() -> void:
 			else:
 				draw_rect(Rect2(x_offset, checkers_y + pad_h / 2.0, check_w, pad_h / 2.0), Color.BLACK, true)
 				
+		# Draw thick black border
+		draw_rect(pad_rect, Color.BLACK, false, 3.0)
+				
 		# Draw target details
 		var font_to_use = custom_font if custom_font else ThemeDB.fallback_font
 		if font_to_use:
 			var txt = "FINISH LINE"
 			var txt_size = font_to_use.get_string_size(txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
-			# Draw background label backing for readability
-			draw_rect(Rect2(-txt_size.x / 2.0 - 6, -37, txt_size.x + 12, 18), Color(0, 0, 0, 0.6), true)
+			var back_rect = Rect2(-txt_size.x / 2.0 - 6, -37, txt_size.x + 12, 18)
+			
+			# Draw background label shadow
+			var shadow_sb = StyleBoxFlat.new()
+			shadow_sb.bg_color = Color.BLACK
+			shadow_sb.set_corner_radius_all(6)
+			draw_style_box(shadow_sb, Rect2(back_rect.position + Vector2(2, 2), back_rect.size))
+			
+			# Draw solid comic backing box
+			var sb = StyleBoxFlat.new()
+			sb.bg_color = Color("#1e1e24")
+			sb.border_color = Color.BLACK
+			sb.set_border_width_all(1.5)
+			sb.set_corner_radius_all(6)
+			draw_style_box(sb, back_rect)
+			
+			# Draw text with shadow offset
+			draw_string(font_to_use, Vector2(-txt_size.x / 2.0, -24) + Vector2(1, 1), txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.BLACK)
 			draw_string(font_to_use, Vector2(-txt_size.x / 2.0, -24), txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, line_color)
 
 	# 10. Towing Target Zone Overlay
@@ -1185,14 +1222,16 @@ func _draw() -> void:
 		var pad_rect = Rect2(-pad_w / 2.0, -pad_h / 2.0, pad_w, pad_h)
 		
 		var pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
-		var glow_color = Color("#ff9f00", 0.2 + 0.15 * pulse) # Amber glow
 		var line_color = Color("#ff9f00", 0.7 + 0.3 * pulse)
 		
-		# Draw glowing pad
-		draw_rect(pad_rect, glow_color, true)
-		draw_rect(pad_rect, line_color, false, 2.0)
+		# Draw solid black shadow pad on ground
+		var shadow_rect = Rect2(pad_rect.position + Vector2(3, 3), pad_rect.size)
+		draw_rect(shadow_rect, Color.BLACK, true)
 		
-		# Draw tow warning stripes inside the pad
+		# Draw solid amber towing zone pad
+		draw_rect(pad_rect, Color("#ff9f00"), true)
+		
+		# Draw tow warning stripes inside the pad (solid black comic style)
 		var stripe_step = 16.0
 		for x_offset in range(-pad_w / 2.0, pad_w / 2.0, stripe_step):
 			var pts = PackedVector2Array([
@@ -1205,14 +1244,34 @@ func _draw() -> void:
 			var clipped_pts = PackedVector2Array()
 			for pt in pts:
 				clipped_pts.append(Vector2(clamp(pt.x, -pad_w / 2.0, pad_w / 2.0), pt.y))
-			draw_polygon(clipped_pts, PackedColorArray([Color("#15161a", 0.45)]))
+			draw_polygon(clipped_pts, PackedColorArray([Color.BLACK]))
+			
+		# Draw thick black border
+		draw_rect(pad_rect, Color.BLACK, false, 3.0)
 			
 		# Draw target details label
 		var font_to_use = custom_font if custom_font else ThemeDB.fallback_font
 		if font_to_use:
 			var txt = "TOW ZONE"
 			var txt_size = font_to_use.get_string_size(txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
-			draw_rect(Rect2(-txt_size.x / 2.0 - 6, -37, txt_size.x + 12, 18), Color(0, 0, 0, 0.6), true)
+			var back_rect = Rect2(-txt_size.x / 2.0 - 6, -37, txt_size.x + 12, 18)
+			
+			# Draw background label shadow
+			var shadow_sb = StyleBoxFlat.new()
+			shadow_sb.bg_color = Color.BLACK
+			shadow_sb.set_corner_radius_all(6)
+			draw_style_box(shadow_sb, Rect2(back_rect.position + Vector2(2, 2), back_rect.size))
+			
+			# Draw solid comic backing box
+			var sb = StyleBoxFlat.new()
+			sb.bg_color = Color("#1e1e24")
+			sb.border_color = Color.BLACK
+			sb.set_border_width_all(1.5)
+			sb.set_corner_radius_all(6)
+			draw_style_box(sb, back_rect)
+			
+			# Draw text with shadow offset
+			draw_string(font_to_use, Vector2(-txt_size.x / 2.0, -24) + Vector2(1, 1), txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.BLACK)
 			draw_string(font_to_use, Vector2(-txt_size.x / 2.0, -24), txt, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, line_color)
 
 
@@ -1373,17 +1432,14 @@ class HouseNotificationBubble extends Control:
 		
 	func _draw() -> void:
 		var glow_color := Color.WHITE
-		var bg_color := Color(0.08, 0.09, 0.12, 0.9)
+		var bg_color := Color("#1e1e24") # Solid comic dark slate
 		match house_type:
 			"racing":
 				glow_color = Color("#FF2A85") # Hot Sunset Pink/Crimson
-				bg_color = Color("#170912", 0.92) # Tinted plum-black
 			"delivery":
 				glow_color = Color("#00F5D4") # Electric Mint Teal
-				bg_color = Color("#091714", 0.92) # Tinted spruce-black
 			"towing":
 				glow_color = Color("#FF9F1C") # Cyber Apricot Orange
-				bg_color = Color("#171209", 0.92) # Tinted bronze-black
 				
 		if is_glitching:
 			_draw_glitch(glow_color)
@@ -1424,10 +1480,8 @@ class HouseNotificationBubble extends Control:
 		# Draw solid body
 		draw_colored_polygon(pts, bg)
 		
-		# Pulse border glow alpha
-		var pulse_glow = Color(glow.r, glow.g, glow.b, 0.8 + 0.2 * sin(elapsed_time * 7.0))
-		# Draw outer glow border
-		draw_polyline(pts + PackedVector2Array([pts[0]]), pulse_glow, 3.5)
+		# Draw thick black outer border (comic style)
+		draw_polyline(pts + PackedVector2Array([pts[0]]), Color.BLACK, 4.0)
 		
 		# Define inner chevron corners (scaled)
 		var inner_corners = [
@@ -1453,8 +1507,8 @@ class HouseNotificationBubble extends Control:
 			var circ_inner = center + (chev_inner - center).normalized() * inner_R
 			inner_pts.append(chev_inner.lerp(circ_inner, follow_blend))
 		
-		# Draw inner accent border
-		draw_polyline(inner_pts + PackedVector2Array([inner_pts[0]]), Color(glow.r, glow.g, glow.b, 0.35), 1.5)
+		# Draw solid inner accent border
+		draw_polyline(inner_pts + PackedVector2Array([inner_pts[0]]), Color(glow.r, glow.g, glow.b, 1.0), 2.2)
 		
 		# Smooth pointer rotation and fade out
 		var screen_size = get_viewport_rect().size
@@ -1477,7 +1531,9 @@ class HouseNotificationBubble extends Control:
 			center + c2_rot
 		])
 		var arrow_alpha = clamp(1.0 - follow_blend, 0.0, 1.0)
-		draw_colored_polygon(arrow_pts, Color(glow.r, glow.g, glow.b, glow.a * arrow_alpha))
+		if arrow_alpha > 0.01:
+			draw_colored_polygon(arrow_pts, Color(glow.r, glow.g, glow.b, glow.a * arrow_alpha))
+			draw_polyline(arrow_pts + PackedVector2Array([arrow_pts[0]]), Color(0, 0, 0, arrow_alpha), 2.5)
 		
 		if vanish_state == 2:
 			# Draw checkmark (ticking)
@@ -1497,15 +1553,28 @@ class HouseNotificationBubble extends Control:
 		else:
 			_draw_symbol(glow, center)
 		
-		# Draw distance label
+		# Draw distance label (comic styled bubble tag)
 		var dist_text = str(int(distance_m)) + "m"
 		var font_to_use = custom_font if custom_font else ThemeDB.fallback_font
 		if font_to_use:
 			var txt_size = font_to_use.get_string_size(dist_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14)
 			var text_pos = Vector2(center.x - txt_size.x / 2.0, center.y + 65)
 			
-			var back_rect = Rect2(center.x - txt_size.x / 2.0 - 5, center.y + 52, txt_size.x + 10, 18)
-			draw_rect(back_rect, Color(0, 0, 0, 0.65), true)
+			var back_rect = Rect2(center.x - txt_size.x / 2.0 - 6, center.y + 52, txt_size.x + 12, 18)
+			
+			var lbl_shadow = StyleBoxFlat.new()
+			lbl_shadow.bg_color = Color.BLACK
+			lbl_shadow.set_corner_radius_all(6)
+			draw_style_box(lbl_shadow, Rect2(back_rect.position + Vector2(2, 2), back_rect.size))
+			
+			var lbl_sb = StyleBoxFlat.new()
+			lbl_sb.bg_color = Color("#1e1e24")
+			lbl_sb.border_color = Color.BLACK
+			lbl_sb.set_border_width_all(1.5)
+			lbl_sb.set_corner_radius_all(6)
+			draw_style_box(lbl_sb, back_rect)
+			
+			draw_string(font_to_use, text_pos + Vector2(1, 1), dist_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.BLACK)
 			draw_string(font_to_use, text_pos, dist_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.WHITE)
 
 	func _draw_symbol(glow: Color, center: Vector2) -> void:

@@ -200,9 +200,18 @@ func _draw() -> void:
 	var av_rect = Rect2(0, 68, 58, 58)
 	var av_pos = av_rect.position
 	
-	# Draw background box outline (blue/cyan tint)
-	draw_rect(av_rect, Color("#00f0ff", 0.45), false, 2.4)
-	draw_rect(av_rect.grow(-3.6), Color("#00f0ff", 0.08), true)
+	# Draw background box outline with bold comic style (black borders + offset black shadow)
+	var av_shadow = StyleBoxFlat.new()
+	av_shadow.bg_color = Color.BLACK
+	av_shadow.set_corner_radius_all(10)
+	draw_style_box(av_shadow, Rect2(av_rect.position + Vector2(4, 4), av_rect.size))
+	
+	var av_sb = StyleBoxFlat.new()
+	av_sb.bg_color = Color("#1e1e24")
+	av_sb.border_color = Color.BLACK
+	av_sb.set_border_width_all(3)
+	av_sb.set_corner_radius_all(10)
+	draw_style_box(av_sb, av_rect)
 
 	# Low fuel alarm calculation
 	var ratio: float = clamp(petrol / petrol_max, 0.0, 1.0)
@@ -279,7 +288,7 @@ func _draw() -> void:
 				var indicator_w = 220.0
 				var opponent = road.get("active_opponent")
 				var has_opponent = is_instance_valid(opponent)
-				var indicator_h = 125.0 if has_opponent else 100.0
+				var indicator_h = 135.0 if has_opponent else 105.0
 				var right_margin = 38.0
 				
 				var ibox_x = screen_w - global_position.x - indicator_w - right_margin
@@ -291,29 +300,48 @@ func _draw() -> void:
 				var green_glow = Color("#00ff66", 0.12 + 0.08 * pulse)
 				var green_line = Color("#00ff66", 0.8 + 0.2 * pulse)
 				
-				# Draw background container
-				draw_rect(ibox, Color(0.08, 0.08, 0.12, 0.85), true)
-				draw_rect(ibox, green_line, false, 2.0)
-				draw_rect(ibox.grow(-3), green_glow, true)
+				# 1. Hard Offset Comic Shadow Box
+				var shadow_sb = StyleBoxFlat.new()
+				shadow_sb.bg_color = Color.BLACK
+				shadow_sb.set_corner_radius_all(12)
+				draw_style_box(shadow_sb, Rect2(ibox.position + Vector2(6, 6), ibox.size))
+				
+				# 2. Foreground Comic Panel (Solid dark slate background + thick black borders)
+				var sb = StyleBoxFlat.new()
+				sb.bg_color = Color("#1e1e24")
+				sb.border_color = Color.BLACK
+				sb.set_border_width_all(3)
+				sb.set_corner_radius_all(12)
+				draw_style_box(sb, ibox)
+				
+				# 3. Solid Header Accent Strip (Solid Green `#00ff66` with thick black bottom border)
+				var header_rect = Rect2(ibox.position.x + 3, ibox.position.y + 3, ibox.size.x - 6, 28)
+				var header_sb = StyleBoxFlat.new()
+				header_sb.bg_color = Color("#00ff66")
+				header_sb.border_color = Color.BLACK
+				header_sb.border_width_bottom = 3
+				header_sb.corner_radius_top_left = 9
+				header_sb.corner_radius_top_right = 9
+				draw_style_box(header_sb, header_rect)
 				
 				var lbl_font_size = 14
 				var val_font_size = 18
 				
 				if has_opponent:
-					# Line 1: Title
+					# Line 1: Title (drawn in solid black inside the green header)
 					var title_str = "DELIVERY TARGET"
-					_draw_clean_text_center(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 22.0), lbl_font_size, Color("#00ff66"))
+					_draw_comic_header_text(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 14.0), lbl_font_size)
 					
 					# Line 2: Crates Count
 					var progress_str = "CRATES: %d/%d" % [crates_delivered, crates_needed]
-					_draw_clean_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 46.0), val_font_size, Color("#ffffff"))
+					_draw_comic_body_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 54.0), val_font_size, Color("#ffffff"))
 					
 					# Line 3: Position
 					var pos_str = "POSITION: 1st"
 					if is_instance_valid(chassis) and is_instance_valid(opponent):
 						if chassis.global_position.x < opponent.global_position.x:
 							pos_str = "POSITION: 2nd"
-					_draw_clean_text_center(font, pos_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 70.0), val_font_size, Color("#ffea79"))
+					_draw_comic_body_text_center(font, pos_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 80.0), val_font_size, Color("#ffea79"))
 					
 					# Line 4: Distance remaining & flash arrow
 					var dist_str = "%d M" % int(max(0.0, dist_rem))
@@ -325,15 +353,19 @@ func _draw() -> void:
 						arrow_char = "◀"
 						
 					var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
-					_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 100.0), val_font_size, green_line)
+					
+					# Breathing pulse that speeds up as you approach target
+					var pulse_speed = 14.0 if dist_rem < 150.0 else 6.0
+					var dist_color = Color("#00ff66").lerp(Color(1.0, 1.0, 1.0, 0.9), 0.35 + 0.35 * sin(_elapsed * pulse_speed))
+					_draw_comic_body_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 112.0), val_font_size, dist_color)
 				else:
 					# Line 1: Title
 					var title_str = "DELIVERY TARGET"
-					_draw_clean_text_center(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 24.0), lbl_font_size, Color("#00ff66"))
+					_draw_comic_header_text(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 14.0), lbl_font_size)
 					
 					# Line 2: Crates Count
 					var progress_str = "CRATES: %d/%d" % [crates_delivered, crates_needed]
-					_draw_clean_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 52.0), val_font_size, Color("#ffffff"))
+					_draw_comic_body_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 56.0), val_font_size, Color("#ffffff"))
 					
 					# Line 3: Distance remaining & flash arrow
 					var dist_str = "%d M" % int(max(0.0, dist_rem))
@@ -345,7 +377,10 @@ func _draw() -> void:
 						arrow_char = "◀"
 						
 					var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
-					_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 82.0), val_font_size, green_line)
+					
+					var pulse_speed = 14.0 if dist_rem < 150.0 else 6.0
+					var dist_color = Color("#00ff66").lerp(Color(1.0, 1.0, 1.0, 0.9), 0.35 + 0.35 * sin(_elapsed * pulse_speed))
+					_draw_comic_body_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 88.0), val_font_size, dist_color)
 		
 		elif road.get("racing_target_chunk") != -1:
 			var target_chunk = road.get("racing_target_chunk")
@@ -364,7 +399,7 @@ func _draw() -> void:
 				var indicator_w = 220.0
 				var opponent = road.get("active_opponent")
 				var has_opponent = is_instance_valid(opponent)
-				var indicator_h = 125.0 if has_opponent else 100.0
+				var indicator_h = 135.0 if has_opponent else 105.0
 				var right_margin = 38.0
 				
 				var ibox_x = screen_w - global_position.x - indicator_w - right_margin
@@ -376,10 +411,29 @@ func _draw() -> void:
 				var pink_glow = Color("#ff007f", 0.12 + 0.08 * pulse)
 				var pink_line = Color("#ff007f", 0.8 + 0.2 * pulse)
 				
-				# Draw background container
-				draw_rect(ibox, Color(0.08, 0.08, 0.12, 0.85), true)
-				draw_rect(ibox, pink_line, false, 2.0)
-				draw_rect(ibox.grow(-3), pink_glow, true)
+				# 1. Hard Offset Comic Shadow Box
+				var shadow_sb = StyleBoxFlat.new()
+				shadow_sb.bg_color = Color.BLACK
+				shadow_sb.set_corner_radius_all(12)
+				draw_style_box(shadow_sb, Rect2(ibox.position + Vector2(6, 6), ibox.size))
+				
+				# 2. Foreground Comic Panel (Solid dark slate background + thick black borders)
+				var sb = StyleBoxFlat.new()
+				sb.bg_color = Color("#1e1e24")
+				sb.border_color = Color.BLACK
+				sb.set_border_width_all(3)
+				sb.set_corner_radius_all(12)
+				draw_style_box(sb, ibox)
+				
+				# 3. Solid Header Accent Strip (Solid Pink `#ff007f` with thick black bottom border)
+				var header_rect = Rect2(ibox.position.x + 3, ibox.position.y + 3, ibox.size.x - 6, 28)
+				var header_sb = StyleBoxFlat.new()
+				header_sb.bg_color = Color("#ff007f")
+				header_sb.border_color = Color.BLACK
+				header_sb.border_width_bottom = 3
+				header_sb.corner_radius_top_left = 9
+				header_sb.corner_radius_top_right = 9
+				draw_style_box(header_sb, header_rect)
 				
 				var lbl_font_size = 14
 				var val_font_size = 18
@@ -387,18 +441,18 @@ func _draw() -> void:
 				if has_opponent:
 					# Line 1: Title
 					var title_str = "RACING TARGET"
-					_draw_clean_text_center(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 22.0), lbl_font_size, Color("#ff007f"))
+					_draw_comic_header_text(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 14.0), lbl_font_size)
 					
 					# Line 2: Race details
 					var progress_str = "FINISH LINE"
-					_draw_clean_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 46.0), val_font_size, Color("#ffffff"))
+					_draw_comic_body_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 54.0), val_font_size, Color("#ffffff"))
 					
 					# Line 3: Position
 					var pos_str = "POSITION: 1st"
 					if is_instance_valid(chassis) and is_instance_valid(opponent):
 						if chassis.global_position.x < opponent.global_position.x:
 							pos_str = "POSITION: 2nd"
-					_draw_clean_text_center(font, pos_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 70.0), val_font_size, Color("#ffea79"))
+					_draw_comic_body_text_center(font, pos_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 80.0), val_font_size, Color("#ffea79"))
 					
 					# Line 4: Distance remaining & flash arrow
 					var dist_str = "%d M" % int(max(0.0, dist_rem))
@@ -410,15 +464,18 @@ func _draw() -> void:
 						arrow_char = "◀"
 						
 					var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
-					_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 100.0), val_font_size, pink_line)
+					
+					var pulse_speed = 14.0 if dist_rem < 150.0 else 6.0
+					var dist_color = Color("#ff007f").lerp(Color(1.0, 1.0, 1.0, 0.9), 0.35 + 0.35 * sin(_elapsed * pulse_speed))
+					_draw_comic_body_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 112.0), val_font_size, dist_color)
 				else:
 					# Line 1: Title
 					var title_str = "RACING TARGET"
-					_draw_clean_text_center(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 24.0), lbl_font_size, Color("#ff007f"))
+					_draw_comic_header_text(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 14.0), lbl_font_size)
 					
 					# Line 2: Race details
 					var progress_str = "FINISH LINE"
-					_draw_clean_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 52.0), val_font_size, Color("#ffffff"))
+					_draw_comic_body_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 56.0), val_font_size, Color("#ffffff"))
 					
 					# Line 3: Distance remaining & flash arrow
 					var dist_str = "%d M" % int(max(0.0, dist_rem))
@@ -430,7 +487,10 @@ func _draw() -> void:
 						arrow_char = "◀"
 						
 					var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
-					_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 82.0), val_font_size, pink_line)
+					
+					var pulse_speed = 14.0 if dist_rem < 150.0 else 6.0
+					var dist_color = Color("#ff007f").lerp(Color(1.0, 1.0, 1.0, 0.9), 0.35 + 0.35 * sin(_elapsed * pulse_speed))
+					_draw_comic_body_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 88.0), val_font_size, dist_color)
 		
 		elif road.get("towing_target_chunk") != -1:
 			var target_chunk = road.get("towing_target_chunk")
@@ -447,7 +507,7 @@ func _draw() -> void:
 			if dist_rem > -50.0:
 				var screen_w = get_viewport_rect().size.x
 				var indicator_w = 220.0
-				var indicator_h = 100.0
+				var indicator_h = 105.0
 				var right_margin = 38.0
 				
 				var ibox_x = screen_w - global_position.x - indicator_w - right_margin
@@ -459,21 +519,40 @@ func _draw() -> void:
 				var amber_glow = Color("#ff9f00", 0.12 + 0.08 * pulse)
 				var amber_line = Color("#ff9f00", 0.8 + 0.2 * pulse)
 				
-				# Draw background container
-				draw_rect(ibox, Color(0.08, 0.08, 0.12, 0.85), true)
-				draw_rect(ibox, amber_line, false, 2.0)
-				draw_rect(ibox.grow(-3), amber_glow, true)
+				# 1. Hard Offset Comic Shadow Box
+				var shadow_sb = StyleBoxFlat.new()
+				shadow_sb.bg_color = Color.BLACK
+				shadow_sb.set_corner_radius_all(12)
+				draw_style_box(shadow_sb, Rect2(ibox.position + Vector2(6, 6), ibox.size))
+				
+				# 2. Foreground Comic Panel (Solid dark slate background + thick black borders)
+				var sb = StyleBoxFlat.new()
+				sb.bg_color = Color("#1e1e24")
+				sb.border_color = Color.BLACK
+				sb.set_border_width_all(3)
+				sb.set_corner_radius_all(12)
+				draw_style_box(sb, ibox)
+				
+				# 3. Solid Header Accent Strip (Solid Amber `#ff9f00` with thick black bottom border)
+				var header_rect = Rect2(ibox.position.x + 3, ibox.position.y + 3, ibox.size.x - 6, 28)
+				var header_sb = StyleBoxFlat.new()
+				header_sb.bg_color = Color("#ff9f00")
+				header_sb.border_color = Color.BLACK
+				header_sb.border_width_bottom = 3
+				header_sb.corner_radius_top_left = 9
+				header_sb.corner_radius_top_right = 9
+				draw_style_box(header_sb, header_rect)
 				
 				var lbl_font_size = 14
 				var val_font_size = 18
 				
 				# Line 1: Title
 				var title_str = "TOWING TARGET"
-				_draw_clean_text_center(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 24.0), lbl_font_size, Color("#ff9f00"))
+				_draw_comic_header_text(font, title_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 14.0), lbl_font_size)
 				
 				# Line 2: Tow details
 				var progress_str = "TOW VEHICLE"
-				_draw_clean_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 52.0), val_font_size, Color("#ffffff"))
+				_draw_comic_body_text_center(font, progress_str, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 54.0), val_font_size, Color("#ffffff"))
 				
 				# Line 3: Distance remaining & flash arrow
 				var dist_str = "%d M" % int(max(0.0, dist_rem))
@@ -485,7 +564,10 @@ func _draw() -> void:
 					arrow_char = "◀"
 					
 				var dist_text = "%s  %s  %s" % [arrow_char, dist_str, arrow_char]
-				_draw_clean_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 82.0), val_font_size, amber_line)
+				
+				var pulse_speed = 14.0 if dist_rem < 150.0 else 6.0
+				var dist_color = Color("#ff9f00").lerp(Color(1.0, 1.0, 1.0, 0.9), 0.35 + 0.35 * sin(_elapsed * pulse_speed))
+				_draw_comic_body_text_center(font, dist_text, Vector2(ibox_x + indicator_w / 2.0, ibox_y + 86.0), val_font_size, dist_color)
 
 # ── Drawing Engines ──────────────────────────────────────────────────────
 
@@ -611,5 +693,21 @@ func _draw_clean_text_center(font: Font, text: String, center_pos: Vector2, font
 		neon_glow = Color(1.0, 0.85, 0.0, 0.3) # Gold glow
 	draw_string(font, pos + Vector2(-1.0, -1.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, neon_glow)
 	
+	# Foreground text
+	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+
+func _draw_comic_header_text(font: Font, text: String, center_pos: Vector2, font_size: int) -> void:
+	var text_size = font.get_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+	var pos = center_pos - Vector2(text_size.x / 2.0, -font_size / 2.0)
+	# Solid black bold text, offset by 1.5px shadow
+	draw_string(font, pos + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0, 0, 0, 0.35))
+	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.BLACK)
+
+func _draw_comic_body_text_center(font: Font, text: String, center_pos: Vector2, font_size: int, color: Color) -> void:
+	var text_size = font.get_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+	var pos = center_pos - Vector2(text_size.x / 2.0, -font_size / 2.0)
+	# Solid thick black outline shadow (offset 2px in 4 directions)
+	for offset in [Vector2(2, 2), Vector2(-1.5, 1.5), Vector2(1.5, -1.5), Vector2(-1.5, -1.5)]:
+		draw_string(font, pos + offset, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.BLACK)
 	# Foreground text
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)

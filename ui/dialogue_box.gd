@@ -713,12 +713,23 @@ func _draw() -> void:
 		
 	var box_rect = Rect2(Vector2.ZERO, box_size)
 	
-	# Draw shadow
-	draw_rect(box_rect.grow(4), Color(0, 0, 0, 0.35), false, 4.0)
+	# Draw solid, comic-style dialogue frame with thick black borders, dual-inset highlight, and hard shadow
+	var shadow_sb = StyleBoxFlat.new()
+	shadow_sb.bg_color = Color.BLACK
+	shadow_sb.set_corner_radius_all(16)
+	draw_style_box(shadow_sb, Rect2(box_rect.position + Vector2(8, 8), box_rect.size))
 	
-	# Draw background
-	draw_rect(box_rect, bg_color, true)
+	var sb = StyleBoxFlat.new()
+	sb.bg_color = Color("#1e1e24") # Solid comic dark slate
+	sb.border_color = Color.BLACK
+	sb.set_border_width_all(4)
+	sb.set_corner_radius_all(16)
+	draw_style_box(sb, box_rect)
 	
-	# Draw double glowing borders
-	draw_rect(box_rect, glow_color, false, 3.0)
-	draw_rect(box_rect.grow(-3.0), inner_glow, false, 1.5)
+	# Solid inner highlight border of the contract theme color
+	var sb_inner = StyleBoxFlat.new()
+	sb_inner.bg_color = Color.TRANSPARENT
+	sb_inner.border_color = glow_color
+	sb_inner.set_border_width_all(3)
+	sb_inner.set_corner_radius_all(12)
+	draw_style_box(sb_inner, box_rect.grow(-4.0))
