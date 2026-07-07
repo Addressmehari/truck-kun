@@ -52,6 +52,20 @@ func _ready() -> void:
 		if area:
 			area.body_entered.connect(_on_body_entered)
 			area.body_exited.connect(_on_body_exited)
+			
+		# Initial visibility/collision check for opponent elevator
+		if is_opponent_elevator:
+			var road_node = get_node_or_null("/root/main/Road")
+			var is_race_active = false
+			if road_node and road_node.get("is_racing_active"):
+				is_race_active = true
+			visible = is_race_active
+			var shape_node = get_node_or_null("CollisionShape2D")
+			if is_instance_valid(shape_node):
+				shape_node.disabled = not is_race_active
+			if is_instance_valid(area):
+				area.monitoring = is_race_active
+				area.monitorable = is_race_active
 	update_layout()
 
 func update_layout() -> void:
@@ -172,6 +186,18 @@ func _physics_process(delta: float) -> void:
 		var target_width = 400.0 if is_towing else 200.0
 		if not is_opponent_elevator and width != target_width:
 			width = target_width
+			
+		# Hide/Disable opponent elevator if race is inactive
+		if is_opponent_elevator:
+			var is_race_active = road_node.get("is_racing_active") == true
+			if visible != is_race_active:
+				visible = is_race_active
+				var shape_node = get_node_or_null("CollisionShape2D")
+				if is_instance_valid(shape_node):
+					shape_node.disabled = not is_race_active
+				if is_instance_valid(area):
+					area.monitoring = is_race_active
+					area.monitorable = is_race_active
 		
 	if is_waiting_to_fall:
 		fall_timer -= delta
