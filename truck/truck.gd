@@ -503,10 +503,10 @@ func _physics_process(delta: float) -> void:
 				label.anchor_right = 1.0
 				label.anchor_top = 0.0
 				label.anchor_bottom = 0.0
-				label.offset_left = -320
+				label.offset_left = -350
 				label.offset_right = -20
 				label.offset_top = 20
-				label.offset_bottom = 60
+				label.offset_bottom = 100
 				label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 				label.add_theme_font_size_override("font_size", 20)
 				label.add_theme_color_override("font_shadow_color", Color.BLACK)
@@ -553,11 +553,15 @@ func _physics_process(delta: float) -> void:
 							var chunk_idx = int(round(plan_x / chunk_width))
 							target_tunnel_x = (chunk_idx + 0.5) * chunk_width
 			
+			var terrain_status = "Unknown"
+			if road and road.has_method("get_current_terrain_state_name"):
+				terrain_status = road.call("get_current_terrain_state_name", player_x)
+
 			if target_tunnel_x == INF or target_tunnel_x <= player_x:
-				label.text = "Tunnel: -- m"
+				label.text = "Tunnel: -- m\nTerrain: %s" % terrain_status
 			else:
 				var dist_meters = int(round((target_tunnel_x - player_x) / 30.0))
-				label.text = "Tunnel: %d m" % dist_meters
+				label.text = "Tunnel: %d m\nTerrain: %s" % [dist_meters, terrain_status]
 		else:
 			var label = hud.get_node_or_null("DebugTunnelLabel")
 			if label:

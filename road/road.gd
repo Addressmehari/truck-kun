@@ -1,7 +1,7 @@
 @tool
 extends StaticBody2D
 
-enum TerrainType {RUGGED, SMOOTH, BOTH, CUSTOM}
+enum TerrainType {RUGGED, SMOOTH, BOTH, CUSTOM, HARD}
 @export var road_length := 15000.0:
 	set(val):
 		road_length = val
@@ -83,43 +83,43 @@ enum TerrainType {RUGGED, SMOOTH, BOTH, CUSTOM}
 @export var mountain_amplitude := 220.0:
 	set(val):
 		mountain_amplitude = val
-		if terrain_type != TerrainType.CUSTOM:
+		if is_node_ready() and not _is_applying_preset and terrain_type != TerrainType.CUSTOM:
 			terrain_type = TerrainType.CUSTOM
 		_on_terrain_param_changed()
 @export var long_hills_amplitude := 85.0:
 	set(val):
 		long_hills_amplitude = val
-		if terrain_type != TerrainType.CUSTOM:
+		if is_node_ready() and not _is_applying_preset and terrain_type != TerrainType.CUSTOM:
 			terrain_type = TerrainType.CUSTOM
 		_on_terrain_param_changed()
 @export var medium_waves_amplitude := 50.0:
 	set(val):
 		medium_waves_amplitude = val
-		if terrain_type != TerrainType.CUSTOM:
+		if is_node_ready() and not _is_applying_preset and terrain_type != TerrainType.CUSTOM:
 			terrain_type = TerrainType.CUSTOM
 		_on_terrain_param_changed()
 @export var smooth_spikes_amplitude := 65.0:
 	set(val):
 		smooth_spikes_amplitude = val
-		if terrain_type != TerrainType.CUSTOM:
+		if is_node_ready() and not _is_applying_preset and terrain_type != TerrainType.CUSTOM:
 			terrain_type = TerrainType.CUSTOM
 		_on_terrain_param_changed()
 @export var sharp_dips_amplitude := 25.0:
 	set(val):
 		sharp_dips_amplitude = val
-		if terrain_type != TerrainType.CUSTOM:
+		if is_node_ready() and not _is_applying_preset and terrain_type != TerrainType.CUSTOM:
 			terrain_type = TerrainType.CUSTOM
 		_on_terrain_param_changed()
 @export var lil_spikes_amplitude := 18.0:
 	set(val):
 		lil_spikes_amplitude = val
-		if terrain_type != TerrainType.CUSTOM:
+		if is_node_ready() and not _is_applying_preset and terrain_type != TerrainType.CUSTOM:
 			terrain_type = TerrainType.CUSTOM
 		_on_terrain_param_changed()
 @export var small_bumps_amplitude := 12.0:
 	set(val):
 		small_bumps_amplitude = val
-		if terrain_type != TerrainType.CUSTOM:
+		if is_node_ready() and not _is_applying_preset and terrain_type != TerrainType.CUSTOM:
 			terrain_type = TerrainType.CUSTOM
 		_on_terrain_param_changed()
 
@@ -227,6 +227,7 @@ var wave_physics_tick := 0
 # Guard: when true the road_color / terrain setters skip regenerate_runtime_chunks()
 # so that apply_active_biome() only triggers a single rebuild at the end.
 var _suppress_regen := false
+var _is_applying_preset := false
 
 func clear_road_geometry_caches() -> void:
 	block_cache.clear()
@@ -242,6 +243,7 @@ func _on_terrain_param_changed() -> void:
 		regenerate_runtime_chunks()
 
 func _apply_terrain_preset() -> void:
+	_is_applying_preset = true
 	if terrain_type == TerrainType.RUGGED:
 		mountain_amplitude = 220.0
 		long_hills_amplitude = 85.0
@@ -258,7 +260,15 @@ func _apply_terrain_preset() -> void:
 		sharp_dips_amplitude = 8.0
 		lil_spikes_amplitude = 0.0
 		small_bumps_amplitude = 6.0
-	# BOTH does not set static parameters on the sliders, as they vary dynamically by distance.
+	elif terrain_type == TerrainType.HARD:
+		mountain_amplitude = 300.0
+		long_hills_amplitude = 110.0
+		medium_waves_amplitude = 70.0
+		smooth_spikes_amplitude = 85.0
+		sharp_dips_amplitude = 35.0
+		lil_spikes_amplitude = 25.0
+		small_bumps_amplitude = 18.0
+	_is_applying_preset = false
 
 
 const TUNNEL_MIN_SPACING := 00.0
@@ -686,6 +696,8 @@ func get_ground_material(fill_col: Color, line_col: Color) -> ShaderMaterial:
 
 func _ready() -> void:
 	collision_layer = 3
+	if terrain_type != TerrainType.CUSTOM:
+		_apply_terrain_preset()
 	update_seed_offsets()
 	if Engine.is_editor_hint():
 		apply_active_biome()
@@ -812,19 +824,33 @@ func get_raw_base_road_height(x: float) -> float:
 				var dist = max(0.0, abs(x))
 				# Starts smooth, but ramps up to full ruggedness potential quickly between 1000px and 7000px (~350m)
 				var max_ruggedness = clamp((dist - 1000.0) / 6000.0, 0.0, 1.0)
+				# Further ramp up from 1.0 to 2.0 (HARD terrain potential) between 15000px and 30000px
+				if dist > 15000.0:
+					max_ruggedness += clamp((dist - 15000.0) / 15000.0, 0.0, 1.0)
+				
 				# Sine wave with ~25k pixel wavelength (~1.25km cycle)
 				var cycle_val = sin(dist * 0.00025 + road_seed * 0.07)
-				# Wide rugged peaks (stays at 1.0 for ~50% of the cycle), quick smooth breaks (~29% of the cycle)
-				var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 1.0)
-				var blend = raw_shift * max_ruggedness
+				# Wide peaks (up to 2.0 for SMOOTH -> RUGGED -> HARD progression)
+				var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 2.0)
+				var blend = min(raw_shift, max_ruggedness)
 				
-				active_mountain = lerp(130.0, 220.0, blend)
-				active_long_hills = lerp(60.0, 85.0, blend)
-				active_medium_waves = lerp(35.0, 50.0, blend)
-				active_smooth_spikes = lerp(15.0, 65.0, blend)
-				active_sharp_dips = lerp(8.0, 25.0, blend)
-				active_lil_spikes = lerp(0.0, 18.0, blend)
-				active_small_bumps = lerp(6.0, 12.0, blend)
+				if blend <= 1.0:
+					active_mountain = lerp(130.0, 220.0, blend)
+					active_long_hills = lerp(60.0, 85.0, blend)
+					active_medium_waves = lerp(35.0, 50.0, blend)
+					active_smooth_spikes = lerp(15.0, 65.0, blend)
+					active_sharp_dips = lerp(8.0, 25.0, blend)
+					active_lil_spikes = lerp(0.0, 18.0, blend)
+					active_small_bumps = lerp(6.0, 12.0, blend)
+				else:
+					var t = blend - 1.0
+					active_mountain = lerp(220.0, 300.0, t)
+					active_long_hills = lerp(85.0, 110.0, t)
+					active_medium_waves = lerp(50.0, 70.0, t)
+					active_smooth_spikes = lerp(65.0, 85.0, t)
+					active_sharp_dips = lerp(25.0, 35.0, t)
+					active_lil_spikes = lerp(18.0, 25.0, t)
+					active_small_bumps = lerp(12.0, 18.0, t)
 			
 			var mountains = sin((x + seed_offset_3 * 0.3 + seed_offset_1 * 0.7) * 0.0003) * active_mountain * mult
 			var long_hills = sin((x + seed_offset_1) * 0.0007) * active_long_hills * mult
@@ -1309,6 +1335,32 @@ func get_tunnel_at_chunk(chunk_index: int) -> Dictionary:
 	tunnel_cache[chunk_index] = tunnel_data
 	return tunnel_data
 
+func get_current_terrain_state_name(x: float) -> String:
+	if terrain_type == TerrainType.SMOOTH:
+		return "SMOOTH"
+	if terrain_type == TerrainType.RUGGED:
+		return "RUGGED"
+	if terrain_type == TerrainType.HARD:
+		return "HARD"
+	if terrain_type == TerrainType.CUSTOM:
+		return "CUSTOM"
+	if terrain_type == TerrainType.BOTH:
+		var dist = max(0.0, abs(x))
+		var max_ruggedness = clamp((dist - 1000.0) / 6000.0, 0.0, 1.0)
+		if dist > 15000.0:
+			max_ruggedness += clamp((dist - 15000.0) / 15000.0, 0.0, 1.0)
+		var cycle_val = sin(dist * 0.00025 + road_seed * 0.07)
+		var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 2.0)
+		var blend = min(raw_shift, max_ruggedness)
+		
+		if blend < 0.5:
+			return "BOTH (SMOOTH)"
+		elif blend <= 1.5:
+			return "BOTH (RUGGED)"
+		else:
+			return "BOTH (HARD)"
+	return "UNKNOWN"
+
 # Returns true when the terrain at world-x is in a smooth (low-ruggedness) zone.
 # Works for SMOOTH, and for BOTH mode by reading the same blend formula used in get_raw_base_road_height.
 func is_smooth_zone_at_x(x: float) -> bool:
@@ -1317,9 +1369,11 @@ func is_smooth_zone_at_x(x: float) -> bool:
 	if terrain_type == TerrainType.BOTH:
 		var dist = max(0.0, abs(x))
 		var max_ruggedness = clamp((dist - 1000.0) / 6000.0, 0.0, 1.0)
+		if dist > 15000.0:
+			max_ruggedness += clamp((dist - 15000.0) / 15000.0, 0.0, 1.0)
 		var cycle_val = sin(dist * 0.00025 + road_seed * 0.07)
-		var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 1.0)
-		var blend = raw_shift * max_ruggedness
+		var raw_shift = clamp((cycle_val + 0.6) * 1.6, 0.0, 2.0)
+		var blend = min(raw_shift, max_ruggedness)
 		# blend < 0.50 is considered a smooth zone (relaxed from 0.25 for higher occurrence)
 		return blend < 0.50
 	return false
