@@ -31,14 +31,14 @@ mouse_filter = 2
 
 [node name="Header" type="MarginContainer" parent="UILayout"]
 layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -580.0
+anchors_preset = 0
+anchor_left = 0.0
+anchor_right = 0.0
+offset_right = 580.0
 offset_bottom = 110.0
-grow_horizontal = 0
+grow_horizontal = 1
+theme_override_constants/margin_left = 40
 theme_override_constants/margin_top = 30
-theme_override_constants/margin_right = 40
 
 [node name="StatsContainer" type="HBoxContainer" parent="UILayout/Header"]
 layout_mode = 2
@@ -172,25 +172,24 @@ layout_mode = 2
 size_flags_horizontal = 3
 
 [node name="PlayButtonContainer" type="Control" parent="UILayout/BottomLayout/HBoxContainer"]
-custom_minimum_size = Vector2(350, 135)
+custom_minimum_size = Vector2(400, 160)
 layout_mode = 2
 size_flags_vertical = 8
 
 [node name="PlayButton" type="Button" parent="UILayout/BottomLayout/HBoxContainer/PlayButtonContainer"]
-custom_minimum_size = Vector2(310, 105)
+custom_minimum_size = Vector2(360, 120)
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -155.0
-offset_top = -52.5
-offset_right = 155.0
-offset_bottom = 52.5
+offset_left = -180.0
+offset_top = -60.0
+offset_right = 180.0
+offset_bottom = 60.0
 grow_horizontal = 2
 grow_vertical = 2
-rotation = -0.10472
-pivot_offset = Vector2(155, 52.5)
+pivot_offset = Vector2(180, 60)
 focus_mode = 0
 text = "PLAY"

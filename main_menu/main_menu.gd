@@ -86,9 +86,11 @@ func _ready() -> void:
 		coin_val_label.text = "25"
 	gem_val_label.text = "25" # Gem starting default value
 
-	# Set font overrides on labels
+	# Set font and color overrides on labels for readability on light backgrounds
 	coin_val_label.add_theme_font_override("font", custom_font)
 	gem_val_label.add_theme_font_override("font", custom_font)
+	coin_val_label.add_theme_color_override("font_color", Color("#111111"))
+	gem_val_label.add_theme_color_override("font_color", Color("#111111"))
 	
 	# Connect resize signal to refresh drawing metrics
 	get_tree().root.size_changed.connect(queue_redraw)
@@ -117,11 +119,11 @@ func _process(delta: float) -> void:
 			leaf.scale = new_leaf.scale
 			leaf.color = new_leaf.color
 
-	# 2. Idle pulsing animation for the PLAY button (Call-To-Action)
-	if is_instance_valid(play_btn) and not play_btn.is_hovered() and not play_btn.is_pressed():
-		play_btn.pivot_offset = play_btn.size / 2.0
-		var pulse_scale = 1.0 + sin(elapsed * 5.0) * 0.04
-		play_btn.scale = Vector2(pulse_scale, pulse_scale)
+	# 2. Draw refresh for the PLAY button (pulsing disabled)
+	if is_instance_valid(play_btn):
+		play_btn.queue_redraw()
+		if not play_btn.is_hovered() and not play_btn.is_pressed():
+			play_btn.scale = Vector2(1.0, 1.0)
 
 	# Trigger redraw for procedural canvas elements
 	queue_redraw()
@@ -331,9 +333,9 @@ func _draw_cinematic_letterbox(size_rect: Vector2) -> void:
 # ─────────────────────────────────────────────────────────────────
 
 func _style_stats_bar(bar: PanelContainer, plus_btn: Button) -> void:
-	# Pill-shaped dark background (Thicker outline & corner radius)
+	# Pill-shaped matching pastel sky blue background (contrasts with black, matches blue waves)
 	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color("#111111", 0.65)
+	panel_style.bg_color = Color("#a9cce3")
 	panel_style.border_color = Color.BLACK
 	panel_style.border_width_left = 4
 	panel_style.border_width_top = 4
@@ -378,40 +380,106 @@ func _style_stats_bar(bar: PanelContainer, plus_btn: Button) -> void:
 	)
 
 func _style_play_button() -> void:
-	var normal = StyleBoxFlat.new()
-	normal.bg_color = Color("#e74c3c") # Red-orange
-	normal.border_color = Color.BLACK
-	normal.border_width_left = 5
-	normal.border_width_top = 5
-	normal.border_width_right = 5
-	normal.border_width_bottom = 18 # Chunkier 3D offset (was 12)
-	normal.set_corner_radius_all(22)
+	play_btn.text = "" # Clear text, we draw it customly
 	
-	var hover = normal.duplicate()
-	hover.bg_color = Color("#ff4d4d") # Brighter red-orange
-	hover.border_width_bottom = 22
-	
-	var pressed = normal.duplicate()
-	pressed.bg_color = Color("#c0392b") # Darker red
-	pressed.border_width_bottom = 5 # Flattened 3D look
-	pressed.border_width_top = 18
-	
-	play_btn.add_theme_stylebox_override("normal", normal)
-	play_btn.add_theme_stylebox_override("hover", hover)
-	play_btn.add_theme_stylebox_override("pressed", pressed)
-	play_btn.add_theme_stylebox_override("focus", hover)
-	
-	play_btn.add_theme_font_override("font", custom_font)
-	play_btn.add_theme_font_size_override("font_size", 64) # Massive PLAY text (was 44)
-	
-	# Font outline/shadow for comic styling
-	play_btn.add_theme_color_override("font_color", Color.WHITE)
-	play_btn.add_theme_color_override("font_hover_color", Color.WHITE)
-	play_btn.add_theme_color_override("font_pressed_color", Color("#dddddd"))
-	play_btn.add_theme_constant_override("outline_size", 18) # Thicker outline (was 12)
-	play_btn.add_theme_color_override("font_outline_color", Color.BLACK)
+	# Apply empty styleboxes so default button rendering is disabled
+	var empty = StyleBoxEmpty.new()
+	play_btn.add_theme_stylebox_override("normal", empty)
+	play_btn.add_theme_stylebox_override("hover", empty)
+	play_btn.add_theme_stylebox_override("pressed", empty)
+	play_btn.add_theme_stylebox_override("focus", empty)
 	
 	play_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	
+	# Connect the draw signal
+	if not play_btn.draw.is_connected(_draw_custom_play_button):
+		play_btn.draw.connect(_draw_custom_play_button)
+
+func _draw_custom_play_button() -> void:
+	if not is_instance_valid(play_btn):
+		return
+		
+	var w = play_btn.size.x
+	var h = play_btn.size.y
+	
+	var is_pressed = play_btn.is_pressed()
+	var is_hover = play_btn.is_hovered()
+	
+	var face_color = Color("#e74c3c") # Red-orange
+	var border_color = Color.BLACK
+	var shadow_color = Color("#7b241c") # Dark red shadow
+	
+	var shadow_offset = 12.0
+	if is_hover:
+		face_color = Color("#ff4d4d") # Brighter red
+		shadow_offset = 15.0
+	if is_pressed:
+		face_color = Color("#b32415") # Darker pressed red
+		shadow_offset = 4.0
+		
+	# Define asymmetrical corner coordinates for an imperfect hand-drawn rectangle
+	var c0 = Vector2(8.0, 6.0)        # Top-left
+	var c1 = Vector2(w - 10.0, 4.0)   # Top-right
+	var c2 = Vector2(w - 6.0, h - 8.0) # Bottom-right
+	var c3 = Vector2(10.0, h - 4.0)    # Bottom-left
+	
+	# 1. Draw the 3D extrusion shadow (bottom layer)
+	var shadow_pts = PackedVector2Array([
+		c0 + Vector2(0.0, shadow_offset),
+		c1 + Vector2(0.0, shadow_offset),
+		c2 + Vector2(0.0, shadow_offset),
+		c3 + Vector2(0.0, shadow_offset)
+	])
+	
+	var shadow_outline = PackedVector2Array()
+	for pt in shadow_pts:
+		shadow_outline.append(pt)
+	shadow_outline.append(shadow_pts[0])
+	
+	play_btn.draw_polygon(shadow_pts, PackedColorArray([shadow_color]))
+	play_btn.draw_polyline(shadow_outline, border_color, 7.0) # Thick hand-drawn style outline
+	
+	# 2. Draw the front face (top layer, offset by state)
+	var face_offset = Vector2.ZERO
+	if is_pressed:
+		face_offset = Vector2(0.0, shadow_offset - 4.0)
+		
+	var face_pts = PackedVector2Array([
+		c0 + face_offset,
+		c1 + face_offset,
+		c2 + face_offset,
+		c3 + face_offset
+	])
+	
+	var face_outline = PackedVector2Array()
+	for pt in face_pts:
+		face_outline.append(pt)
+	face_outline.append(face_pts[0])
+	
+	play_btn.draw_polygon(face_pts, PackedColorArray([face_color]))
+	play_btn.draw_polyline(face_outline, border_color, 7.0)
+	
+	# 3. Draw a shiny hand-drawn highlight line at the top
+	var hi_start = c0 + Vector2(12.0, 5.0) + face_offset
+	var hi_end = c1 + Vector2(-12.0, 5.0) + face_offset
+	play_btn.draw_line(hi_start, hi_end, Color("#ffea79", 0.6), 5.0)
+	
+	# 4. Draw bold comic text "PLAY" centered on the front face
+	var text = "PLAY"
+	var font_size = 64
+	var font = custom_font if custom_font else get_theme_default_font()
+	
+	# Center calculations using the average center of the face polygon
+	var text_size = font.get_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+	var face_center = (c0 + c1 + c2 + c3) / 4.0 + face_offset
+	var text_pos = face_center - Vector2(text_size.x / 2.0, -font_size * 0.3)
+	
+	# Draw thick black text outlines
+	for offset in [Vector2(4, 4), Vector2(-4, 4), Vector2(4, -4), Vector2(-4, -4), Vector2(0, 4), Vector2(0, -4), Vector2(4, 0), Vector2(-4, 0)]:
+		play_btn.draw_string(font, text_pos + offset, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.BLACK)
+		
+	# Draw main white text
+	play_btn.draw_string(font, text_pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
 
 func _style_action_button(btn: Button, has_white_border: bool) -> void:
 	# Rounded square StyleBox for bottom options (chunky 6px border)
