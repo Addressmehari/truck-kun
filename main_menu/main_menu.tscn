@@ -1,0 +1,196 @@
+[gd_scene load_steps=2 format=3 uid="uid://mainmenu001"]
+
+[ext_resource type="Script" path="res://main_menu/main_menu.gd" id="1_mainmenu_gd"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_mainmenu_gd")
+
+[node name="Background" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="UILayout" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Header" type="MarginContainer" parent="UILayout"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -580.0
+offset_bottom = 110.0
+grow_horizontal = 0
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 40
+
+[node name="StatsContainer" type="HBoxContainer" parent="UILayout/Header"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="GemBar" type="PanelContainer" parent="UILayout/Header/StatsContainer"]
+custom_minimum_size = Vector2(250, 64)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="UILayout/Header/StatsContainer/GemBar"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 4
+
+[node name="HBox" type="HBoxContainer" parent="UILayout/Header/StatsContainer/GemBar/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="IconAnchor" type="Control" parent="UILayout/Header/StatsContainer/GemBar/Margin/HBox"]
+custom_minimum_size = Vector2(38, 38)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="ValueLabel" type="Label" parent="UILayout/Header/StatsContainer/GemBar/Margin/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 30
+text = "25"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="PlusButton" type="Button" parent="UILayout/Header/StatsContainer/GemBar/Margin/HBox"]
+custom_minimum_size = Vector2(38, 38)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 0
+text = "+"
+
+[node name="CoinBar" type="PanelContainer" parent="UILayout/Header/StatsContainer"]
+custom_minimum_size = Vector2(250, 64)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="UILayout/Header/StatsContainer/CoinBar"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 4
+
+[node name="HBox" type="HBoxContainer" parent="UILayout/Header/StatsContainer/CoinBar/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="IconAnchor" type="Control" parent="UILayout/Header/StatsContainer/CoinBar/Margin/HBox"]
+custom_minimum_size = Vector2(38, 38)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="ValueLabel" type="Label" parent="UILayout/Header/StatsContainer/CoinBar/Margin/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 30
+text = "25"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="PlusButton" type="Button" parent="UILayout/Header/StatsContainer/CoinBar/Margin/HBox"]
+custom_minimum_size = Vector2(38, 38)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 0
+text = "+"
+
+[node name="BottomLayout" type="MarginContainer" parent="UILayout"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -210.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/margin_left = 60
+theme_override_constants/margin_right = 60
+theme_override_constants/margin_bottom = 45
+
+[node name="HBoxContainer" type="HBoxContainer" parent="UILayout/BottomLayout"]
+layout_mode = 2
+alignment = 1
+
+[node name="LeftButtons" type="GridContainer" parent="UILayout/BottomLayout/HBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 8
+theme_override_constants/horizontal_separation = 20
+columns = 5
+
+[node name="Btn1" type="Button" parent="UILayout/BottomLayout/HBoxContainer/LeftButtons"]
+custom_minimum_size = Vector2(110, 110)
+layout_mode = 2
+focus_mode = 0
+text = "👤"
+
+[node name="Btn2" type="Button" parent="UILayout/BottomLayout/HBoxContainer/LeftButtons"]
+custom_minimum_size = Vector2(110, 110)
+layout_mode = 2
+focus_mode = 0
+text = "🛒"
+
+[node name="Btn3" type="Button" parent="UILayout/BottomLayout/HBoxContainer/LeftButtons"]
+custom_minimum_size = Vector2(110, 110)
+layout_mode = 2
+focus_mode = 0
+text = "🏆"
+
+[node name="Btn4" type="Button" parent="UILayout/BottomLayout/HBoxContainer/LeftButtons"]
+custom_minimum_size = Vector2(110, 110)
+layout_mode = 2
+focus_mode = 0
+text = "⚙️"
+
+[node name="Btn5" type="Button" parent="UILayout/BottomLayout/HBoxContainer/LeftButtons"]
+custom_minimum_size = Vector2(110, 110)
+layout_mode = 2
+focus_mode = 0
+text = "ℹ️"
+
+[node name="Spacer" type="Control" parent="UILayout/BottomLayout/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PlayButtonContainer" type="Control" parent="UILayout/BottomLayout/HBoxContainer"]
+custom_minimum_size = Vector2(350, 135)
+layout_mode = 2
+size_flags_vertical = 8
+
+[node name="PlayButton" type="Button" parent="UILayout/BottomLayout/HBoxContainer/PlayButtonContainer"]
+custom_minimum_size = Vector2(310, 105)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -155.0
+offset_top = -52.5
+offset_right = 155.0
+offset_bottom = 52.5
+grow_horizontal = 2
+grow_vertical = 2
+rotation = -0.10472
+pivot_offset = Vector2(155, 52.5)
+focus_mode = 0
+text = "PLAY"
