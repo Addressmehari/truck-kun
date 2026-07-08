@@ -236,8 +236,8 @@ func _draw() -> void:
 	# ─────────────────────────────────────────────────────────────────
 	# 1. Draw Rotating Comic Sunburst & Halftone Background
 	# ─────────────────────────────────────────────────────────────────
-	# Base fill (deep midnight purple)
-	draw_rect(Rect2(Vector2.ZERO, screen_size), Color("#130a1c"), true)
+	# Base fill (soft warm browney / latte cream)
+	draw_rect(Rect2(Vector2.ZERO, screen_size), Color("#dfd5cd"), true)
 	
 	var bg_center = screen_size / 2.0
 	
@@ -259,7 +259,7 @@ func _draw() -> void:
 				bg_center + Vector2(cos(a2), sin(a2)) * ray_radius,
 				bg_center
 			])
-			draw_polygon(pts_ray, PackedColorArray([Color("#281236")])) # Dark plum/violet
+			draw_polygon(pts_ray, PackedColorArray([Color("#c8b7ac")])) # Soft warm tan/cocoa
 			
 	# Draw pop-art halftone dots (chunky comic grid)
 	var grid_spacing = 54.0
@@ -271,7 +271,7 @@ func _draw() -> void:
 			var dist = pos.distance_to(bg_center)
 			# Wave pattern for dot sizing (dynamic halftone ripple)
 			var rad = 4.0 + sin(elapsed * 2.2 - dist * 0.005) * 2.0
-			draw_circle(pos, rad, Color("#0b050f", 0.45))
+			draw_circle(pos, rad, Color("#ffffff", 0.4))
 
 	# ─────────────────────────────────────────────────────────────────
 	# 1.5. Draw Spinning Gears (Garage Theme)
