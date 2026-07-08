@@ -165,7 +165,7 @@ text = "⚙️"
 custom_minimum_size = Vector2(110, 110)
 layout_mode = 2
 focus_mode = 0
-text = "ℹ️"
+text = "X"
 
 [node name="Spacer" type="Control" parent="UILayout/BottomLayout/HBoxContainer"]
 layout_mode = 2

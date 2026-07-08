@@ -28,6 +28,8 @@ var elapsed: float = 0.0
 @onready var play_btn = $UILayout/BottomLayout/HBoxContainer/PlayButtonContainer/PlayButton
 @onready var coin_val_label = $UILayout/Header/StatsContainer/CoinBar/Margin/HBox/ValueLabel
 @onready var gem_val_label = $UILayout/Header/StatsContainer/GemBar/Margin/HBox/ValueLabel
+@onready var coin_bar = $UILayout/Header/StatsContainer/CoinBar
+@onready var gem_bar = $UILayout/Header/StatsContainer/GemBar
 @onready var left_buttons_container = $UILayout/BottomLayout/HBoxContainer/LeftButtons
 
 func _ready() -> void:
@@ -72,10 +74,11 @@ func _ready() -> void:
 		var index = 0
 		for child in left_buttons_container.get_children():
 			if child is Button:
+				var orig_text = child.text
 				_style_action_button(child, index == 4) # 5th button gets the white outline
 				child.mouse_entered.connect(_on_action_button_hover.bind(child, true))
 				child.mouse_exited.connect(_on_action_button_hover.bind(child, false))
-				child.pressed.connect(_on_action_button_pressed.bind(child.text))
+				child.pressed.connect(_on_action_button_pressed.bind(orig_text))
 				index += 1
 
 	# Set dynamic stats from game state if available
@@ -124,6 +127,17 @@ func _process(delta: float) -> void:
 		play_btn.queue_redraw()
 		if not play_btn.is_hovered() and not play_btn.is_pressed():
 			play_btn.scale = Vector2(1.0, 1.0)
+
+	# Redraw bottom action buttons for custom drawing states
+	if is_instance_valid(left_buttons_container):
+		for child in left_buttons_container.get_children():
+			if child is Button:
+				child.queue_redraw()
+
+	if is_instance_valid(coin_bar):
+		coin_bar.queue_redraw()
+	if is_instance_valid(gem_bar):
+		gem_bar.queue_redraw()
 
 	# Trigger redraw for procedural canvas elements
 	queue_redraw()
@@ -333,16 +347,13 @@ func _draw_cinematic_letterbox(size_rect: Vector2) -> void:
 # ─────────────────────────────────────────────────────────────────
 
 func _style_stats_bar(bar: PanelContainer, plus_btn: Button) -> void:
-	# Pill-shaped matching pastel sky blue background (contrasts with black, matches blue waves)
-	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color("#a9cce3")
-	panel_style.border_color = Color.BLACK
-	panel_style.border_width_left = 4
-	panel_style.border_width_top = 4
-	panel_style.border_width_right = 4
-	panel_style.border_width_bottom = 4
-	panel_style.set_corner_radius_all(30)
-	bar.add_theme_stylebox_override("panel", panel_style)
+	# Clear default styleboxes so we draw manually
+	var empty = StyleBoxEmpty.new()
+	bar.add_theme_stylebox_override("panel", empty)
+	
+	# Connect the draw signal
+	if not bar.draw.is_connected(_draw_custom_stats_bar.bind(bar)):
+		bar.draw.connect(_draw_custom_stats_bar.bind(bar))
 	
 	# Style the "+" button
 	var btn_normal = StyleBoxFlat.new()
@@ -378,6 +389,60 @@ func _style_stats_bar(bar: PanelContainer, plus_btn: Button) -> void:
 		var tween = create_tween()
 		tween.tween_property(plus_btn, "scale", Vector2(1.0, 1.0), 0.1)
 	)
+
+func _draw_custom_stats_bar(bar: PanelContainer) -> void:
+	if not is_instance_valid(bar):
+		return
+		
+	var w = bar.size.x
+	var h = bar.size.y
+	
+	var face_color = Color("#a9cce3") # Pastel sky blue
+	var shadow_color = Color("#111111") # Solid black shadow
+	var border_color = Color.BLACK
+	
+	var shadow_offset = 6.0
+	
+	# Define a wobbly hand-drawn rectangle
+	var c0 = Vector2(10.0, 5.0)
+	var c1 = Vector2(w - 10.0, 4.0)
+	var c2 = Vector2(w - 8.0, h - 8.0)
+	var c3 = Vector2(10.0, h - 5.0)
+	
+	# 1. Draw 3D shadow (bottom layer)
+	var shadow_pts = PackedVector2Array([
+		c0 + Vector2(0.0, shadow_offset),
+		c1 + Vector2(0.0, shadow_offset),
+		c2 + Vector2(0.0, shadow_offset),
+		c3 + Vector2(0.0, shadow_offset)
+	])
+	var shadow_outline = PackedVector2Array()
+	for pt in shadow_pts:
+		shadow_outline.append(pt)
+	shadow_outline.append(shadow_pts[0])
+	
+	bar.draw_polygon(shadow_pts, PackedColorArray([shadow_color]))
+	bar.draw_polyline(shadow_outline, border_color, 4.5)
+	
+	# 2. Draw front face (top layer)
+	var face_pts = PackedVector2Array([
+		c0,
+		c1,
+		c2,
+		c3
+	])
+	var face_outline = PackedVector2Array()
+	for pt in face_pts:
+		face_outline.append(pt)
+	face_outline.append(face_pts[0])
+	
+	bar.draw_polygon(face_pts, PackedColorArray([face_color]))
+	bar.draw_polyline(face_outline, border_color, 4.5)
+	
+	# 3. Draw a highlight line
+	var hi_start = c0 + Vector2(12.0, 4.0)
+	var hi_end = c1 + Vector2(-12.0, 4.0)
+	bar.draw_line(hi_start, hi_end, Color(1, 1, 1, 0.4), 3.5)
 
 func _style_play_button() -> void:
 	play_btn.text = "" # Clear text, we draw it customly
@@ -482,42 +547,125 @@ func _draw_custom_play_button() -> void:
 	play_btn.draw_string(font, text_pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
 
 func _style_action_button(btn: Button, has_white_border: bool) -> void:
-	# Rounded square StyleBox for bottom options (chunky 6px border)
-	var normal = StyleBoxFlat.new()
-	normal.bg_color = Color("#313131")
-	normal.border_width_left = 6
-	normal.border_width_top = 6
-	normal.border_width_right = 6
-	normal.border_width_bottom = 6
+	btn.set_meta("emoji", btn.text)
+	btn.text = "" # Clear text so we can draw it customly
 	
-	# Apply white highlight outline to the 5th active button
-	if has_white_border:
-		normal.border_color = Color.WHITE
-		normal.bg_color = Color("#4a4a4a")
-	else:
-		normal.border_color = Color("#111111")
-		
-	normal.set_corner_radius_all(26)
+	# Apply empty styleboxes so default button rendering is disabled
+	var empty = StyleBoxEmpty.new()
+	btn.add_theme_stylebox_override("normal", empty)
+	btn.add_theme_stylebox_override("hover", empty)
+	btn.add_theme_stylebox_override("pressed", empty)
+	btn.add_theme_stylebox_override("focus", empty)
 	
-	var hover = normal.duplicate()
-	hover.bg_color = Color("#555555")
-	if not has_white_border:
-		hover.border_color = Color("#222222")
-	else:
-		hover.border_color = Color.WHITE
-		
-	var pressed = normal.duplicate()
-	pressed.bg_color = Color("#1e1e1e")
-	
-	btn.add_theme_stylebox_override("normal", normal)
-	btn.add_theme_stylebox_override("hover", hover)
-	btn.add_theme_stylebox_override("pressed", pressed)
-	btn.add_theme_stylebox_override("focus", hover)
-	
-	btn.add_theme_font_override("font", custom_font)
-	btn.add_theme_font_size_override("font_size", 48) # Larger icon glyphs (was 34)
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	btn.pivot_offset = btn.size / 2.0
+	
+	# Connect the draw signal
+	if not btn.draw.is_connected(_draw_custom_action_button):
+		btn.draw.connect(_draw_custom_action_button.bind(btn, has_white_border))
+
+func _draw_custom_action_button(btn: Button, has_white_border: bool) -> void:
+	if not is_instance_valid(btn):
+		return
+		
+	var w = btn.size.x
+	var h = btn.size.y
+	
+	var is_pressed = btn.is_pressed()
+	var is_hover = btn.is_hovered()
+	
+	var emoji = btn.get_meta("emoji", "")
+	
+	# Color setup
+	var face_color = Color("#313131")
+	var shadow_color = Color("#111111")
+	var border_color = Color.WHITE if has_white_border else Color.BLACK
+	
+	# Special coloring for the red Exit button
+	if emoji == "X":
+		face_color = Color("#e74c3c") # Red-orange
+		shadow_color = Color("#7b241c") # Dark red shadow
+		
+	if is_hover:
+		if emoji == "X":
+			face_color = Color("#ff4d4d")
+		else:
+			face_color = Color("#4a4a4a")
+			
+	if is_pressed:
+		if emoji == "X":
+			face_color = Color("#b32415")
+		else:
+			face_color = Color("#1e1e1e")
+			
+	var shadow_offset = 8.0
+	if is_pressed:
+		shadow_offset = 3.0
+		
+	# Define a wobbly hand-drawn square
+	var c0 = Vector2(6.0, 5.0)
+	var c1 = Vector2(w - 7.0, 4.0)
+	var c2 = Vector2(w - 5.0, h - 7.0)
+	var c3 = Vector2(7.0, h - 5.0)
+	
+	# 1. Draw 3D shadow
+	var shadow_pts = PackedVector2Array([
+		c0 + Vector2(0.0, shadow_offset),
+		c1 + Vector2(0.0, shadow_offset),
+		c2 + Vector2(0.0, shadow_offset),
+		c3 + Vector2(0.0, shadow_offset)
+	])
+	var shadow_outline = PackedVector2Array()
+	for pt in shadow_pts:
+		shadow_outline.append(pt)
+	shadow_outline.append(shadow_pts[0])
+	
+	btn.draw_polygon(shadow_pts, PackedColorArray([shadow_color]))
+	# Shadow outline is always black
+	btn.draw_polyline(shadow_outline, Color.BLACK, 4.5)
+	
+	# 2. Draw front face
+	var face_offset = Vector2.ZERO
+	if is_pressed:
+		face_offset = Vector2(0.0, shadow_offset - 3.0)
+		
+	var face_pts = PackedVector2Array([
+		c0 + face_offset,
+		c1 + face_offset,
+		c2 + face_offset,
+		c3 + face_offset
+	])
+	var face_outline = PackedVector2Array()
+	for pt in face_pts:
+		face_outline.append(pt)
+	face_outline.append(face_pts[0])
+	
+	btn.draw_polygon(face_pts, PackedColorArray([face_color]))
+	btn.draw_polyline(face_outline, border_color, 4.5)
+	
+	# 3. Draw a highlight line
+	var hi_start = c0 + Vector2(10.0, 4.0) + face_offset
+	var hi_end = c1 + Vector2(-10.0, 4.0) + face_offset
+	var hi_color = Color(1, 1, 1, 0.4) if emoji != "X" else Color("#ffea79", 0.6)
+	btn.draw_line(hi_start, hi_end, hi_color, 3.5)
+	
+	# 4. Draw Emoji / Text
+	var font_size = 46
+	var font = custom_font if custom_font else get_theme_default_font()
+	
+	var text_size = font.get_string_size(emoji, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+	var face_center = (c0 + c1 + c2 + c3) / 4.0 + face_offset
+	var text_pos = face_center - Vector2(text_size.x / 2.0, -font_size * 0.3)
+	
+	if emoji == "X":
+		# Thick white comic outline around the black text "X"
+		for offset in [Vector2(3, 3), Vector2(-3, 3), Vector2(3, -3), Vector2(-3, -3), Vector2(0, 3), Vector2(0, -3), Vector2(3, 0), Vector2(-3, 0)]:
+			btn.draw_string(font, text_pos + offset, emoji, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
+		btn.draw_string(font, text_pos, emoji, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.BLACK)
+	else:
+		# Standard emoji drop shadow
+		btn.draw_string(font, text_pos + Vector2(2, 2), emoji, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0, 0, 0, 0.4))
+		btn.draw_string(font, text_pos, emoji, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
 
 func _on_action_button_hover(btn: Button, is_hover: bool) -> void:
 	btn.pivot_offset = btn.size / 2.0
@@ -529,6 +677,8 @@ func _on_action_button_hover(btn: Button, is_hover: bool) -> void:
 
 func _on_action_button_pressed(action_name: String) -> void:
 	print("Bottom Action Button Tapped: ", action_name)
+	if action_name == "X":
+		get_tree().quit()
 
 func _on_play_hover(is_hover: bool) -> void:
 	play_btn.pivot_offset = play_btn.size / 2.0
