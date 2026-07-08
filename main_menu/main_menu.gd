@@ -173,41 +173,87 @@ func _draw() -> void:
 	var screen_size = get_viewport_rect().size
 	
 	# ─────────────────────────────────────────────────────────────────
-	# 1. Draw Concentric Blue Waves Background
+	# 1. Draw Rotating Comic Sunburst & Halftone Background
 	# ─────────────────────────────────────────────────────────────────
-	# Base fill (darkest outer blue)
-	draw_rect(Rect2(Vector2.ZERO, screen_size), Color("#1b487c"), true)
+	# Base fill (deep midnight purple)
+	draw_rect(Rect2(Vector2.ZERO, screen_size), Color("#130a1c"), true)
 	
 	var bg_center = screen_size / 2.0
-	var base_radius = min(screen_size.x, screen_size.y)
 	
-	# Pulsing modifiers for dynamic background waves
-	var pulse_b = sin(elapsed * 1.5) * 15.0
-	var pulse_c = cos(elapsed * 2.0) * 10.0
-	var pulse_d = sin(elapsed * 1.0) * 18.0
+	# Draw rotating sunburst rays
+	var num_rays = 16
+	var ray_angle = TAU / num_rays
+	var ray_radius = max(screen_size.x, screen_size.y) * 1.3
+	var rotation_angle = elapsed * 0.08 # Smooth rotating speed rays
 	
-	# Draw concentric rings from outer to inner
-	# Ring 1
-	draw_circle(bg_center, base_radius * 0.85 + pulse_d, Color("#22558d"))
-	# Ring 2
-	draw_circle(bg_center, base_radius * 0.65 + pulse_b, Color("#2b65a5"))
-	# Ring 3
-	draw_circle(bg_center, base_radius * 0.48 + pulse_c, Color("#3676be"))
-	# Ring 4
-	draw_circle(bg_center, base_radius * 0.32 + pulse_b * 0.5, Color("#4289d7"))
-	# Ring 5 (Inner circle center)
-	draw_circle(bg_center, base_radius * 0.18 + pulse_c * 0.3, Color("#529cee"))
+	for i in range(num_rays):
+		var a1 = i * ray_angle + rotation_angle
+		var a2 = (i + 0.5) * ray_angle + rotation_angle
+		
+		# Draw alternating colored rays
+		if i % 2 == 0:
+			var pts_ray = PackedVector2Array([
+				bg_center,
+				bg_center + Vector2(cos(a1), sin(a1)) * ray_radius,
+				bg_center + Vector2(cos(a2), sin(a2)) * ray_radius,
+				bg_center
+			])
+			draw_polygon(pts_ray, PackedColorArray([Color("#281236")])) # Dark plum/violet
+			
+	# Draw pop-art halftone dots (chunky comic grid)
+	var grid_spacing = 54.0
+	var cols = int(screen_size.x / grid_spacing) + 2
+	var rows = int(screen_size.y / grid_spacing) + 2
+	for x_idx in range(cols):
+		for y_idx in range(rows):
+			var pos = Vector2(x_idx * grid_spacing, y_idx * grid_spacing)
+			var dist = pos.distance_to(bg_center)
+			# Wave pattern for dot sizing (dynamic halftone ripple)
+			var rad = 4.0 + sin(elapsed * 2.2 - dist * 0.005) * 2.0
+			draw_circle(pos, rad, Color("#0b050f", 0.45))
+
+	# ─────────────────────────────────────────────────────────────────
+	# 1.5. Draw Spinning Gears (Garage Theme)
+	# ─────────────────────────────────────────────────────────────────
+	# --- Top-Left Gear (Behind stats bars) ---
+	var gG_center = Vector2(80.0, 80.0)
+	_draw_gear(gG_center, 70.0, 7, elapsed * 0.15, Color("#424d5d"))
+	
+	# --- Top-Right Gear ---
+	var gH_center = Vector2(screen_size.x - 80.0, 80.0)
+	_draw_gear(gH_center, 80.0, 8, -elapsed * 0.12, Color("#34495e"))
+
+	# --- Bottom-Left Interlocking Chain (3 Gears) ---
+	# Bottom-Left Gear A (Large base corner gear)
+	var gA_center = Vector2(-20.0, screen_size.y + 20.0)
+	_draw_gear(gA_center, 180.0, 14, elapsed * 0.25, Color("#4f5d75"))
+	
+	# Bottom-Left Gear B (Medium interlocking gear)
+	var gB_center = Vector2(170.0, screen_size.y - 110.0)
+	_draw_gear(gB_center, 100.0, 8, -elapsed * 0.4375 + 0.35, Color("#708090"))
+	
+	# Bottom-Left Gear E (Small tertiary gear)
+	var gE_center = Vector2(290.0, screen_size.y - 40.0)
+	_draw_gear(gE_center, 60.0, 5, elapsed * 0.7 - 0.1, Color("#85929e"))
+	
+	# --- Bottom-Right Interlocking Chain (3 Gears) ---
+	# Bottom-Right Gear C (Large base corner gear)
+	var gC_center = Vector2(screen_size.x + 20.0, screen_size.y + 20.0)
+	_draw_gear(gC_center, 200.0, 16, -elapsed * 0.2, Color("#566573"))
+	
+	# Bottom-Right Gear D (Medium interlocking gear)
+	var gD_center = Vector2(screen_size.x - 200.0, screen_size.y - 120.0)
+	_draw_gear(gD_center, 110.0, 9, elapsed * 0.3556 - 0.2, Color("#4a5868"))
+	
+	# Bottom-Right Gear F (Small tertiary gear)
+	var gF_center = Vector2(screen_size.x - 330.0, screen_size.y - 60.0)
+	_draw_gear(gF_center, 70.0, 6, -elapsed * 0.5334 + 0.15, Color("#5d6d7e"))
 
 	# ─────────────────────────────────────────────────────────────────
 	# 2. Draw Falling Leaves (Scaled Up)
 	# ─────────────────────────────────────────────────────────────────
 	for leaf in leaves:
 		_draw_stylized_leaf(leaf)
-
-	# ─────────────────────────────────────────────────────────────────
-	# 3. Draw Stylized Comic-Style Corner Bushes (Scaled Up)
-	# ─────────────────────────────────────────────────────────────────
-	_draw_corner_bushes(screen_size)
 
 	# ─────────────────────────────────────────────────────────────────
 	# 4. Draw Black Cinematic Letterbox Curved Banners (Top/Bottom)
@@ -246,55 +292,7 @@ func _draw_stylized_leaf(leaf: Leaf) -> void:
 	var vein_end = leaf_transform * Vector2(0, -38)
 	draw_line(vein_start, vein_end, Color("#0d1804"), 3.0)
 
-func _draw_corner_bushes(size_rect: Vector2) -> void:
-	# Define circles for bottom-left and bottom-right bushes
-	# Each circle is described by: offset relative to corner, radius, color
-	
-	# Green shade constants
-	var c_dark = Color("#183b17") # Deep background green
-	var c_mid = Color("#295e28")  # Mid-tone green
-	var c_light = Color("#4a933f") # Primary leaf green
-	var c_bright = Color("#74b84b") # Highlight leaf green
-	
-	# Bottom-Left Shrub configuration (origins: 0, size_rect.y)
-	var bl_corner = Vector2(0, size_rect.y)
-	var bl_circles = [
-		{"offset": Vector2(30, -30), "rad": 170.0, "color": c_dark},
-		{"offset": Vector2(180, -10), "rad": 130.0, "color": c_dark},
-		{"offset": Vector2(-20, -110), "rad": 150.0, "color": c_mid},
-		{"offset": Vector2(110, -90), "rad": 140.0, "color": c_mid},
-		{"offset": Vector2(-40, 20), "rad": 180.0, "color": c_light},
-		{"offset": Vector2(50, -30), "rad": 135.0, "color": c_light},
-		{"offset": Vector2(140, 50), "rad": 110.0, "color": c_bright}
-	]
-	
-	# Draw Bottom-Left Bush
-	for circ in bl_circles:
-		var center = bl_corner + circ["offset"]
-		# Black outline
-		draw_circle(center, circ["rad"], Color("#0b1409"))
-		# Green fill
-		draw_circle(center, circ["rad"] - 6.5, circ["color"])
-		
-	# Bottom-Right Shrub configuration (origins: size_rect.x, size_rect.y)
-	var br_corner = Vector2(size_rect.x, size_rect.y)
-	var br_circles = [
-		{"offset": Vector2(-30, -30), "rad": 175.0, "color": c_dark},
-		{"offset": Vector2(-180, -10), "rad": 135.0, "color": c_dark},
-		{"offset": Vector2(20, -110), "rad": 160.0, "color": c_mid},
-		{"offset": Vector2(-110, -90), "rad": 145.0, "color": c_mid},
-		{"offset": Vector2(40, 20), "rad": 185.0, "color": c_light},
-		{"offset": Vector2(-50, -30), "rad": 140.0, "color": c_light},
-		{"offset": Vector2(-140, 50), "rad": 115.0, "color": c_bright}
-	]
-	
-	# Draw Bottom-Right Bush
-	for circ in br_circles:
-		var center = br_corner + circ["offset"]
-		# Black outline
-		draw_circle(center, circ["rad"], Color("#0b1409"))
-		# Green fill
-		draw_circle(center, circ["rad"] - 6.5, circ["color"])
+
 
 func _draw_cinematic_letterbox(size_rect: Vector2) -> void:
 	var segments = 24
@@ -698,6 +696,68 @@ func _on_play_pressed() -> void:
 		else:
 			get_tree().change_scene_to_file("res://main.tscn")
 	)
+
+func _draw_gear(center: Vector2, radius: float, teeth_count: int, angle: float, face_color: Color) -> void:
+	var depth = radius * 0.15
+	var step = TAU / teeth_count
+	var pts = PackedVector2Array()
+	
+	for i in range(teeth_count):
+		var a = angle + i * step
+		# Corner points of each gear tooth
+		var p1 = center + Vector2(cos(a - step * 0.25), sin(a - step * 0.25)) * radius
+		var p2 = center + Vector2(cos(a - step * 0.15), sin(a - step * 0.15)) * (radius + depth)
+		var p3 = center + Vector2(cos(a + step * 0.15), sin(a + step * 0.15)) * (radius + depth)
+		var p4 = center + Vector2(cos(a + step * 0.25), sin(a + step * 0.25)) * radius
+		var p5 = center + Vector2(cos(a + step * 0.5), sin(a + step * 0.5)) * (radius - 2.0)
+		
+		pts.append(p1)
+		pts.append(p2)
+		pts.append(p3)
+		pts.append(p4)
+		pts.append(p5)
+		
+	# Draw outline first (black border, offset/thick)
+	var outline_pts = PackedVector2Array()
+	for pt in pts:
+		outline_pts.append(pt)
+	outline_pts.append(pts[0])
+	
+	# Draw 3D drop shadow of the gear
+	var shadow_offset = Vector2(0.0, 8.0)
+	var shadow_pts = PackedVector2Array()
+	for pt in pts:
+		shadow_pts.append(pt + shadow_offset)
+	var shadow_outline = PackedVector2Array()
+	for pt in shadow_pts:
+		shadow_outline.append(pt)
+	shadow_outline.append(shadow_pts[0])
+	
+	draw_polygon(shadow_pts, PackedColorArray([Color("#0b0512")]))
+	draw_polyline(shadow_outline, Color.BLACK, 6.0)
+	
+	# Draw front gear face
+	draw_polygon(pts, PackedColorArray([face_color]))
+	draw_polyline(outline_pts, Color.BLACK, 6.0)
+	
+	# Draw 4 circular cutouts inside for mechanical look
+	var cutout_dist = radius * 0.58
+	var cutout_rad = radius * 0.16
+	for j in range(4):
+		var ca = angle + j * (PI / 2.0)
+		var c_center = center + Vector2(cos(ca), sin(ca)) * cutout_dist
+		# Draw outline for cutout
+		draw_circle(c_center, cutout_rad, Color.BLACK)
+		# Draw fill using base background color to simulate hole
+		draw_circle(c_center, cutout_rad - 4.5, Color("#130a1c"))
+		
+	# Draw central axle hole
+	var axle_rad = radius * 0.22
+	draw_circle(center, axle_rad, Color.BLACK)
+	draw_circle(center, axle_rad - 4.5, Color("#130a1c"))
+	# Small center metal pin
+	draw_circle(center, axle_rad * 0.4, Color.BLACK)
+	draw_circle(center, axle_rad * 0.4 - 2.0, face_color)
 
 # ─────────────────────────────────────────────────────────────────
 # Helper Vector Draw Classes for Coin & Gem
