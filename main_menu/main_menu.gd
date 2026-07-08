@@ -23,6 +23,8 @@ const MAX_LEAVES = 8
 # Animation elapsed time
 var elapsed: float = 0.0
 
+var real_truck: Node2D
+
 # Node references (will be set in ready)
 @onready var background_layer = $Background
 @onready var play_btn = $UILayout/BottomLayout/HBoxContainer/PlayButtonContainer/PlayButton
@@ -98,6 +100,34 @@ func _ready() -> void:
 	# Connect resize signal to refresh drawing metrics
 	get_tree().root.size_changed.connect(queue_redraw)
 
+	# Instance the real truck (Truck-kun) in the main menu
+	var truck_scene = load("res://truck/truck.tscn")
+	if truck_scene:
+		real_truck = truck_scene.instantiate()
+		add_child(real_truck)
+		move_child(real_truck, 1) # Behind UILayout but in front of Background
+		
+		# Scale and position
+		real_truck.scale = Vector2(3.2, 3.2)
+		
+		# Remove the gameplay HUD overlay so it doesn't show in the menu
+		var hud = real_truck.get_node_or_null("HUD")
+		if hud:
+			hud.queue_free()
+			
+		# Disable processing & input handling on the truck
+		real_truck.process_mode = Node.PROCESS_MODE_DISABLED
+		
+		# Freeze all physics bodies so it remains statically suspended
+		_freeze_truck_physics(real_truck)
+		
+		# Enable exhaust smoke particles to float up nicely
+		var chassis_node = real_truck.get_node_or_null("chassis")
+		if chassis_node:
+			for child in chassis_node.get_children():
+				if child is CPUParticles2D:
+					child.process_mode = Node.PROCESS_MODE_ALWAYS
+
 func _process(delta: float) -> void:
 	elapsed += delta
 
@@ -121,6 +151,37 @@ func _process(delta: float) -> void:
 			leaf.rot_speed = new_leaf.rot_speed
 			leaf.scale = new_leaf.scale
 			leaf.color = new_leaf.color
+
+	# Animate and redraw the real instanced truck
+	if is_instance_valid(real_truck):
+		var target_scale = clamp(screen_size.y / 200.0, 2.0, 3.25)
+		real_truck.scale = Vector2(target_scale, target_scale)
+		
+		var bob_offset = Vector2(0.0, sin(elapsed * 5.0) * 5.0)
+		real_truck.position = Vector2(screen_size.x / 2.0, screen_size.y / 2.0 + (screen_size.y * 0.05)) + bob_offset
+		
+		var tyre1 = real_truck.get_node_or_null("chassis/tyre-1")
+		if tyre1:
+			tyre1.rotation += delta * 4.5
+			tyre1.queue_redraw()
+		var tyre2 = real_truck.get_node_or_null("container_body/tyre-2")
+		if tyre2:
+			tyre2.rotation += delta * 4.5
+			tyre2.queue_redraw()
+		var tyre3 = real_truck.get_node_or_null("container_body/tyre-3")
+		if tyre3:
+			tyre3.rotation += delta * 4.5
+			tyre3.queue_redraw()
+			
+		# Subtle engine vibration shake on the cabin (chassis)
+		var chassis_node = real_truck.get_node_or_null("chassis")
+		if chassis_node:
+			chassis_node.position.y = sin(elapsed * 12.0) * 0.8
+			chassis_node.queue_redraw()
+			
+		var container_node = real_truck.get_node_or_null("container_body")
+		if container_node:
+			container_node.queue_redraw()
 
 	# 2. Draw refresh for the PLAY button (pulsing disabled)
 	if is_instance_valid(play_btn):
@@ -248,6 +309,115 @@ func _draw() -> void:
 	# Bottom-Right Gear F (Small tertiary gear)
 	var gF_center = Vector2(screen_size.x - 330.0, screen_size.y - 60.0)
 	_draw_gear(gF_center, 70.0, 6, -elapsed * 0.5334 + 0.15, Color("#5d6d7e"))
+
+
+
+	# ─────────────────────────────────────────────────────────────────
+	# 1.9. Draw Hydraulic Lift & Slab Platform (Garage Theme)
+	# ─────────────────────────────────────────────────────────────────
+	if is_instance_valid(real_truck):
+		var t_pos = real_truck.position
+		var t_scale = real_truck.scale.x
+		
+		# Center the slab on the midpoint of the truck's wheel span (which is -28px from the truck origin)
+		var slab_center_x = t_pos.x - 28.0 * t_scale
+		
+		# Slab dimensions scaled relative to truck size
+		var slab_w = 205.0 * t_scale
+		var slab_h = 16.0 * t_scale # Thicker block shape
+		var slab_x = slab_center_x - slab_w / 2.0
+		# Align slab_y to touch the bottom of the tyres precisely
+		var slab_y = t_pos.y + 28.5 * t_scale
+		
+		# --- A. Draw Hydraulic Pistons (Vertical Pillars) ---
+		var piston_left_x = slab_center_x - 55.0 * t_scale
+		var piston_right_x = slab_center_x + 55.0 * t_scale
+		var piston_width = 9.0 * t_scale
+		var piston_color = Color("#7f8c8d") # Metallic silver chrome
+		var piston_shadow = Color("#505a5b")
+		
+		for px in [piston_left_x, piston_right_x]:
+			# Piston 3D Shadow (shifted right)
+			draw_rect(Rect2(px - piston_width/2.0 + 8.0, slab_y, piston_width, screen_size.y - slab_y), Color("#0b0512"), true)
+			# Piston core
+			draw_rect(Rect2(px - piston_width/2.0, slab_y, piston_width, screen_size.y - slab_y), piston_color, true)
+			# Piston inner shading/sheen
+			draw_rect(Rect2(px - piston_width/2.0, slab_y, piston_width * 0.35, screen_size.y - slab_y), Color("#bdc3c7"), true)
+			draw_rect(Rect2(px + piston_width * 0.15, slab_y, piston_width * 0.35, screen_size.y - slab_y), piston_shadow, true)
+			# Outlines
+			draw_line(Vector2(px - piston_width/2.0, slab_y), Vector2(px - piston_width/2.0, screen_size.y), Color.BLACK, 4.5)
+			draw_line(Vector2(px + piston_width/2.0, slab_y), Vector2(px + piston_width/2.0, screen_size.y), Color.BLACK, 4.5)
+
+		# --- B. Draw Concrete Block 3D Drop Shadow ---
+		var shadow_offset = Vector2(0.0, 8.0)
+		var slab_shadow_pts = PackedVector2Array([
+			Vector2(slab_x - 6.0, slab_y + 2.0) + shadow_offset,
+			Vector2(slab_x + slab_w + 6.0, slab_y - 2.0) + shadow_offset,
+			Vector2(slab_x + slab_w + 3.0, slab_y + slab_h + 3.0) + shadow_offset,
+			Vector2(slab_x - 3.0, slab_y + slab_h - 2.0) + shadow_offset
+		])
+		draw_polygon(slab_shadow_pts, PackedColorArray([Color("#0b0512")]))
+		
+		# Draw outline for the shadow
+		var shadow_outline = PackedVector2Array()
+		for pt in slab_shadow_pts:
+			shadow_outline.append(pt)
+		shadow_outline.append(slab_shadow_pts[0])
+		draw_polyline(shadow_outline, Color.BLACK, 6.0)
+
+		# --- C. Draw Concrete Block Core (Wobbly Hand-Drawn Rectangle) ---
+		var slab_pts = PackedVector2Array([
+			Vector2(slab_x - 6.0, slab_y + 2.0),
+			Vector2(slab_x + slab_w + 6.0, slab_y - 2.0),
+			Vector2(slab_x + slab_w + 3.0, slab_y + slab_h + 3.0),
+			Vector2(slab_x - 3.0, slab_y + slab_h - 2.0)
+		])
+		# Heavy raw concrete gray color
+		draw_polygon(slab_pts, PackedColorArray([Color("#909497")]))
+		
+		# Inner bevel overlay (for highlights and wobbly hand-drawn texture)
+		var slab_inner_pts = PackedVector2Array([
+			Vector2(slab_x - 2.0, slab_y + 5.0),
+			Vector2(slab_x + slab_w + 2.0, slab_y + 2.0),
+			Vector2(slab_x + slab_w, slab_y + slab_h - 2.0),
+			Vector2(slab_x + 1.0, slab_y + slab_h - 4.0)
+		])
+		draw_polygon(slab_inner_pts, PackedColorArray([Color("#a6acaf")]))
+
+		# --- D. Draw Concrete Aggregate Stones (Texture Dots) ---
+		var aggregates = [
+			Vector2(0.12, 0.35), Vector2(0.24, 0.72), Vector2(0.38, 0.22), Vector2(0.48, 0.82),
+			Vector2(0.58, 0.38), Vector2(0.68, 0.76), Vector2(0.78, 0.28), Vector2(0.86, 0.62),
+			Vector2(0.94, 0.32), Vector2(0.06, 0.68), Vector2(0.18, 0.52), Vector2(0.88, 0.82)
+		]
+		for agg in aggregates:
+			var ax = slab_x + agg.x * slab_w
+			var ay = slab_y + agg.y * slab_h
+			draw_circle(Vector2(ax, ay), 2.2, Color("#7f8c8d"))
+
+		# --- E. Draw Concrete Jagged Cracks ---
+		# Left-side bottom crack
+		var crack1 = PackedVector2Array([
+			Vector2(slab_x + 35.0, slab_y + slab_h - 2.0),
+			Vector2(slab_x + 48.0, slab_y + slab_h - 14.0),
+			Vector2(slab_x + 42.0, slab_y + slab_h - 24.0)
+		])
+		draw_polyline(crack1, Color.BLACK, 3.0)
+
+		# Right-side top crack
+		var crack2 = PackedVector2Array([
+			Vector2(slab_x + slab_w - 55.0, slab_y + 1.0),
+			Vector2(slab_x + slab_w - 70.0, slab_y + 15.0),
+			Vector2(slab_x + slab_w - 65.0, slab_y + 25.0)
+		])
+		draw_polyline(crack2, Color.BLACK, 3.0)
+
+		# --- F. Draw Outlines ---
+		var slab_outline = PackedVector2Array()
+		for pt in slab_pts:
+			slab_outline.append(pt)
+		slab_outline.append(slab_pts[0])
+		draw_polyline(slab_outline, Color.BLACK, 6.0)
 
 	# ─────────────────────────────────────────────────────────────────
 	# 2. Draw Falling Leaves (Scaled Up)
@@ -825,3 +995,14 @@ class GemIcon extends Control:
 		draw_line(center + Vector2(r * 0.85, -r * 0.25), center + Vector2(0, 0), Color.BLACK, 1.8)
 		draw_line(center + Vector2(-r * 0.45, r), center + Vector2(0, 0), Color.BLACK, 1.8)
 		draw_line(center + Vector2(r * 0.45, r), center + Vector2(0, 0), Color.BLACK, 1.8)
+
+func _freeze_truck_physics(node: Node) -> void:
+	if node is RigidBody2D:
+		node.freeze = true
+		node.freeze_mode = RigidBody2D.FREEZE_MODE_STATIC
+		# Disable collision elements so they don't block anything
+		for child in node.get_children():
+			if child is CollisionShape2D or child is CollisionPolygon2D:
+				child.disabled = true
+	for child in node.get_children():
+		_freeze_truck_physics(child)
