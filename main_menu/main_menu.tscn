@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://mainmenu001"]
 
-[ext_resource type="Script" path="res://main_menu/main_menu.gd" id="1_mainmenu_gd"]
+[ext_resource type="Script" uid="uid://s8ahim21qv6j" path="res://main_menu/main_menu.gd" id="1_mainmenu_gd"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -31,12 +31,8 @@ mouse_filter = 2
 
 [node name="Header" type="MarginContainer" parent="UILayout"]
 layout_mode = 1
-anchors_preset = 0
-anchor_left = 0.0
-anchor_right = 0.0
 offset_right = 580.0
 offset_bottom = 110.0
-grow_horizontal = 1
 theme_override_constants/margin_left = 40
 theme_override_constants/margin_top = 30
 
@@ -134,7 +130,6 @@ alignment = 1
 [node name="LeftButtons" type="GridContainer" parent="UILayout/BottomLayout/HBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 8
-theme_override_constants/horizontal_separation = 20
 columns = 5
 
 [node name="Btn1" type="Button" parent="UILayout/BottomLayout/HBoxContainer/LeftButtons"]

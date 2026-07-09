@@ -24,6 +24,8 @@ const MAX_LEAVES = 8
 var elapsed: float = 0.0
 
 var real_truck: Node2D
+var click_anim_time: float = -1.0
+var beep_bubble_time: float = -1.0
 
 # Node references (will be set in ready)
 @onready var background_layer = $Background
@@ -155,22 +157,58 @@ func _process(delta: float) -> void:
 	# Animate and redraw the real instanced truck
 	if is_instance_valid(real_truck):
 		var target_scale = clamp(screen_size.y / 200.0, 2.0, 3.25)
-		real_truck.scale = Vector2(target_scale, target_scale)
 		
+		# --- Process Interactive Jump/Squash Physics ---
+		var jump_offset = 0.0
+		var scale_modifier = Vector2.ONE
+		
+		if click_anim_time >= 0.0:
+			click_anim_time += delta
+			if click_anim_time < 0.15:
+				# 1. Prep squish (crouching down slightly)
+				var t = click_anim_time / 0.15
+				scale_modifier.y = lerp(1.0, 0.97, t)
+				scale_modifier.x = lerp(1.0, 1.015, t)
+			elif click_anim_time < 0.45:
+				# 2. Launch jump
+				var t = (click_anim_time - 0.15) / 0.30
+				jump_offset = -sin(t * PI) * 25.0
+				scale_modifier.y = lerp(0.97, 1.02, sin(t * PI))
+				scale_modifier.x = lerp(1.015, 0.985, sin(t * PI))
+			elif click_anim_time < 0.65:
+				# 3. Falling back down
+				var t = (click_anim_time - 0.45) / 0.20
+				jump_offset = -cos(t * PI/2.0) * 6.0 # residual drop height
+				scale_modifier.y = lerp(1.02, 0.975, t)
+				scale_modifier.x = lerp(0.985, 1.015, t)
+			elif click_anim_time < 0.85:
+				# 4. Landing squash rebound
+				var t = (click_anim_time - 0.65) / 0.20
+				scale_modifier.y = lerp(0.975, 1.0, t)
+				scale_modifier.x = lerp(1.015, 1.0, t)
+			else:
+				# Click animation completed
+				click_anim_time = -1.0
+				
+		if beep_bubble_time >= 0.0:
+			beep_bubble_time += delta
+			if beep_bubble_time > 1.2:
+				beep_bubble_time = -1.0
+		
+		# Set final scale and position combining idle bob and jump offset
+		real_truck.scale = Vector2(target_scale * scale_modifier.x, target_scale * scale_modifier.y)
 		var bob_offset = Vector2(0.0, sin(elapsed * 5.0) * 5.0)
-		real_truck.position = Vector2(screen_size.x / 2.0, screen_size.y / 2.0 + (screen_size.y * 0.05)) + bob_offset
+		real_truck.position = Vector2(screen_size.x / 2.0, screen_size.y / 2.0 + (screen_size.y * 0.05)) + bob_offset + Vector2(0, jump_offset)
 		
+		# Redraw all truck sub-components
 		var tyre1 = real_truck.get_node_or_null("chassis/tyre-1")
 		if tyre1:
-			tyre1.rotation += delta * 4.5
 			tyre1.queue_redraw()
 		var tyre2 = real_truck.get_node_or_null("container_body/tyre-2")
 		if tyre2:
-			tyre2.rotation += delta * 4.5
 			tyre2.queue_redraw()
 		var tyre3 = real_truck.get_node_or_null("container_body/tyre-3")
 		if tyre3:
-			tyre3.rotation += delta * 4.5
 			tyre3.queue_redraw()
 			
 		# Subtle engine vibration shake on the cabin (chassis)
@@ -202,6 +240,26 @@ func _process(delta: float) -> void:
 
 	# Trigger redraw for procedural canvas elements
 	queue_redraw()
+
+func _input(event: InputEvent) -> void:
+	if not is_instance_valid(real_truck):
+		return
+		
+	var is_click = event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT
+	var is_touch = event is InputEventScreenTouch and event.pressed
+	
+	if is_click or is_touch:
+		# Convert touch coordinates to truck's local coordinate space
+		var local_pos = real_truck.to_local(event.position)
+		
+		# Truck local bounding box limits:
+		# Container starts around x=-119, Cabin ends around x=195. Height is y=-80 to y=65.
+		if local_pos.x >= -125.0 and local_pos.x <= 195.0 and local_pos.y >= -85.0 and local_pos.y <= 70.0:
+			# Trigger the springy jump and speech bubble if not already animating
+			if click_anim_time < 0.0:
+				click_anim_time = 0.0
+				beep_bubble_time = 0.0
+				queue_redraw()
 
 func create_random_leaf(anywhere_y: bool) -> Leaf:
 	var leaf = Leaf.new()
@@ -316,8 +374,17 @@ func _draw() -> void:
 	# 1.9. Draw Hydraulic Lift & Slab Platform (Garage Theme)
 	# ─────────────────────────────────────────────────────────────────
 	if is_instance_valid(real_truck):
-		var t_pos = real_truck.position
-		var t_scale = real_truck.scale.x
+		# Use stationary (non-squishing, non-jumping) values for the slab
+		# so the concrete block stays firmly in place while the truck bobs/jumps
+		var t_scale = clamp(screen_size.y / 200.0, 2.0, 3.25)
+		var t_pos = Vector2(screen_size.x / 2.0, screen_size.y / 2.0 + (screen_size.y * 0.05)) + Vector2(0.0, sin(elapsed * 5.0) * 5.0)
+		
+		# --- Calculate landing impact shake ---
+		var slab_shake = 0.0
+		if click_anim_time >= 0.65 and click_anim_time < 0.85:
+			var t_rebound = (click_anim_time - 0.65) / 0.20
+			# Heavy dampening wobble
+			slab_shake = sin((click_anim_time - 0.65) * 65.0) * 5.0 * (1.0 - t_rebound)
 		
 		# Center the slab on the midpoint of the truck's wheel span (which is -28px from the truck origin)
 		var slab_center_x = t_pos.x - 28.0 * t_scale
@@ -326,8 +393,8 @@ func _draw() -> void:
 		var slab_w = 205.0 * t_scale
 		var slab_h = 16.0 * t_scale # Thicker block shape
 		var slab_x = slab_center_x - slab_w / 2.0
-		# Align slab_y to touch the bottom of the tyres precisely
-		var slab_y = t_pos.y + 28.5 * t_scale
+		# Align slab_y to touch the bottom of the tyres precisely (adding shake)
+		var slab_y = t_pos.y + 28.5 * t_scale + slab_shake
 		
 		# --- A. Draw Hydraulic Pistons (Vertical Pillars) ---
 		var piston_left_x = slab_center_x - 55.0 * t_scale
@@ -418,6 +485,63 @@ func _draw() -> void:
 			slab_outline.append(pt)
 		slab_outline.append(slab_pts[0])
 		draw_polyline(slab_outline, Color.BLACK, 6.0)
+
+		# --- G. Draw Comic Horn Speech Bubble ("BEEP! BEEP!") ---
+		if beep_bubble_time >= 0.0:
+			var truck_pos = real_truck.position
+			var truck_scale = real_truck.scale.x
+			var truck_scale_y = real_truck.scale.y
+			
+			# Place bubble above and slightly to the right of the cabin
+			var bubble_pos = truck_pos + Vector2(110.0 * truck_scale, -80.0 * truck_scale_y)
+			var bubble_w = 60.0 * truck_scale
+			var bubble_h = 24.0 * truck_scale_y
+			
+			# Triangle tail pointing down-left toward the cabin window
+			var tail_base_l = bubble_pos + Vector2(-15.0 * truck_scale * 0.45, bubble_h / 2.0)
+			var tail_base_r = bubble_pos + Vector2(10.0 * truck_scale * 0.45, bubble_h / 2.0)
+			var tail_tip = truck_pos + Vector2(90.0 * truck_scale, -35.0 * truck_scale_y)
+			
+			var tri_pts = PackedVector2Array([tail_base_l, tail_tip, tail_base_r])
+			
+			# Speech Bubble Shadow (shifted down-right)
+			var s_off = Vector2(0.0, 5.0)
+			var tri_shadow = PackedVector2Array([tri_pts[0] + s_off, tri_pts[1] + s_off, tri_pts[2] + s_off])
+			
+			draw_polygon(tri_shadow, PackedColorArray([Color("#0b0512")]))
+			draw_rect(Rect2(bubble_pos - Vector2(bubble_w/2.0, bubble_h/2.0) + s_off, Vector2(bubble_w, bubble_h)), Color("#0b0512"), true)
+			
+			# Speech Bubble Fill (Bright yellow comic-pop)
+			draw_polygon(tri_pts, PackedColorArray([Color("#f1c40f")]))
+			draw_rect(Rect2(bubble_pos - Vector2(bubble_w/2.0, bubble_h/2.0), Vector2(bubble_w, bubble_h)), Color("#f1c40f"), true)
+			
+			# Black outlines of bubble + pointer tail
+			draw_polyline(PackedVector2Array([
+				bubble_pos + Vector2(-bubble_w/2.0, -bubble_h/2.0),
+				bubble_pos + Vector2(bubble_w/2.0, -bubble_h/2.0),
+				bubble_pos + Vector2(bubble_w/2.0, bubble_h/2.0),
+				tail_base_r,
+				tail_tip,
+				tail_base_l,
+				bubble_pos + Vector2(-bubble_w/2.0, bubble_h/2.0),
+				bubble_pos + Vector2(-bubble_w/2.0, -bubble_h/2.0)
+			]), Color.BLACK, 4.0)
+			
+			# Comic text "BEEP!"
+			var b_text = "BEEP! BEEP!"
+			var b_font_size = int(8.0 * truck_scale)
+			if b_font_size < 10:
+				b_font_size = 10
+			var b_font = custom_font if custom_font else get_theme_default_font()
+			
+			# Draw text outline for legibility
+			var b_size = b_font.get_string_size(b_text, HORIZONTAL_ALIGNMENT_CENTER, -1, b_font_size)
+			var b_pos = bubble_pos - Vector2(b_size.x/2.0, -b_font_size * 0.3)
+			
+			for offset in [Vector2(2, 2), Vector2(-2, 2), Vector2(2, -2), Vector2(-2, -2), Vector2(0, 2), Vector2(0, -2), Vector2(2, 0), Vector2(-2, 0)]:
+				draw_string(b_font, b_pos + offset, b_text, HORIZONTAL_ALIGNMENT_LEFT, -1, b_font_size, Color.BLACK)
+			# Text fill
+			draw_string(b_font, b_pos, b_text, HORIZONTAL_ALIGNMENT_LEFT, -1, b_font_size, Color.WHITE)
 
 	# ─────────────────────────────────────────────────────────────────
 	# 2. Draw Falling Leaves (Scaled Up)
