@@ -1,0 +1,183 @@
+# Premium Godot 4 Button Templates
+
+This guide provides clean, ready-to-use code templates based on the custom button designs from this game. You can copy these into your other Godot projects to achieve the same look and feel.
+
+---
+
+## 1. The Boxy 3D Button Template
+This button style features a chunky, cartoon-like 3D appearance (similar to games like *Clash of Clans* or *Hill Climb Racing*). It uses `StyleBoxFlat` properties to simulate a "3D depression" when clicked, combined with smooth scale animations on hover.
+
+### Component Code (`BoxyButton.gd`)
+Create a new script that extends `Button` and attach it to any Button node in your scene:
+
+```gdscript
+# BoxyButton.gd
+extends Button
+
+@export var normal_color: Color = Color("#2ecc71") # Green
+@export var shadow_color: Color = Color("#27ae60") # Darker Green for 3D edge
+@export var font_size: int = 32
+
+# Style values
+const CORNER_RADIUS = 12
+const BORDER_BOTTOM = 8 # Thick bottom border creates the 3D look
+const BORDER_SIDE = 3
+
+var base_scale: Vector2
+
+func _ready() -> void:
+	base_scale = scale
+	_apply_boxy_style()
+	
+	# Connect hover/scale animations
+	mouse_entered.connect(_on_mouse_entered)
+	mouse_exited.connect(_on_mouse_exited)
+
+func _apply_boxy_style() -> void:
+	# 1. Normal State
+	var normal = StyleBoxFlat.new()
+	normal.bg_color = normal_color
+	normal.border_width_left = BORDER_SIDE
+	normal.border_width_top = BORDER_SIDE
+	normal.border_width_right = BORDER_SIDE
+	normal.border_width_bottom = BORDER_BOTTOM
+	normal.border_color = shadow_color
+	normal.set_corner_radius_all(CORNER_RADIUS)
+	
+	# Soft Drop Shadow
+	normal.shadow_color = Color(0, 0, 0, 0.3)
+	normal.shadow_size = 6
+	normal.shadow_offset = Vector2(0, 4)
+	
+	# 2. Hover State (Slightly brightened)
+	var hover = normal.duplicate()
+	hover.bg_color = normal_color.lightened(0.08)
+	
+	# 3. Pressed State (3D depression effect)
+	var pressed = normal.duplicate()
+	pressed.bg_color = normal_color.darkened(0.12)
+	pressed.border_width_bottom = BORDER_SIDE  # Flatten bottom
+	pressed.border_width_top = BORDER_BOTTOM     # Shift thickness to top
+	pressed.shadow_size = 2
+	pressed.shadow_offset = Vector2(0, 1)
+	
+	# Apply style overrides
+	add_theme_stylebox_override("normal", normal)
+	add_theme_stylebox_override("hover", hover)
+	add_theme_stylebox_override("pressed", pressed)
+	add_theme_stylebox_override("focus", hover)
+	
+	# Font overrides
+	add_theme_font_size_override("font_size", font_size)
+	add_theme_color_override("font_color", Color.WHITE)
+	add_theme_constant_override("outline_size", 8)
+	add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	
+	# Set pointing hand cursor
+	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	
+	# Center pivot offset for scale animations
+	pivot_offset = size / 2.0
+
+func _on_mouse_entered() -> void:
+	# Keep pivot updated in case of layout changes
+	pivot_offset = size / 2.0
+	var tween = create_tween()
+	tween.tween_property(self, "scale", base_scale * 1.08, 0.12)\
+			.set_trans(Tween.TRANS_BACK)\
+			.set_ease(Tween.EASE_OUT)
+
+func _on_mouse_exited() -> void:
+	var tween = create_tween()
+	tween.tween_property(self, "scale", base_scale, 0.15)\
+			.set_trans(Tween.TRANS_SINE)\
+			.set_ease(Tween.EASE_IN_OUT)
+```
+
+---
+
+## 2. The Glassmorphic Touch Button Template
+This template is optimized for mobile games using `TouchScreenButton`. It uses procedural drawing (`_draw`) to render a beautiful translucent, glossy circular button with high-contrast pause or action indicators and provides instant tactile scale feedback.
+
+### Component Code (`GlassTouchButton.gd`)
+Create a new Node2D/Control-based script, or attach this to a `TouchScreenButton`:
+
+```gdscript
+# GlassTouchButton.gd
+extends TouchScreenButton
+
+@export var button_radius: float = 40.0
+@export var button_color: Color = Color(1.0, 1.0, 1.0, 0.15) # Translucent white
+@export var border_color: Color = Color(1.0, 1.0, 1.0, 0.4)
+
+var visual_node: Control
+
+func _ready() -> void:
+	# Define Touch Target Area
+	var touch_shape = CircleShape2D.new()
+	touch_shape.radius = button_radius * 1.5 # Extra generous for fat fingers
+	shape = touch_shape
+	
+	# Create a visual child to handle custom drawing and scaling
+	visual_node = Control.new()
+	visual_node.size = Vector2(button_radius * 2, button_radius * 2)
+	visual_node.position = -visual_node.size / 2 # Center visual on button origin
+	visual_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(visual_node)
+	
+	# Setup Glass styleboxes
+	var glass_style = StyleBoxFlat.new()
+	glass_style.bg_color = button_color
+	glass_style.set_corner_radius_all(button_radius)
+	glass_style.border_width_left = 3
+	glass_style.border_width_top = 3
+	glass_style.border_width_right = 3
+	glass_style.border_width_bottom = 3
+	glass_style.border_color = border_color
+	glass_style.shadow_color = Color(0, 0, 0, 0.3)
+	glass_style.shadow_size = 15
+	
+	# Highlight Reflection Style
+	var gloss_style = StyleBoxFlat.new()
+	gloss_style.bg_color = Color(1, 1, 1, 0.12)
+	gloss_style.set_corner_radius_all(button_radius)
+	
+	# Custom Draw Routine
+	visual_node.draw.connect(func():
+		# Draw Glass Circle Base
+		visual_node.draw_style_box(glass_style, Rect2(Vector2.ZERO, visual_node.size))
+		
+		# Draw Glossy Top Reflection Shape
+		var gloss_rect = Rect2(
+			Vector2(button_radius * 0.25, button_radius * 0.12),
+			Vector2(visual_node.size.x - (button_radius * 0.5), visual_node.size.y * 0.3)
+		)
+		visual_node.draw_style_box(gloss_style, gloss_rect)
+		
+		# Draw Custom Inner Icon (e.g. Pause Bars)
+		var center = visual_node.size / 2
+		var bar_w = button_radius * 0.25
+		var bar_h = button_radius * 0.8
+		
+		# Left Bar
+		visual_node.draw_rect(Rect2(center.x - bar_w - (button_radius * 0.1), center.y - (bar_h / 2), bar_w, bar_h), Color.WHITE)
+		# Right Bar
+		visual_node.draw_rect(Rect2(center.x + (button_radius * 0.1), center.y - (bar_h / 2), bar_w, bar_h), Color.WHITE)
+	)
+	
+	# Connect Signals for Tactile Action Feedback
+	pressed.connect(_on_pressed)
+	released.connect(_on_released)
+
+func _on_pressed() -> void:
+	# Squish and glow when tapped
+	visual_node.scale = Vector2(0.85, 0.85)
+	visual_node.modulate = Color(1.5, 1.5, 1.5)
+
+func _on_released() -> void:
+	# Snap back to normal size
+	visual_node.scale = Vector2(1.0, 1.0)
+	visual_node.modulate = Color.WHITE
+	
+	# Insert your trigger logic here (e.g. emit signal or pause game)
+```
