@@ -172,13 +172,13 @@ func _process(delta: float) -> void:
 			elif click_anim_time < 0.45:
 				# 2. Launch jump
 				var t = (click_anim_time - 0.15) / 0.30
-				jump_offset = -sin(t * PI) * 25.0
+				jump_offset = - sin(t * PI) * 25.0
 				scale_modifier.y = lerp(0.97, 1.02, sin(t * PI))
 				scale_modifier.x = lerp(1.015, 0.985, sin(t * PI))
 			elif click_anim_time < 0.65:
 				# 3. Falling back down
 				var t = (click_anim_time - 0.45) / 0.20
-				jump_offset = -cos(t * PI/2.0) * 6.0 # residual drop height
+				jump_offset = - cos(t * PI / 2.0) * 6.0 # residual drop height
 				scale_modifier.y = lerp(1.02, 0.975, t)
 				scale_modifier.x = lerp(0.985, 1.015, t)
 			elif click_anim_time < 0.85:
@@ -369,7 +369,6 @@ func _draw() -> void:
 	_draw_gear(gF_center, 70.0, 6, -elapsed * 0.5334 + 0.15, Color("#5d6d7e"))
 
 
-
 	# ─────────────────────────────────────────────────────────────────
 	# 1.9. Draw Hydraulic Lift & Slab Platform (Garage Theme)
 	# ─────────────────────────────────────────────────────────────────
@@ -405,15 +404,15 @@ func _draw() -> void:
 		
 		for px in [piston_left_x, piston_right_x]:
 			# Piston 3D Shadow (shifted right)
-			draw_rect(Rect2(px - piston_width/2.0 + 8.0, slab_y, piston_width, screen_size.y - slab_y), Color("#0b0512"), true)
+			draw_rect(Rect2(px - piston_width / 2.0 + 8.0, slab_y, piston_width, screen_size.y - slab_y), Color("#0b0512"), true)
 			# Piston core
-			draw_rect(Rect2(px - piston_width/2.0, slab_y, piston_width, screen_size.y - slab_y), piston_color, true)
+			draw_rect(Rect2(px - piston_width / 2.0, slab_y, piston_width, screen_size.y - slab_y), piston_color, true)
 			# Piston inner shading/sheen
-			draw_rect(Rect2(px - piston_width/2.0, slab_y, piston_width * 0.35, screen_size.y - slab_y), Color("#bdc3c7"), true)
+			draw_rect(Rect2(px - piston_width / 2.0, slab_y, piston_width * 0.35, screen_size.y - slab_y), Color("#bdc3c7"), true)
 			draw_rect(Rect2(px + piston_width * 0.15, slab_y, piston_width * 0.35, screen_size.y - slab_y), piston_shadow, true)
 			# Outlines
-			draw_line(Vector2(px - piston_width/2.0, slab_y), Vector2(px - piston_width/2.0, screen_size.y), Color.BLACK, 4.5)
-			draw_line(Vector2(px + piston_width/2.0, slab_y), Vector2(px + piston_width/2.0, screen_size.y), Color.BLACK, 4.5)
+			draw_line(Vector2(px - piston_width / 2.0, slab_y), Vector2(px - piston_width / 2.0, screen_size.y), Color.BLACK, 4.5)
+			draw_line(Vector2(px + piston_width / 2.0, slab_y), Vector2(px + piston_width / 2.0, screen_size.y), Color.BLACK, 4.5)
 
 		# --- B. Draw Concrete Block 3D Drop Shadow ---
 		var shadow_offset = Vector2(0.0, 8.0)
@@ -509,22 +508,22 @@ func _draw() -> void:
 			var tri_shadow = PackedVector2Array([tri_pts[0] + s_off, tri_pts[1] + s_off, tri_pts[2] + s_off])
 			
 			draw_polygon(tri_shadow, PackedColorArray([Color("#0b0512")]))
-			draw_rect(Rect2(bubble_pos - Vector2(bubble_w/2.0, bubble_h/2.0) + s_off, Vector2(bubble_w, bubble_h)), Color("#0b0512"), true)
+			draw_rect(Rect2(bubble_pos - Vector2(bubble_w / 2.0, bubble_h / 2.0) + s_off, Vector2(bubble_w, bubble_h)), Color("#0b0512"), true)
 			
 			# Speech Bubble Fill (Bright yellow comic-pop)
 			draw_polygon(tri_pts, PackedColorArray([Color("#f1c40f")]))
-			draw_rect(Rect2(bubble_pos - Vector2(bubble_w/2.0, bubble_h/2.0), Vector2(bubble_w, bubble_h)), Color("#f1c40f"), true)
+			draw_rect(Rect2(bubble_pos - Vector2(bubble_w / 2.0, bubble_h / 2.0), Vector2(bubble_w, bubble_h)), Color("#f1c40f"), true)
 			
 			# Black outlines of bubble + pointer tail
 			draw_polyline(PackedVector2Array([
-				bubble_pos + Vector2(-bubble_w/2.0, -bubble_h/2.0),
-				bubble_pos + Vector2(bubble_w/2.0, -bubble_h/2.0),
-				bubble_pos + Vector2(bubble_w/2.0, bubble_h/2.0),
+				bubble_pos + Vector2(-bubble_w / 2.0, -bubble_h / 2.0),
+				bubble_pos + Vector2(bubble_w / 2.0, -bubble_h / 2.0),
+				bubble_pos + Vector2(bubble_w / 2.0, bubble_h / 2.0),
 				tail_base_r,
 				tail_tip,
 				tail_base_l,
-				bubble_pos + Vector2(-bubble_w/2.0, bubble_h/2.0),
-				bubble_pos + Vector2(-bubble_w/2.0, -bubble_h/2.0)
+				bubble_pos + Vector2(-bubble_w / 2.0, bubble_h / 2.0),
+				bubble_pos + Vector2(-bubble_w / 2.0, -bubble_h / 2.0)
 			]), Color.BLACK, 4.0)
 			
 			# Comic text "BEEP!"
@@ -536,7 +535,7 @@ func _draw() -> void:
 			
 			# Draw text outline for legibility
 			var b_size = b_font.get_string_size(b_text, HORIZONTAL_ALIGNMENT_CENTER, -1, b_font_size)
-			var b_pos = bubble_pos - Vector2(b_size.x/2.0, -b_font_size * 0.3)
+			var b_pos = bubble_pos - Vector2(b_size.x / 2.0, -b_font_size * 0.3)
 			
 			for offset in [Vector2(2, 2), Vector2(-2, 2), Vector2(2, -2), Vector2(-2, -2), Vector2(0, 2), Vector2(0, -2), Vector2(2, 0), Vector2(-2, 0)]:
 				draw_string(b_font, b_pos + offset, b_text, HORIZONTAL_ALIGNMENT_LEFT, -1, b_font_size, Color.BLACK)
@@ -585,7 +584,6 @@ func _draw_stylized_leaf(leaf: Leaf) -> void:
 	var vein_start = leaf_transform * Vector2(0, 38)
 	var vein_end = leaf_transform * Vector2(0, -38)
 	draw_line(vein_start, vein_end, Color("#0d1804"), 3.0)
-
 
 
 func _draw_cinematic_letterbox(size_rect: Vector2) -> void:
@@ -775,10 +773,10 @@ func _draw_custom_play_button() -> void:
 		shadow_offset = 4.0
 		
 	# Define asymmetrical corner coordinates for an imperfect hand-drawn rectangle
-	var c0 = Vector2(8.0, 6.0)        # Top-left
-	var c1 = Vector2(w - 10.0, 4.0)   # Top-right
+	var c0 = Vector2(8.0, 6.0) # Top-left
+	var c1 = Vector2(w - 10.0, 4.0) # Top-right
 	var c2 = Vector2(w - 6.0, h - 8.0) # Bottom-right
-	var c3 = Vector2(10.0, h - 4.0)    # Bottom-left
+	var c3 = Vector2(10.0, h - 4.0) # Bottom-left
 	
 	# 1. Draw the 3D extrusion shadow (bottom layer)
 	var shadow_pts = PackedVector2Array([
@@ -822,7 +820,7 @@ func _draw_custom_play_button() -> void:
 	play_btn.draw_line(hi_start, hi_end, Color("#ffea79", 0.6), 5.0)
 	
 	# 4. Draw bold comic text "PLAY" centered on the front face
-	var text = "PLAY"
+	var text = "START"
 	var font_size = 64
 	var font = custom_font if custom_font else get_theme_default_font()
 	
@@ -963,8 +961,8 @@ func _on_action_button_hover(btn: Button, is_hover: bool) -> void:
 	btn.pivot_offset = btn.size / 2.0
 	var tween = create_tween()
 	var target_scale = Vector2(1.12, 1.12) if is_hover else Vector2(1.0, 1.0)
-	tween.tween_property(btn, "scale", target_scale, 0.12)\
-			.set_trans(Tween.TRANS_BACK)\
+	tween.tween_property(btn, "scale", target_scale, 0.12) \
+			.set_trans(Tween.TRANS_BACK) \
 			.set_ease(Tween.EASE_OUT)
 
 func _on_action_button_pressed(action_name: String) -> void:
@@ -976,8 +974,8 @@ func _on_play_hover(is_hover: bool) -> void:
 	play_btn.pivot_offset = play_btn.size / 2.0
 	var tween = create_tween()
 	var target_scale = Vector2(1.18, 1.18) if is_hover else Vector2(1.0, 1.0)
-	tween.tween_property(play_btn, "scale", target_scale, 0.12)\
-			.set_trans(Tween.TRANS_BACK)\
+	tween.tween_property(play_btn, "scale", target_scale, 0.12) \
+			.set_trans(Tween.TRANS_BACK) \
 			.set_ease(Tween.EASE_OUT)
 
 func _on_play_pressed() -> void:
@@ -1088,11 +1086,11 @@ class GemIcon extends Control:
 		
 		# Define outer coordinates of diamond gemstone
 		var pts = PackedVector2Array([
-			center + Vector2(0, -r),               # Top
-			center + Vector2(r * 0.85, -r * 0.25),  # Top Right
-			center + Vector2(r * 0.45, r),          # Bottom Right
-			center + Vector2(-r * 0.45, r),         # Bottom Left
-			center + Vector2(-r * 0.85, -r * 0.25)  # Top Left
+			center + Vector2(0, -r), # Top
+			center + Vector2(r * 0.85, -r * 0.25), # Top Right
+			center + Vector2(r * 0.45, r), # Bottom Right
+			center + Vector2(-r * 0.45, r), # Bottom Left
+			center + Vector2(-r * 0.85, -r * 0.25) # Top Left
 		])
 		
 		# Base shading
