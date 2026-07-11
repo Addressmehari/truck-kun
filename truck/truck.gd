@@ -1669,3 +1669,25 @@ func stop_tunnel_transition() -> void:
 				if top_bar and is_instance_valid(top_bar): top_bar.queue_free()
 				if bottom_bar and is_instance_valid(bottom_bar): bottom_bar.queue_free()
 			)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if is_dead:
+		return
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		if not get_tree().paused:
+			get_viewport().set_input_as_handled()
+			_spawn_pause_menu()
+
+func _spawn_pause_menu() -> void:
+	if get_tree().root.has_node("PauseMenu"):
+		return
+		
+	var pause_script = load("res://ui/pause_menu.gd")
+	if not pause_script:
+		push_error("[Truck] pause_menu.gd not found!")
+		return
+	var menu = CanvasLayer.new()
+	menu.set_script(pause_script)
+	menu.name = "PauseMenu"
+	get_tree().root.add_child(menu)
+	menu.call("show_pause")

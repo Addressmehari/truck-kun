@@ -126,6 +126,7 @@ func _ready() -> void:
 	var btn = Button.new()
 	btn.text = "RETRY"
 	btn.custom_minimum_size = Vector2(220, 58)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.pressed.connect(_on_retry)
 	_vbox.add_child(btn)
@@ -136,6 +137,7 @@ func _ready() -> void:
 	var menu_btn = Button.new()
 	menu_btn.text = "MAIN MENU"
 	menu_btn.custom_minimum_size = Vector2(220, 58)
+	menu_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	menu_btn.focus_mode = Control.FOCUS_NONE
 	menu_btn.pressed.connect(_on_main_menu)
 	_vbox.add_child(menu_btn)
