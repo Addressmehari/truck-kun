@@ -15,7 +15,7 @@ func _ready() -> void:
 	if ResourceLoader.exists(FONT_PATH):
 		custom_font = load(FONT_PATH)
 	else:
-		custom_font = get_theme_default_font()
+		custom_font = ThemeDB.get_default_theme().get_default_font()
 		push_warning("RetryMenu: Custom font not found at: " + FONT_PATH)
 
 	# ── Root control (fills the whole screen) ────────────────────────────────
@@ -204,7 +204,7 @@ func _draw_custom_button(btn: Button, face_color_hex: String, shadow_color_hex: 
 	
 	# 4. Draw Text
 	var font_size = 24
-	var font = custom_font if custom_font else get_theme_default_font()
+	var font = custom_font if custom_font else ThemeDB.get_default_theme().get_default_font()
 	
 	var text_size = font.get_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
 	var face_center = (c0 + c1 + c2 + c3) / 4.0 + face_offset
