@@ -62,6 +62,18 @@ func _ready() -> void:
 	btn.pressed.connect(_on_retry)
 	vbox.add_child(btn)
 
+	# Main Menu button
+	var menu_btn = Button.new()
+	menu_btn.text = "MAIN MENU"
+	menu_btn.custom_minimum_size = Vector2(160, 52)
+	menu_btn.focus_mode = Control.FOCUS_NONE
+	var menu_sty = sty.duplicate()
+	menu_btn.add_theme_stylebox_override("normal", menu_sty)
+	menu_btn.add_theme_color_override("font_color", Color.WHITE)
+	menu_btn.add_theme_font_size_override("font_size", 24)
+	menu_btn.pressed.connect(_on_main_menu)
+	vbox.add_child(menu_btn)
+
 func show_death(cause: String, _distance: float) -> void:
 	_cause_label.text = cause
 	visible = true
@@ -78,3 +90,15 @@ func _on_retry() -> void:
 		gs.transition_to_scene("res://main.tscn")
 	else:
 		get_tree().change_scene_to_file("res://main.tscn")
+
+func _on_main_menu() -> void:
+	visible = false
+	var gs = get_node_or_null("/root/GameState")
+	if gs:
+		gs.is_continuing = false
+		gs.carryover_coins = 0
+		gs.carryover_distance_m = 0.0
+		gs.transition_to_scene("res://main_menu/main_menu.tscn")
+	else:
+		get_tree().change_scene_to_file("res://main_menu/main_menu.tscn")
+

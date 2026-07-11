@@ -32,8 +32,10 @@ var beep_bubble_time: float = -1.0
 @onready var play_btn = $UILayout/BottomLayout/HBoxContainer/PlayButtonContainer/PlayButton
 @onready var coin_val_label = $UILayout/Header/StatsContainer/CoinBar/Margin/HBox/ValueLabel
 @onready var gem_val_label = $UILayout/Header/StatsContainer/GemBar/Margin/HBox/ValueLabel
+@onready var highscore_val_label = $UILayout/Header/StatsContainer/HighScoreBar/Margin/HBox/ValueLabel
 @onready var coin_bar = $UILayout/Header/StatsContainer/CoinBar
 @onready var gem_bar = $UILayout/Header/StatsContainer/GemBar
+@onready var highscore_bar = $UILayout/Header/StatsContainer/HighScoreBar
 @onready var left_buttons_container = $UILayout/BottomLayout/HBoxContainer/LeftButtons
 
 func _ready() -> void:
@@ -52,17 +54,18 @@ func _ready() -> void:
 		leaves.append(create_random_leaf(true))
 
 	# Setup Stat Bars
-	var gem_bar = $UILayout/Header/StatsContainer/GemBar
-	var gem_plus = $UILayout/Header/StatsContainer/GemBar/Margin/HBox/PlusButton
 	var gem_anchor = $UILayout/Header/StatsContainer/GemBar/Margin/HBox/IconAnchor
-	_style_stats_bar(gem_bar, gem_plus)
+	_style_stats_bar(gem_bar)
 	gem_anchor.add_child(GemIcon.new())
 
-	var coin_bar = $UILayout/Header/StatsContainer/CoinBar
-	var coin_plus = $UILayout/Header/StatsContainer/CoinBar/Margin/HBox/PlusButton
 	var coin_anchor = $UILayout/Header/StatsContainer/CoinBar/Margin/HBox/IconAnchor
-	_style_stats_bar(coin_bar, coin_plus)
+	_style_stats_bar(coin_bar)
 	coin_anchor.add_child(CoinIcon.new())
+
+	var highscore_bar_node = $UILayout/Header/StatsContainer/HighScoreBar
+	var highscore_anchor = $UILayout/Header/StatsContainer/HighScoreBar/Margin/HBox/IconAnchor
+	_style_stats_bar(highscore_bar_node)
+	highscore_anchor.add_child(TrophyIcon.new())
 
 	# Style and wire the Play Button
 	if is_instance_valid(play_btn):
@@ -88,16 +91,21 @@ func _ready() -> void:
 	# Set dynamic stats from game state if available
 	var gs = get_node_or_null("/root/GameState")
 	if gs:
-		coin_val_label.text = str(gs.carryover_coins if gs.carryover_coins > 0 else 25)
+		coin_val_label.text = str(gs.total_coins)
+		gem_val_label.text = str(gs.total_gems)
+		highscore_val_label.text = "%d M" % int(gs.best_distance)
 	else:
-		coin_val_label.text = "25"
-	gem_val_label.text = "25" # Gem starting default value
+		coin_val_label.text = "0"
+		gem_val_label.text = "0"
+		highscore_val_label.text = "0 M"
 
 	# Set font and color overrides on labels for readability on light backgrounds
 	coin_val_label.add_theme_font_override("font", custom_font)
 	gem_val_label.add_theme_font_override("font", custom_font)
+	highscore_val_label.add_theme_font_override("font", custom_font)
 	coin_val_label.add_theme_color_override("font_color", Color("#111111"))
 	gem_val_label.add_theme_color_override("font_color", Color("#111111"))
+	highscore_val_label.add_theme_color_override("font_color", Color("#111111"))
 	
 	# Connect resize signal to refresh drawing metrics
 	get_tree().root.size_changed.connect(queue_redraw)
@@ -237,6 +245,8 @@ func _process(delta: float) -> void:
 		coin_bar.queue_redraw()
 	if is_instance_valid(gem_bar):
 		gem_bar.queue_redraw()
+	if is_instance_valid(highscore_bar):
+		highscore_bar.queue_redraw()
 
 	# Trigger redraw for procedural canvas elements
 	queue_redraw()
@@ -636,7 +646,7 @@ func _draw_cinematic_letterbox(size_rect: Vector2) -> void:
 # 5. UI Custom Styling & Signalling
 # ─────────────────────────────────────────────────────────────────
 
-func _style_stats_bar(bar: PanelContainer, plus_btn: Button) -> void:
+func _style_stats_bar(bar: PanelContainer, plus_btn: Button = null) -> void:
 	# Clear default styleboxes so we draw manually
 	var empty = StyleBoxEmpty.new()
 	bar.add_theme_stylebox_override("panel", empty)
@@ -646,39 +656,40 @@ func _style_stats_bar(bar: PanelContainer, plus_btn: Button) -> void:
 		bar.draw.connect(_draw_custom_stats_bar.bind(bar))
 	
 	# Style the "+" button
-	var btn_normal = StyleBoxFlat.new()
-	btn_normal.bg_color = Color("#d35400")
-	btn_normal.border_color = Color.BLACK
-	btn_normal.border_width_left = 3
-	btn_normal.border_width_top = 3
-	btn_normal.border_width_right = 3
-	btn_normal.border_width_bottom = 3
-	btn_normal.set_corner_radius_all(99) # Circle
-	
-	var btn_hover = btn_normal.duplicate()
-	btn_hover.bg_color = Color("#e67e22") # Bright orange
-	
-	var btn_pressed = btn_normal.duplicate()
-	btn_pressed.bg_color = Color("#a04000")
-	
-	plus_btn.add_theme_stylebox_override("normal", btn_normal)
-	plus_btn.add_theme_stylebox_override("hover", btn_hover)
-	plus_btn.add_theme_stylebox_override("pressed", btn_pressed)
-	plus_btn.add_theme_stylebox_override("focus", btn_hover)
-	plus_btn.add_theme_font_override("font", custom_font)
-	plus_btn.add_theme_font_size_override("font_size", 24)
-	plus_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	plus_btn.pivot_offset = plus_btn.size / 2.0
-	
-	# Connect plus button hover animations
-	plus_btn.mouse_entered.connect(func():
-		var tween = create_tween()
-		tween.tween_property(plus_btn, "scale", Vector2(1.2, 1.2), 0.1)
-	)
-	plus_btn.mouse_exited.connect(func():
-		var tween = create_tween()
-		tween.tween_property(plus_btn, "scale", Vector2(1.0, 1.0), 0.1)
-	)
+	if plus_btn:
+		var btn_normal = StyleBoxFlat.new()
+		btn_normal.bg_color = Color("#d35400")
+		btn_normal.border_color = Color.BLACK
+		btn_normal.border_width_left = 3
+		btn_normal.border_width_top = 3
+		btn_normal.border_width_right = 3
+		btn_normal.border_width_bottom = 3
+		btn_normal.set_corner_radius_all(99) # Circle
+		
+		var btn_hover = btn_normal.duplicate()
+		btn_hover.bg_color = Color("#e67e22") # Bright orange
+		
+		var btn_pressed = btn_normal.duplicate()
+		btn_pressed.bg_color = Color("#a04000")
+		
+		plus_btn.add_theme_stylebox_override("normal", btn_normal)
+		plus_btn.add_theme_stylebox_override("hover", btn_hover)
+		plus_btn.add_theme_stylebox_override("pressed", btn_pressed)
+		plus_btn.add_theme_stylebox_override("focus", btn_hover)
+		plus_btn.add_theme_font_override("font", custom_font)
+		plus_btn.add_theme_font_size_override("font_size", 24)
+		plus_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		plus_btn.pivot_offset = plus_btn.size / 2.0
+		
+		# Connect plus button hover animations
+		plus_btn.mouse_entered.connect(func():
+			var tween = create_tween()
+			tween.tween_property(plus_btn, "scale", Vector2(1.2, 1.2), 0.1)
+		)
+		plus_btn.mouse_exited.connect(func():
+			var tween = create_tween()
+			tween.tween_property(plus_btn, "scale", Vector2(1.0, 1.0), 0.1)
+		)
 
 func _draw_custom_stats_bar(bar: PanelContainer) -> void:
 	if not is_instance_valid(bar):
@@ -1062,18 +1073,55 @@ class CoinIcon extends Control:
 		
 	func _draw() -> void:
 		var center = size / 2.0
-		var rad = min(size.x, size.y) / 2.0
+		var r = min(size.x, size.y) / 2.0
 		
-		# Outermost outline
-		draw_circle(center, rad, Color.BLACK)
-		# Outer rim
-		draw_circle(center, rad - 3.0, Color("#d4ac0d"))
-		# Gold highlight
-		draw_circle(center, rad - 5.0, Color("#f1c40f"))
-		# Debossed center circle
-		draw_circle(center, rad * 0.5, Color("#b7950b"))
-		# Specular shine
-		draw_circle(center - Vector2(rad * 0.35, rad * 0.35), rad * 0.25, Color.WHITE)
+		# Outermost black border
+		draw_circle(center, r, Color.BLACK)
+		
+		var _color_main = Color(0.88, 0.60, 0.02)
+		var _color_inner = Color(1.0, 0.88, 0.28)
+		var _color_gem_dark = Color(0.72, 0.44, 0.0)
+		var _color_gem_light = Color(1.0, 0.95, 0.6)
+		
+		# 1. Outer Base Coin Body
+		draw_circle(center, r - 1.5, _color_main)
+
+		# 2. Inner Face
+		draw_circle(center, r - 5.0, _color_inner)
+
+		# 3. Inner decorative concentric groove ring
+		draw_arc(center, r - 8.0, 0.0, TAU, 36, _color_main.lerp(Color.BLACK, 0.1), 1.5)
+
+		# 4. Smooth specular gloss highlight (top-left crescent)
+		draw_circle(center - Vector2(r * 0.25, r * 0.25), r * 0.4, Color(1.0, 1.0, 1.0, 0.4))
+
+		# 5. High-contrast crisp outer rim border
+		draw_arc(center, r - 2.0, 0.0, TAU, 40, _color_main.lerp(Color.BLACK, 0.4), 2.5)
+
+		# 6. Premium Geometric Inside Design: Layered Diamond Core
+		var d_size = r * 0.40
+		var d_shadow = Color(0.0, 0.0, 0.0, 0.35)
+		
+		var d_top = center + Vector2(0, -d_size)
+		var d_bottom = center + Vector2(0, d_size)
+		var d_left = center + Vector2(-d_size, 0)
+		var d_right = center + Vector2(d_size, 0)
+		
+		# Diamond Shadow Offset
+		var s_off = Vector2(0, 1.5)
+		draw_colored_polygon(PackedVector2Array([d_top + s_off, d_right + s_off, d_bottom + s_off, d_left + s_off]), d_shadow)
+		
+		# Diamond Left Facet (Darker shade)
+		draw_colored_polygon(PackedVector2Array([d_top, center, d_bottom, d_left]), _color_gem_dark)
+		
+		# Diamond Right Facet (Lighter shade)
+		draw_colored_polygon(PackedVector2Array([d_top, d_right, d_bottom, center]), _color_gem_light)
+		
+		# Diamond Center Dividing/Border Lines
+		var border_color = _color_main.lerp(Color.BLACK, 0.5)
+		draw_line(d_top, d_bottom, border_color, 1.5)
+		draw_line(d_left, d_right, border_color, 1.5)
+		draw_polyline(PackedVector2Array([d_top, d_right, d_bottom, d_left, d_top]), border_color, 2.0)
 
 class GemIcon extends Control:
 	func _init() -> void:
@@ -1117,6 +1165,90 @@ class GemIcon extends Control:
 		draw_line(center + Vector2(r * 0.85, -r * 0.25), center + Vector2(0, 0), Color.BLACK, 1.8)
 		draw_line(center + Vector2(-r * 0.45, r), center + Vector2(0, 0), Color.BLACK, 1.8)
 		draw_line(center + Vector2(r * 0.45, r), center + Vector2(0, 0), Color.BLACK, 1.8)
+
+class TrophyIcon extends Control:
+	func _init() -> void:
+		custom_minimum_size = Vector2(38, 38)
+		size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		
+	func _draw() -> void:
+		var center = size / 2.0
+		var r = min(size.x, size.y) / 2.0
+		
+		# Define colors matching the game's premium palette
+		var gold_color = Color("#f1c40f")
+		var gold_dark = Color("#d4ac0d")
+		var gold_light = Color("#f9e79f")
+		var border_color = Color.BLACK
+		
+		# 1. Handles (left and right)
+		# Left Handle
+		draw_arc(center + Vector2(-r * 0.4, -r * 0.15), r * 0.3, PI/2.0, 3.0 * PI/2.0, 16, border_color, 4.0)
+		draw_arc(center + Vector2(-r * 0.4, -r * 0.15), r * 0.3, PI/2.0, 3.0 * PI/2.0, 16, gold_color, 1.8)
+		
+		# Right Handle
+		draw_arc(center + Vector2(r * 0.4, -r * 0.15), r * 0.3, -PI/2.0, PI/2.0, 16, border_color, 4.0)
+		draw_arc(center + Vector2(r * 0.4, -r * 0.15), r * 0.3, -PI/2.0, PI/2.0, 16, gold_color, 1.8)
+		
+		# 2. Base (Trapezoid / Slate base)
+		var base_pts = PackedVector2Array([
+			center + Vector2(-r * 0.4, r * 0.7),
+			center + Vector2(r * 0.4, r * 0.7),
+			center + Vector2(r * 0.25, r * 0.45),
+			center + Vector2(-r * 0.25, r * 0.45)
+		])
+		var base_outline = PackedVector2Array()
+		for pt in base_pts:
+			base_outline.append(pt)
+		base_outline.append(base_pts[0])
+		
+		draw_polygon(base_pts, PackedColorArray([Color("#34495e")])) # Dark slate base
+		draw_polyline(base_outline, border_color, 3.5)
+		
+		# 3. Stem (connector from base to cup)
+		var stem_rect = Rect2(center.x - r * 0.1, center.y + r * 0.1, r * 0.2, r * 0.35)
+		draw_rect(stem_rect, gold_dark, true)
+		draw_rect(stem_rect, border_color, false, 3.5)
+		
+		# 4. Cup (chalice top)
+		var cup_pts = PackedVector2Array([
+			center + Vector2(-r * 0.5, -r * 0.6), # Top Left
+			center + Vector2(r * 0.5, -r * 0.6),  # Top Right
+			center + Vector2(r * 0.4, 0.0),       # Bottom Right
+			center + Vector2(0.0, r * 0.25),      # Bottom Center
+			center + Vector2(-r * 0.4, 0.0)       # Bottom Left
+		])
+		
+		var cup_outline = PackedVector2Array()
+		for pt in cup_pts:
+			cup_outline.append(pt)
+		cup_outline.append(cup_pts[0])
+		
+		# Base gold cup fill
+		draw_polygon(cup_pts, PackedColorArray([gold_color]))
+		
+		# Left/Darker shading for 3D depth
+		var cup_left_pts = PackedVector2Array([
+			center + Vector2(-r * 0.5, -r * 0.6),
+			center + Vector2(0.0, -r * 0.6),
+			center + Vector2(0.0, r * 0.25),
+			center + Vector2(-r * 0.4, 0.0)
+		])
+		draw_polygon(cup_left_pts, PackedColorArray([gold_dark]))
+		
+		# Shiny Specular Highlight on the right rim
+		var cup_highlight = PackedVector2Array([
+			center + Vector2(r * 0.25, -r * 0.5),
+			center + Vector2(r * 0.4, -r * 0.5),
+			center + Vector2(r * 0.32, -r * 0.1)
+		])
+		draw_polygon(cup_highlight, PackedColorArray([gold_light]))
+		
+		# Cup Outer Outline
+		draw_polyline(cup_outline, border_color, 4.0)
+		
+		# Rim inner line (rim opening)
+		draw_line(center + Vector2(-r * 0.5, -r * 0.6), center + Vector2(r * 0.5, -r * 0.6), border_color, 3.5)
 
 func _freeze_truck_physics(node: Node) -> void:
 	if node is RigidBody2D:

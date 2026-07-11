@@ -23,6 +23,8 @@ extends Node
 @export var petrol_critical_threshold: float = 0.25
 ## Chance (0-1) that the next slot spawns a mystery box
 @export_range(0.0, 0.5, 0.01) var mystery_box_chance: float = 0.05
+## Chance (0-1) that the next slot spawns a gem
+@export_range(0.0, 0.5, 0.01) var gem_chance: float = 0.08
 ## Y offset above road surface so coins hover visibly
 @export var hover_height: float = -20.0
 ## Minimum cooldown duration (seconds) after a mini-event ends before mystery boxes can spawn again
@@ -32,6 +34,7 @@ extends Node
 
 # ─── Internal ─────────────────────────────────────────────────────────────────
 var _coin_scene: PackedScene
+var _gem_scene: PackedScene
 var _petrol_scene: PackedScene
 var _mystery_box_scene: PackedScene
 var _road: StaticBody2D
@@ -51,11 +54,15 @@ func _ready() -> void:
 	_road   = get_node_or_null("/root/main/Road")
 	_chassis = get_node_or_null("/root/main/truck/chassis")
 
-	# Preload scene
+	# Preload scenes
 	_coin_scene = load("res://obstacles/coin.tscn")
 	if not _coin_scene:
 		push_error("CoinSpawner: cannot load res://obstacles/coin.tscn")
 		return
+
+	_gem_scene = load("res://obstacles/gem.tscn")
+	if not _gem_scene:
+		push_warning("CoinSpawner: gem.tscn not found — gems won't spawn")
 
 	_petrol_scene = load("res://obstacles/petrol.tscn")
 	if not _petrol_scene:
@@ -239,6 +246,10 @@ func _fill_pool() -> void:
 			_spawn_petrol(_next_spawn_x)
 			_last_petrol_spawn_x = _next_spawn_x
 			ahead_count += 1
+		elif _gem_scene and _rng.randf() < gem_chance:
+			# Gem
+			_spawn_gem(_next_spawn_x)
+			ahead_count += 1
 		elif _rng.randf() < cluster_chance:
 			_spawn_cluster(_next_spawn_x)
 			ahead_count += 3
@@ -261,6 +272,19 @@ func _spawn_coin(world_x: float, x_jitter: float = 0.0) -> void:
 
 	coin.global_position = Vector2(spawn_x, road_y + hover_height)
 	_coins.append(coin)
+
+# ── Spawn a single gem at world X ─────────────────────────────────────────────
+func _spawn_gem(world_x: float, x_jitter: float = 0.0) -> void:
+	var gem = _gem_scene.instantiate()
+	get_parent().add_child.call_deferred(gem)
+
+	var spawn_x = world_x + x_jitter
+	var road_y = 0.0
+	if _road and _road.has_method("get_road_height"):
+		road_y = _road.call("get_road_height", spawn_x)
+
+	gem.global_position = Vector2(spawn_x, road_y + hover_height)
+	_coins.append(gem)
 
 # ── Spawn a tight triangle cluster of 3 coins ─────────────────────────────────
 func _spawn_cluster(world_x: float) -> void:

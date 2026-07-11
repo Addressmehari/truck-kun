@@ -12,10 +12,17 @@ var is_biome_transition: bool = false
 var carryover_coins: int = 0
 var carryover_distance_m: float = 0.0
 
+var total_coins: int = 0
+var total_gems: int = 0
+var best_distance: float = 0.0
+const SAVE_PATH: String = "user://highscore.cfg"
+
 var fade_layer: CanvasLayer
 var fade_rect: ColorRect
 
 func _ready() -> void:
+	load_coins()
+	
 	# Create a CanvasLayer for transition overlay (high layer index to draw on top of HUD)
 	fade_layer = CanvasLayer.new()
 	fade_layer.layer = 128
@@ -34,6 +41,34 @@ func _ready() -> void:
 	fade_rect.offset_bottom = 0
 	fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fade_layer.add_child(fade_rect)
+
+func load_coins() -> void:
+	var config = ConfigFile.new()
+	if config.load(SAVE_PATH) == OK:
+		total_coins = config.get_value("progression", "total_coins", 0)
+		total_gems = config.get_value("progression", "total_gems", 0)
+		best_distance = config.get_value("progression", "best_distance", 0.0)
+	else:
+		total_coins = 0
+		total_gems = 0
+		best_distance = 0.0
+
+func save_coins() -> void:
+	var config = ConfigFile.new()
+	# Load existing file first to avoid overwriting other keys (e.g. best_distance)
+	var _err = config.load(SAVE_PATH)
+	config.set_value("progression", "total_coins", total_coins)
+	config.set_value("progression", "total_gems", total_gems)
+	config.save(SAVE_PATH)
+
+func add_to_total_coins(amount: int) -> void:
+	total_coins += amount
+	save_coins()
+
+func add_to_total_gems(amount: int) -> void:
+	total_gems += amount
+	save_coins()
+
 
 ## Performs a smooth video-like fade-to-black scene transition
 func transition_to_scene(target_scene_path: String) -> void:
