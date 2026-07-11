@@ -122,7 +122,8 @@ func _ready() -> void:
 	
 	# Propagate inspector-tweakable suspension values to child physics bodies
 	_apply_exports()
-		
+	_apply_upgrades()
+
 	# Instantiate visual parking indicator
 	var indicator_script = load("res://truck/parking_indicator.gd")
 	if indicator_script:
@@ -161,6 +162,29 @@ func _apply_exports() -> void:
 				body.suspension_stiffness = suspension_stiffness
 			if "suspension_damping" in body:
 				body.suspension_damping = suspension_damping
+
+func _apply_upgrades() -> void:
+	var gs = get_node_or_null("/root/GameState")
+	if not gs:
+		return
+		
+	# 1. Engine Power (torque + top speed)
+	var engine_lvl = gs.get("engine_level") if gs.get("engine_level") != null else 1
+	var torque_mult = 1.0 + (engine_lvl - 1) * 0.222 # up to 1.88x torque at Level 5
+	var speed_mult = 1.0 + (engine_lvl - 1) * 0.114 # up to 1.45x top speed at Level 5
+	
+	for tyre in [tyre_1, tyre_2, tyre_3]:
+		if is_instance_valid(tyre):
+			tyre.torque_power = 45000.0 * torque_mult
+			tyre.max_angular_velocity = 70.0 * speed_mult
+			
+	# 2. Tilt Control (air_tilt_power)
+	var air_lvl = gs.get("air_level") if gs.get("air_level") != null else 1
+	air_tilt_power = 6000.0 * (1.0 + (air_lvl - 1) * 0.25) # up to 2.0x tilt force at Level 5
+	
+	# 3. Shield (damage_scale)
+	var shield_lvl = gs.get("shield_level") if gs.get("shield_level") != null else 1
+	damage_scale = 0.3 * (1.0 - (shield_lvl - 1) * 0.20) # down to 0.06 damage scale at Level 5 (80% mitigation)
 
 func setup_shifter_ui() -> void:
 	# Style Shifter Panel (wooden panel backboard)
@@ -1189,8 +1213,18 @@ func _spawn_retry_menu(cause: String, distance: float) -> void:
 	var menu = CanvasLayer.new()
 	menu.set_script(retry_script)
 	menu.name = "RetryMenu"
+	
+	var coins_collected = 0
+	var gems_collected = 0
+	var hud_stats = get_node_or_null("HUD/HudStats")
+	if hud_stats:
+		if "coins" in hud_stats:
+			coins_collected = hud_stats.coins
+		if "gems" in hud_stats:
+			gems_collected = hud_stats.gems
+			
 	get_tree().root.add_child(menu)
-	menu.call("show_death", cause, distance)
+	menu.call("show_death", cause, distance, coins_collected, gems_collected)
 
 func _spawn_journey_completed_menu() -> void:
 	var journey_menu_script = load("res://ui/journey_completed_menu.gd")
@@ -1659,3 +1693,25 @@ func stop_tunnel_transition() -> void:
 				if top_bar and is_instance_valid(top_bar): top_bar.queue_free()
 				if bottom_bar and is_instance_valid(bottom_bar): bottom_bar.queue_free()
 			)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if is_dead:
+		return
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		if not get_tree().paused:
+			get_viewport().set_input_as_handled()
+			_spawn_pause_menu()
+
+func _spawn_pause_menu() -> void:
+	if get_tree().root.has_node("PauseMenu"):
+		return
+		
+	var pause_script = load("res://ui/pause_menu.gd")
+	if not pause_script:
+		push_error("[Truck] pause_menu.gd not found!")
+		return
+	var menu = CanvasLayer.new()
+	menu.set_script(pause_script)
+	menu.name = "PauseMenu"
+	get_tree().root.add_child(menu)
+	menu.call("show_pause")

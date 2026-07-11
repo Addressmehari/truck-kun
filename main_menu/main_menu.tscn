@@ -48,7 +48,7 @@ layout_mode = 2
 layout_mode = 2
 theme_override_constants/margin_left = 14
 theme_override_constants/margin_top = 4
-theme_override_constants/margin_right = 6
+theme_override_constants/margin_right = 14
 theme_override_constants/margin_bottom = 4
 
 [node name="HBox" type="HBoxContainer" parent="UILayout/Header/StatsContainer/GemBar/Margin"]
@@ -68,13 +68,6 @@ text = "25"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="PlusButton" type="Button" parent="UILayout/Header/StatsContainer/GemBar/Margin/HBox"]
-custom_minimum_size = Vector2(38, 38)
-layout_mode = 2
-size_flags_vertical = 4
-focus_mode = 0
-text = "+"
-
 [node name="CoinBar" type="PanelContainer" parent="UILayout/Header/StatsContainer"]
 custom_minimum_size = Vector2(250, 64)
 layout_mode = 2
@@ -83,7 +76,7 @@ layout_mode = 2
 layout_mode = 2
 theme_override_constants/margin_left = 14
 theme_override_constants/margin_top = 4
-theme_override_constants/margin_right = 6
+theme_override_constants/margin_right = 14
 theme_override_constants/margin_bottom = 4
 
 [node name="HBox" type="HBoxContainer" parent="UILayout/Header/StatsContainer/CoinBar/Margin"]
@@ -103,12 +96,33 @@ text = "25"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="PlusButton" type="Button" parent="UILayout/Header/StatsContainer/CoinBar/Margin/HBox"]
+[node name="HighScoreBar" type="PanelContainer" parent="UILayout/Header/StatsContainer"]
+custom_minimum_size = Vector2(250, 64)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="UILayout/Header/StatsContainer/HighScoreBar"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 4
+
+[node name="HBox" type="HBoxContainer" parent="UILayout/Header/StatsContainer/HighScoreBar/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="IconAnchor" type="Control" parent="UILayout/Header/StatsContainer/HighScoreBar/Margin/HBox"]
 custom_minimum_size = Vector2(38, 38)
 layout_mode = 2
 size_flags_vertical = 4
-focus_mode = 0
-text = "+"
+
+[node name="ValueLabel" type="Label" parent="UILayout/Header/StatsContainer/HighScoreBar/Margin/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 30
+text = "0 M"
+horizontal_alignment = 2
+vertical_alignment = 1
 
 [node name="BottomLayout" type="MarginContainer" parent="UILayout"]
 layout_mode = 1

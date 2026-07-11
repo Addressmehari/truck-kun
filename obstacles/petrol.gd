@@ -81,24 +81,24 @@ func _draw_petrol_can() -> void:
 	var h: float = 30.0 * scale_f
 
 	# Drop shadow
-	draw_rect(Rect2(-w * 0.5 + 1.5, -h * 0.5 + 2.5, w, h), Color(0, 0, 0, 0.40), true, 0.0, true)
+	draw_rect(Rect2(-w * 0.5 + 1.5, -h * 0.5 + 2.5, w, h), Color(0, 0, 0, 0.40))
 
 	# Can body
-	draw_rect(Rect2(-w * 0.5, -h * 0.5, w, h), col_body, true, 0.0, true)
+	draw_rect(Rect2(-w * 0.5, -h * 0.5, w, h), col_body)
 
 	# Right-side highlight strip
 	var hi_rect = Rect2(-w * 0.5 + w * 0.65, -h * 0.5 + 3.0, w * 0.15, h - 6.0)
-	draw_rect(hi_rect, col_hi, true, 0.0, true)
+	draw_rect(hi_rect, col_hi)
 
 	# Dark left-side shading
 	var dk_rect = Rect2(-w * 0.5, -h * 0.5 + 3.0, w * 0.12, h - 6.0)
-	draw_rect(dk_rect, col_dark, true, 0.0, true)
+	draw_rect(dk_rect, col_dark)
 
 	# Nozzle cap on top-right
 	var cap_w: float = w * 0.30
 	var cap_h: float = 7.0 * scale_f
-	draw_rect(Rect2(w * 0.5 - cap_w, -h * 0.5 - cap_h, cap_w, cap_h), col_cap, true, 0.0, true)
-	draw_rect(Rect2(w * 0.5 - cap_w, -h * 0.5 - cap_h, cap_w, cap_h), col_dark.lightened(0.1), false, 1.0, true)
+	draw_rect(Rect2(w * 0.5 - cap_w, -h * 0.5 - cap_h, cap_w, cap_h), col_cap)
+	draw_rect(Rect2(w * 0.5 - cap_w, -h * 0.5 - cap_h, cap_w, cap_h), col_dark.lightened(0.1), false, 1.0)
 
 	# Handle on top-left (simple arch)
 	var handle_x = -w * 0.5 + 2.0
@@ -112,7 +112,7 @@ func _draw_petrol_can() -> void:
 	draw_circle(drop_mid + Vector2(0, 5.5 * scale_f), 4.0 * scale_f, col_label)
 
 	# Outer border
-	draw_rect(Rect2(-w * 0.5, -h * 0.5, w, h), col_dark, false, 1.5, true)
+	draw_rect(Rect2(-w * 0.5, -h * 0.5, w, h), col_dark, false, 1.5)
 
 	# Glow halo (subtle warm aura)
 	var glow_a = (0.5 + sin(_elapsed * 5.0) * 0.3) * 0.25

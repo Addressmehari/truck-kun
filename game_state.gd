@@ -12,10 +12,23 @@ var is_biome_transition: bool = false
 var carryover_coins: int = 0
 var carryover_distance_m: float = 0.0
 
+var total_coins: int = 0
+var total_gems: int = 0
+var best_distance: float = 0.0
+var music_enabled: bool = true
+var sfx_enabled: bool = true
+var engine_level: int = 1
+var fuel_level: int = 1
+var air_level: int = 1
+var shield_level: int = 1
+const SAVE_PATH: String = "user://highscore.cfg"
+
 var fade_layer: CanvasLayer
 var fade_rect: ColorRect
 
 func _ready() -> void:
+	load_coins()
+	
 	# Create a CanvasLayer for transition overlay (high layer index to draw on top of HUD)
 	fade_layer = CanvasLayer.new()
 	fade_layer.layer = 128
@@ -34,6 +47,74 @@ func _ready() -> void:
 	fade_rect.offset_bottom = 0
 	fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fade_layer.add_child(fade_rect)
+
+func load_coins() -> void:
+	var config = ConfigFile.new()
+	if config.load(SAVE_PATH) == OK:
+		total_coins = config.get_value("progression", "total_coins", 0)
+		total_gems = config.get_value("progression", "total_gems", 0)
+		best_distance = config.get_value("progression", "best_distance", 0.0)
+		music_enabled = config.get_value("settings", "music_enabled", true)
+		sfx_enabled = config.get_value("settings", "sfx_enabled", true)
+		engine_level = config.get_value("upgrades", "engine_level", 1)
+		fuel_level = config.get_value("upgrades", "fuel_level", 1)
+		air_level = config.get_value("upgrades", "air_level", 1)
+		shield_level = config.get_value("upgrades", "shield_level", 1)
+	else:
+		total_coins = 0
+		total_gems = 0
+		best_distance = 0.0
+		music_enabled = true
+		sfx_enabled = true
+		engine_level = 1
+		fuel_level = 1
+		air_level = 1
+		shield_level = 1
+
+func save_coins() -> void:
+	var config = ConfigFile.new()
+	# Load existing file first to avoid overwriting other keys
+	var _err = config.load(SAVE_PATH)
+	config.set_value("progression", "total_coins", total_coins)
+	config.set_value("progression", "total_gems", total_gems)
+	config.set_value("progression", "best_distance", best_distance)
+	config.set_value("settings", "music_enabled", music_enabled)
+	config.set_value("settings", "sfx_enabled", sfx_enabled)
+	config.set_value("upgrades", "engine_level", engine_level)
+	config.set_value("upgrades", "fuel_level", fuel_level)
+	config.set_value("upgrades", "air_level", air_level)
+	config.set_value("upgrades", "shield_level", shield_level)
+	config.save(SAVE_PATH)
+
+func add_to_total_coins(amount: int) -> void:
+	total_coins += amount
+	save_coins()
+
+func add_to_total_gems(amount: int) -> void:
+	total_gems += amount
+	save_coins()
+func reset_progress() -> void:
+	total_coins = 0
+	total_gems = 0
+	best_distance = 0.0
+	engine_level = 1
+	fuel_level = 1
+	air_level = 1
+	shield_level = 1
+	
+	var dir = DirAccess.open("user://")
+	if dir and dir.file_exists("highscore.cfg"):
+		dir.remove("highscore.cfg")
+		
+	var config = ConfigFile.new()
+	config.set_value("progression", "total_coins", 0)
+	config.set_value("progression", "total_gems", 0)
+	config.set_value("progression", "best_distance", 0.0)
+	config.set_value("upgrades", "engine_level", 1)
+	config.set_value("upgrades", "fuel_level", 1)
+	config.set_value("upgrades", "air_level", 1)
+	config.set_value("upgrades", "shield_level", 1)
+	config.save(SAVE_PATH)
 
 ## Performs a smooth video-like fade-to-black scene transition
 func transition_to_scene(target_scene_path: String) -> void:

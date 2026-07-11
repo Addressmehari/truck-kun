@@ -10,6 +10,9 @@ var custom_font: Font
 var coins: int = 0
 var _coin_pop_timer: float = 0.0
 var _coin_pop_scale: float = 1.0
+var gems: int = 0
+var _gem_pop_timer: float = 0.0
+var _last_gem_amount: int = 1
 
 # Petrol State
 var petrol: float = 100.0        # 0–100
@@ -65,6 +68,12 @@ func _ready() -> void:
 		_distance_m = _distance_offset_m
 		gs.is_continuing = false
 
+	# Apply Fuel Tank Upgrade
+	if gs:
+		var fuel_lvl = gs.get("fuel_level") if gs.get("fuel_level") != null else 1
+		petrol_max = 100.0 + (fuel_lvl - 1) * 25.0 # Up to 200.0 max at Level 5
+		petrol = petrol_max
+
 	# ── Responsive Safe-Zone Setup (1.2x Enlarged Layout) ─────────────
 	anchor_left = 0.0
 	anchor_top = 0.0
@@ -78,6 +87,8 @@ func _ready() -> void:
 
 func save_best_distance() -> void:
 	var config = ConfigFile.new()
+	# Load existing file first to avoid overwriting other keys (e.g. coins, upgrades)
+	var _err = config.load(SAVE_PATH)
 	config.set_value("progression", "best_distance", _best_distance_m)
 	config.save(SAVE_PATH)
 
@@ -101,8 +112,12 @@ func _process(delta: float) -> void:
 				_dist_bump_timer = 0.55
 			_best_distance_m = _distance_m
 			save_best_distance()
+			var gs = get_node_or_null("/root/GameState")
+			if gs:
+				gs.best_distance = _best_distance_m
 
 	if _coin_pop_timer > 0.0: _coin_pop_timer -= delta
+	if _gem_pop_timer > 0.0: _gem_pop_timer -= delta
 	if _dist_bump_timer > 0.0: _dist_bump_timer -= delta
 	if _coin_digit_flash > 0.0: _coin_digit_flash -= delta
 	if _streak_timer > 0.0: _streak_timer -= delta
@@ -116,6 +131,21 @@ func add_coin(amount: int = 1) -> void:
 	_last_coin_amount = amount
 	_coin_pop_timer = 0.60
 	_coin_digit_flash = 0.60
+	
+	var gs = get_node_or_null("/root/GameState")
+	if gs:
+		gs.add_to_total_coins(amount)
+
+func add_gem(amount: int = 1) -> void:
+	gems += amount
+	_last_gem_amount = amount
+	_gem_pop_timer = 0.60
+	
+	var gs = get_node_or_null("/root/GameState")
+	if gs:
+		gs.add_to_total_gems(amount)
+
+
 
 func fill_petrol(amount: float = 30.0) -> void:
 	var old = petrol
@@ -146,12 +176,54 @@ func _draw() -> void:
 	# 1. Coin Symbol (Enlarged 1.3x more: radius 21.0)
 	var coin_center = Vector2(26.0, 26.0)
 	var coin_rad = 21.0
-	# Gold neon coin details
-	draw_circle(coin_center, coin_rad, Color("#ffea79", 0.25))
-	draw_circle(coin_center, coin_rad - 1.5, Color("#ffb900"))
-	draw_circle(coin_center, coin_rad * 0.60, Color("#ffea79"))
-	draw_circle(coin_center, coin_rad * 0.25, Color("#ffb900"))
-	draw_circle(coin_center + Vector2(-coin_rad * 0.35, -coin_rad * 0.35), coin_rad * 0.25, Color(1.0, 1.0, 1.0, 0.8))
+	
+	# Outermost black border
+	draw_circle(coin_center, coin_rad, Color.BLACK)
+	
+	var _color_main = Color(0.88, 0.60, 0.02)
+	var _color_inner = Color(1.0, 0.88, 0.28)
+	var _color_gem_dark = Color(0.72, 0.44, 0.0)
+	var _color_gem_light = Color(1.0, 0.95, 0.6)
+	
+	# 1. Outer Base Coin Body
+	draw_circle(coin_center, coin_rad - 1.5, _color_main)
+
+	# 2. Inner Face
+	draw_circle(coin_center, coin_rad - 5.0, _color_inner)
+
+	# 3. Inner decorative concentric groove ring
+	draw_arc(coin_center, coin_rad - 8.0, 0.0, TAU, 36, _color_main.lerp(Color.BLACK, 0.1), 1.5)
+
+	# 4. Smooth specular gloss highlight (top-left crescent)
+	draw_circle(coin_center - Vector2(coin_rad * 0.25, coin_rad * 0.25), coin_rad * 0.4, Color(1.0, 1.0, 1.0, 0.4))
+
+	# 5. High-contrast crisp outer rim border
+	draw_arc(coin_center, coin_rad - 2.0, 0.0, TAU, 40, _color_main.lerp(Color.BLACK, 0.4), 2.5)
+
+	# 6. Premium Geometric Inside Design: Layered Diamond Core
+	var d_size = coin_rad * 0.40
+	var d_shadow = Color(0.0, 0.0, 0.0, 0.35)
+	
+	var d_top = coin_center + Vector2(0, -d_size)
+	var d_bottom = coin_center + Vector2(0, d_size)
+	var d_left = coin_center + Vector2(-d_size, 0)
+	var d_right = coin_center + Vector2(d_size, 0)
+	
+	# Diamond Shadow Offset
+	var s_off = Vector2(0, 1.5)
+	draw_colored_polygon(PackedVector2Array([d_top + s_off, d_right + s_off, d_bottom + s_off, d_left + s_off]), d_shadow)
+	
+	# Diamond Left Facet (Darker shade)
+	draw_colored_polygon(PackedVector2Array([d_top, coin_center, d_bottom, d_left]), _color_gem_dark)
+	
+	# Diamond Right Facet (Lighter shade)
+	draw_colored_polygon(PackedVector2Array([d_top, d_right, d_bottom, coin_center]), _color_gem_light)
+	
+	# Diamond Center Dividing/Border Lines
+	var border_color = _color_main.lerp(Color.BLACK, 0.5)
+	draw_line(d_top, d_bottom, border_color, 1.5)
+	draw_line(d_left, d_right, border_color, 1.5)
+	draw_polyline(PackedVector2Array([d_top, d_right, d_bottom, d_left, d_top]), border_color, 2.0)
 
 	# 2. Coin Text (Aligned to X = 58.0 due to bigger icon)
 	var color_coin_text = Color("#ffea79")
@@ -249,7 +321,6 @@ func _draw() -> void:
 	# 2. Slanted Retro Petrol Bar (1.2x Enlarged, next to petrol icon)
 	_draw_slanted_petrol_bar(77, 74)
 
-	# ── FX OVERLAYS ───────────────────────────────────────────────────
 	# +N Popups (Rising cleanly above the coin counter)
 	if _coin_pop_timer > 0.0:
 		var fade = coin_t
@@ -257,6 +328,14 @@ func _draw() -> void:
 		var popup_x = 58.0 + (coins_val_w / 2.0)
 		_draw_clean_text(font, "+%d" % _last_coin_amount, Vector2(popup_x - 12, -8.0 - rise), 30, Color("#ffea79", fade))
 		_draw_vector_sparkles(Vector2(popup_x - 8.0, -18.0 - rise), coin_t)
+
+	if _gem_pop_timer > 0.0:
+		var gem_t = clamp(_gem_pop_timer / 0.60, 0.0, 1.0)
+		var fade = gem_t
+		var rise = (1.0 - fade) * 43.0
+		var popup_x = 58.0 + coins_val_w + 35.0
+		_draw_clean_text(font, "+%d Gem" % _last_gem_amount, Vector2(popup_x, -8.0 - rise), 30, Color("#2e86c1", fade))
+		_draw_vector_sparkles(Vector2(popup_x + 30.0, -18.0 - rise), gem_t)
 
 	# High score beaten announcement popup (Rising above the distance value)
 	if _streak_shown and _streak_timer > 0.0:

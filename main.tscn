@@ -120,6 +120,7 @@ position = Vector2(-5, 3)
 
 [node name="truck" parent="." instance=ExtResource("1_truck")]
 position = Vector2(-5, 3)
+unlimited_petrol = false
 
 [node name="CoinSpawner" type="Node" parent="."]
 script = ExtResource("7_coin_spawner_gd")
