@@ -11,6 +11,7 @@ var _cards_hbox: HBoxContainer
 # Tracking nodes for dynamic updates
 var _card_buttons: Dictionary = {}
 var _level_grids: Dictionary = {}
+var _info_labels: Dictionary = {}
 
 const UPGRADE_COSTS = [150, 300, 600, 1200]
 
@@ -155,7 +156,7 @@ func _update_coins_display() -> void:
 func _create_upgrade_card(type: String, title: String, emoji: String, face_hex: String, shadow_hex: String) -> void:
 	# Card PanelContainer (styled wobbly panel)
 	var card = PanelContainer.new()
-	card.custom_minimum_size = Vector2(220, 210)
+	card.custom_minimum_size = Vector2(220, 225)
 	card.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	card.draw.connect(_draw_card_panel.bind(card, face_hex))
 	_cards_hbox.add_child(card)
@@ -206,9 +207,20 @@ func _create_upgrade_card(type: String, title: String, emoji: String, face_hex: 
 		
 	_level_grids[type] = blocks_list
 
+	# Dynamic Info Label ("450 HP -> 549 HP")
+	var info_lbl = Label.new()
+	info_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	info_lbl.add_theme_font_override("font", custom_font)
+	info_lbl.add_theme_font_size_override("font_size", 12)
+	info_lbl.add_theme_color_override("font_color", Color("#ffea79")) # Accent yellow color
+	info_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	info_lbl.add_theme_constant_override("outline_size", 4)
+	card_vbox.add_child(info_lbl)
+	_info_labels[type] = info_lbl
+
 	# Spacer
 	var c_spacer = Control.new()
-	c_spacer.custom_minimum_size = Vector2(0, 2)
+	c_spacer.custom_minimum_size = Vector2(0, 4)
 	card_vbox.add_child(c_spacer)
 
 	# Purchase Button
@@ -295,6 +307,36 @@ func _update_rows() -> void:
 		# Force level blocks redraw
 		for block in blocks_list:
 			block.queue_redraw()
+		
+		# Dynamic power level calculation
+		var val_curr = 0
+		var val_next = 0
+		var power_unit = ""
+		match type:
+			"engine":
+				val_curr = int(45000 * (1.0 + (current_lvl - 1) * 0.222)) / 100
+				val_next = int(45000 * (1.0 + current_lvl * 0.222)) / 100
+				power_unit = "HP"
+			"fuel":
+				val_curr = int(100.0 + (current_lvl - 1) * 25.0)
+				val_next = int(100.0 + current_lvl * 25.0)
+				power_unit = "L"
+			"air":
+				val_curr = 100 + (current_lvl - 1) * 25
+				val_next = 100 + current_lvl * 25
+				power_unit = "%"
+			"shield":
+				var scale_curr = 0.3 * (1.0 - (current_lvl - 1) * 0.20)
+				val_curr = int((1.0 - scale_curr) * 100)
+				var scale_next = 0.3 * (1.0 - current_lvl * 0.20)
+				val_next = int((1.0 - scale_next) * 100)
+				power_unit = "%"
+				
+		var info_lbl = _info_labels[type]
+		if current_lvl >= 5:
+			info_lbl.text = "%d %s (MAX)" % [val_curr, power_unit]
+		else:
+			info_lbl.text = "%d %s -> %d %s" % [val_curr, power_unit, val_next, power_unit]
 		
 		# Update Button Cost/Text
 		if current_lvl >= 5:
