@@ -189,7 +189,7 @@ func _process(delta: float) -> void:
 		# Set final scale and position combining idle bob and jump offset
 		real_truck.scale = Vector2(target_scale * scale_modifier.x, target_scale * scale_modifier.y)
 		var bob_offset = Vector2(0.0, sin(elapsed * 5.0) * 5.0)
-		real_truck.position = Vector2(screen_size.x / 2.0, screen_size.y / 2.0 + (screen_size.y * 0.05)) + bob_offset + Vector2(0, jump_offset)
+		real_truck.position = Vector2(screen_size.x * 0.33, screen_size.y / 2.0 + (screen_size.y * 0.05)) + bob_offset + Vector2(0, jump_offset)
 		
 		# Redraw all truck sub-components
 		var tyre1 = real_truck.get_node_or_null("chassis/tyre-1")
@@ -257,24 +257,7 @@ func _input(event: InputEvent) -> void:
 						upgrades_menu.call("_update_rows")
 					print("CHEAT: 10,000 Coins added!")
 
-	if not is_instance_valid(real_truck):
-		return
-		
-	var is_click = event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT
-	var is_touch = event is InputEventScreenTouch and event.pressed
-	
-	if is_click or is_touch:
-		# Convert touch coordinates to truck's local coordinate space
-		var local_pos = real_truck.to_local(event.position)
-		
-		# Truck local bounding box limits:
-		# Container starts around x=-119, Cabin ends around x=195. Height is y=-80 to y=65.
-		if local_pos.x >= -125.0 and local_pos.x <= 195.0 and local_pos.y >= -85.0 and local_pos.y <= 70.0:
-			# Trigger the springy jump and speech bubble if not already animating
-			if click_anim_time < 0.0:
-				click_anim_time = 0.0
-				beep_bubble_time = 0.0
-				queue_redraw()
+
 
 func create_random_leaf(anywhere_y: bool) -> Leaf:
 	var leaf = Leaf.new()
@@ -391,7 +374,7 @@ func _draw() -> void:
 		# Use stationary (non-squishing, non-jumping) values for the slab
 		# so the concrete block stays firmly in place while the truck bobs/jumps
 		var t_scale = clamp(screen_size.y / 200.0, 2.0, 3.25)
-		var t_pos = Vector2(screen_size.x / 2.0, screen_size.y / 2.0 + (screen_size.y * 0.05)) + Vector2(0.0, sin(elapsed * 5.0) * 5.0)
+		var t_pos = Vector2(screen_size.x * 0.33, screen_size.y / 2.0 + (screen_size.y * 0.05)) + Vector2(0.0, sin(elapsed * 5.0) * 5.0)
 		
 		# --- Calculate landing impact shake ---
 		var slab_shake = 0.0
@@ -562,6 +545,11 @@ func _draw() -> void:
 	# ─────────────────────────────────────────────────────────────────
 	for leaf in leaves:
 		_draw_stylized_leaf(leaf)
+
+	# ─────────────────────────────────────────────────────────────────
+	# 3. Draw Garage Specs Panel (Current Stats)
+	# ─────────────────────────────────────────────────────────────────
+	_draw_stats_panel(screen_size)
 
 	# ─────────────────────────────────────────────────────────────────
 	# 4. Draw Black Cinematic Letterbox Curved Banners (Top/Bottom)
@@ -1315,3 +1303,124 @@ func update_stats_display() -> void:
 	coin_val_label.add_theme_color_override("font_color", Color("#111111"))
 	gem_val_label.add_theme_color_override("font_color", Color("#111111"))
 	highscore_val_label.add_theme_color_override("font_color", Color("#111111"))
+	
+	queue_redraw()
+
+func _draw_stats_panel(screen_size: Vector2) -> void:
+	var gs = get_node_or_null("/root/GameState")
+	if not gs:
+		return
+
+	# Fonts: custom_font for title, bold_font for clean, bold specs rows
+	var title_font = custom_font if custom_font else ThemeDB.get_default_theme().get_default_font()
+	
+	# Fetch the default theme's bold font variant
+	var bold_font = ThemeDB.get_default_theme().get_font("bold", "Label")
+	if not bold_font:
+		bold_font = ThemeDB.get_default_theme().get_default_font()
+	
+	# Specs dimensions & positioning (moved closer to the truck at x * 0.53)
+	var w = 380.0
+	var h = 420.0
+	var x = clamp(screen_size.x * 0.53, 520.0, screen_size.x - w - 30.0)
+	var y = screen_size.y / 2.0 - h / 2.0 - 20.0
+	
+	# Draw Header Text "TRUCK SPECS" directly (no background boxes)
+	var title_text = "TRUCK SPECS"
+	var title_size = 36
+	var title_pos = Vector2(x + 52.0, y + 25.0)
+	_draw_menu_comic_text(title_font, title_text, title_pos, title_size, Color("#ff9f00"), 5.0, Color.BLACK)
+	
+	# Draw 4 stat rows
+	var start_row_y = y + 70.0
+	var row_h = 82.0
+	
+	var upgrades_data = [
+		{"type": "engine", "name": "ENGINE", "icon": "🚀", "color": Color("#3498db")},
+		{"type": "fuel", "name": "FUEL TANK", "icon": "⛽", "color": Color("#e67e22")},
+		{"type": "air", "name": "TILT CTRL", "icon": "🕹️", "color": Color("#9b59b6")},
+		{"type": "shield", "name": "SHIELD", "icon": "🛡️", "color": Color("#e74c3c")}
+	]
+	
+	var slant := -6.0
+	var outline_color := Color(0.08, 0.08, 0.12)
+	var outline_width := 3.0
+	
+	for idx in range(upgrades_data.size()):
+		var data = upgrades_data[idx]
+		var type = data["type"]
+		var current_lvl = gs.get(type + "_level") if gs.get(type + "_level") != null else 1
+		
+		# Compute values and units
+		var val_str = ""
+		match type:
+			"engine":
+				var torque_val = int(45000 * (1.0 + (current_lvl - 1) * 0.222))
+				val_str = "%d HP" % int(torque_val / 100)
+			"fuel":
+				var petrol_max = 100.0 + (current_lvl - 1) * 25.0
+				val_str = "%dL" % int(petrol_max)
+			"air":
+				var tilt_pct = 100 + (current_lvl - 1) * 25
+				val_str = "%d%%" % tilt_pct
+			"shield":
+				var damage_scale = 0.3 * (1.0 - (current_lvl - 1) * 0.20)
+				val_str = "%d%%" % int((1.0 - damage_scale) * 100)
+				
+		var row_y = start_row_y + idx * row_h
+		
+		# Draw Icon & Text using bold font
+		var text_y = row_y + 24.0
+		
+		# Icon (drawn with bold font)
+		var icon_str = data["icon"]
+		var icon_font_size = 24
+		draw_string(bold_font, Vector2(x + 18.0, text_y + 2.0), icon_str, HORIZONTAL_ALIGNMENT_LEFT, -1, icon_font_size)
+		
+		# Name & Level in a clean, legible format (dark color for high visibility)
+		var name_str = "%s  Lv. %d" % [data["name"], current_lvl]
+		var name_font_size = 20
+		_draw_menu_comic_text(bold_font, name_str, Vector2(x + 52.0, text_y), name_font_size, Color("#1e272e"), 3.0, Color.WHITE)
+		
+		# Value (bold orange/amber for accent color readability)
+		var val_font_size = 20
+		var val_w = bold_font.get_string_size(val_str, HORIZONTAL_ALIGNMENT_RIGHT, -1, val_font_size).x
+		_draw_menu_comic_text(bold_font, val_str, Vector2(x + w - 30.0 - val_w, text_y), val_font_size, Color("#d35400"), 3.0, Color.WHITE)
+		
+		# Draw 5 slanted cells exactly like event_timer_bar.gd (placed down under the text)
+		var cell_w := 34.0
+		var cell_h := 24.0
+		var cell_gap := 8.0
+		
+		for b_idx in range(5):
+			var bx = x + 52.0 + b_idx * (cell_w + cell_gap)
+			var by = row_y + 38.0
+			var cell_rect = Rect2(bx, by, cell_w, cell_h)
+			
+			var cell_color = data["color"]
+			var is_filled = (b_idx < current_lvl)
+			
+			if is_filled:
+				_draw_menu_slanted_cell(cell_rect, cell_color, outline_color, outline_width, slant, 0.0)
+			else:
+				var bg_c = cell_color * 0.22
+				bg_c.a = 0.55
+				_draw_menu_slanted_cell(cell_rect, bg_c, outline_color, outline_width, slant, 0.0)
+
+func _draw_menu_slanted_cell(rect: Rect2, color: Color, outline_color: Color, outline_width: float, slant: float, bob: float) -> void:
+	var tl = Vector2(rect.position.x + slant, rect.position.y + bob)
+	var tr = Vector2(rect.position.x + rect.size.x + slant, rect.position.y + bob)
+	var br = Vector2(rect.position.x + rect.size.x, rect.position.y + rect.size.y + bob)
+	var bl = Vector2(rect.position.x, rect.position.y + rect.size.y + bob)
+	
+	var points = PackedVector2Array([tl, tr, br, bl])
+	draw_polygon(points, PackedColorArray([color]))
+	
+	var outline_points = PackedVector2Array([tl, tr, br, bl, tl])
+	draw_polyline(outline_points, outline_color, outline_width)
+
+func _draw_menu_comic_text(font: Font, text: String, pos: Vector2, font_size: int, color: Color, outline_size: float = 3.0, outline_color: Color = Color.BLACK) -> void:
+	# Draw clean vector outline using Godot's built-in system
+	draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, int(outline_size), outline_color)
+	# Foreground text
+	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
