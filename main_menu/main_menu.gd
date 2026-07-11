@@ -88,24 +88,7 @@ func _ready() -> void:
 				child.pressed.connect(_on_action_button_pressed.bind(orig_text))
 				index += 1
 
-	# Set dynamic stats from game state if available
-	var gs = get_node_or_null("/root/GameState")
-	if gs:
-		coin_val_label.text = str(gs.total_coins)
-		gem_val_label.text = str(gs.total_gems)
-		highscore_val_label.text = "%d M" % int(gs.best_distance)
-	else:
-		coin_val_label.text = "0"
-		gem_val_label.text = "0"
-		highscore_val_label.text = "0 M"
-
-	# Set font and color overrides on labels for readability on light backgrounds
-	coin_val_label.add_theme_font_override("font", custom_font)
-	gem_val_label.add_theme_font_override("font", custom_font)
-	highscore_val_label.add_theme_font_override("font", custom_font)
-	coin_val_label.add_theme_color_override("font_color", Color("#111111"))
-	gem_val_label.add_theme_color_override("font_color", Color("#111111"))
-	highscore_val_label.add_theme_color_override("font_color", Color("#111111"))
+	update_stats_display()
 	
 	# Connect resize signal to refresh drawing metrics
 	get_tree().root.size_changed.connect(queue_redraw)
@@ -980,6 +963,21 @@ func _on_action_button_pressed(action_name: String) -> void:
 	print("Bottom Action Button Tapped: ", action_name)
 	if action_name == "X":
 		get_tree().quit()
+	elif action_name == "⚙️":
+		_spawn_settings_menu()
+
+func _spawn_settings_menu() -> void:
+	if has_node("SettingsMenu"):
+		return
+	var settings_script = load("res://ui/settings_menu.gd")
+	if not settings_script:
+		push_error("Settings script not found!")
+		return
+	var menu = CanvasLayer.new()
+	menu.set_script(settings_script)
+	menu.name = "SettingsMenu"
+	add_child(menu)
+	menu.call("show_settings")
 
 func _on_play_hover(is_hover: bool) -> void:
 	play_btn.pivot_offset = play_btn.size / 2.0
@@ -1260,3 +1258,23 @@ func _freeze_truck_physics(node: Node) -> void:
 				child.disabled = true
 	for child in node.get_children():
 		_freeze_truck_physics(child)
+
+func update_stats_display() -> void:
+	var gs = get_node_or_null("/root/GameState")
+	if gs:
+		coin_val_label.text = str(gs.total_coins)
+		gem_val_label.text = str(gs.total_gems)
+		highscore_val_label.text = "%d M" % int(gs.best_distance)
+	else:
+		coin_val_label.text = "0"
+		gem_val_label.text = "0"
+		highscore_val_label.text = "0 M"
+
+	if custom_font:
+		coin_val_label.add_theme_font_override("font", custom_font)
+		gem_val_label.add_theme_font_override("font", custom_font)
+		highscore_val_label.add_theme_font_override("font", custom_font)
+		
+	coin_val_label.add_theme_color_override("font_color", Color("#111111"))
+	gem_val_label.add_theme_color_override("font_color", Color("#111111"))
+	highscore_val_label.add_theme_color_override("font_color", Color("#111111"))

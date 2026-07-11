@@ -15,6 +15,8 @@ var carryover_distance_m: float = 0.0
 var total_coins: int = 0
 var total_gems: int = 0
 var best_distance: float = 0.0
+var music_enabled: bool = true
+var sfx_enabled: bool = true
 const SAVE_PATH: String = "user://highscore.cfg"
 
 var fade_layer: CanvasLayer
@@ -48,10 +50,14 @@ func load_coins() -> void:
 		total_coins = config.get_value("progression", "total_coins", 0)
 		total_gems = config.get_value("progression", "total_gems", 0)
 		best_distance = config.get_value("progression", "best_distance", 0.0)
+		music_enabled = config.get_value("settings", "music_enabled", true)
+		sfx_enabled = config.get_value("settings", "sfx_enabled", true)
 	else:
 		total_coins = 0
 		total_gems = 0
 		best_distance = 0.0
+		music_enabled = true
+		sfx_enabled = true
 
 func save_coins() -> void:
 	var config = ConfigFile.new()
@@ -59,6 +65,8 @@ func save_coins() -> void:
 	var _err = config.load(SAVE_PATH)
 	config.set_value("progression", "total_coins", total_coins)
 	config.set_value("progression", "total_gems", total_gems)
+	config.set_value("settings", "music_enabled", music_enabled)
+	config.set_value("settings", "sfx_enabled", sfx_enabled)
 	config.save(SAVE_PATH)
 
 func add_to_total_coins(amount: int) -> void:
@@ -68,7 +76,20 @@ func add_to_total_coins(amount: int) -> void:
 func add_to_total_gems(amount: int) -> void:
 	total_gems += amount
 	save_coins()
-
+func reset_progress() -> void:
+	total_coins = 0
+	total_gems = 0
+	best_distance = 0.0
+	
+	var dir = DirAccess.open("user://")
+	if dir and dir.file_exists("highscore.cfg"):
+		dir.remove("highscore.cfg")
+		
+	var config = ConfigFile.new()
+	config.set_value("progression", "total_coins", 0)
+	config.set_value("progression", "total_gems", 0)
+	config.set_value("progression", "best_distance", 0.0)
+	config.save(SAVE_PATH)
 
 ## Performs a smooth video-like fade-to-black scene transition
 func transition_to_scene(target_scene_path: String) -> void:

@@ -4,11 +4,16 @@ const FONT_PATH: String = "res://retro_font.ttf"
 var custom_font: Font
 
 var _title_label: Label
-var _vbox: VBoxContainer
+var _main_vbox: VBoxContainer
+var _confirm_vbox: VBoxContainer
 var _dialog_box: PanelContainer
+var _vbox: VBoxContainer
+
+var _music_btn: Button
+var _sfx_btn: Button
 
 func _ready() -> void:
-	layer = 130 # Higher than retry menu
+	layer = 140 # Topmost overlay
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
 
@@ -17,7 +22,7 @@ func _ready() -> void:
 		custom_font = load(FONT_PATH)
 	else:
 		custom_font = ThemeDB.get_default_theme().get_default_font()
-		push_warning("PauseMenu: Custom font not found at: " + FONT_PATH)
+		push_warning("SettingsMenu: Custom font not found at: " + FONT_PATH)
 
 	# ── Root control (fills the whole screen) ────────────────────────────────
 	var root = Control.new()
@@ -29,7 +34,7 @@ func _ready() -> void:
 
 	# Dark overlay
 	var bg = ColorRect.new()
-	bg.color            = Color(0, 0, 0, 0.78)
+	bg.color            = Color(0.05, 0.03, 0.08, 0.82) # Dark purple tint
 	bg.anchor_right     = 1.0
 	bg.anchor_bottom    = 1.0
 	bg.mouse_filter     = Control.MOUSE_FILTER_IGNORE
@@ -65,60 +70,126 @@ func _ready() -> void:
 	margin.add_theme_constant_override("margin_bottom", 35)
 	_dialog_box.add_child(margin)
 
-	# Centre VBox
-	_vbox = VBoxContainer.new()
-	_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	_vbox.add_theme_constant_override("separation", 24)
-	margin.add_child(_vbox)
+	# ─── State 1: Main Settings VBox ──────────────────────────────────────────
+	_main_vbox = VBoxContainer.new()
+	_main_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	_main_vbox.add_theme_constant_override("separation", 20)
+	margin.add_child(_main_vbox)
 
-	# "PAUSED" title
+	# "SETTINGS" title
 	_title_label = Label.new()
-	_title_label.text = "PAUSED"
+	_title_label.text = "SETTINGS"
 	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_title_label.add_theme_font_override("font", custom_font)
 	_title_label.add_theme_font_size_override("font_size", 64)
-	_title_label.add_theme_color_override("font_color", Color("#e74c3c")) # Bright Red
+	_title_label.add_theme_color_override("font_color", Color("#f1c40f")) # Bright Yellow
 	_title_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_title_label.add_theme_constant_override("outline_size", 8)
-	_vbox.add_child(_title_label)
+	_vbox = _main_vbox # alias for retrocompatibility with feedback adding
+	_main_vbox.add_child(_title_label)
 
 	# Spacer
 	var spacer = Control.new()
-	spacer.custom_minimum_size = Vector2(0, 16)
-	_vbox.add_child(spacer)
+	spacer.custom_minimum_size = Vector2(0, 10)
+	_main_vbox.add_child(spacer)
 
-	# Resume button
-	var resume_btn = Button.new()
-	resume_btn.text = "RESUME"
-	resume_btn.custom_minimum_size = Vector2(220, 58)
-	resume_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	resume_btn.focus_mode = Control.FOCUS_NONE
-	resume_btn.pressed.connect(_on_resume)
-	_vbox.add_child(resume_btn)
-	_style_comic_button(resume_btn, "#2ecc71", "#27ae60") # Premium Green
+	# Music Toggle Button
+	_music_btn = Button.new()
+	_music_btn.custom_minimum_size = Vector2(250, 58)
+	_music_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_music_btn.focus_mode = Control.FOCUS_NONE
+	_music_btn.pressed.connect(_on_music_toggled)
+	_main_vbox.add_child(_music_btn)
+	_update_music_btn_text()
+	_style_comic_button(_music_btn, "#3498db", "#2980b9") # Blue
 
-	# Restart button
-	var restart_btn = Button.new()
-	restart_btn.text = "RESTART"
-	restart_btn.custom_minimum_size = Vector2(220, 58)
-	restart_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	restart_btn.focus_mode = Control.FOCUS_NONE
-	restart_btn.pressed.connect(_on_restart)
-	_vbox.add_child(restart_btn)
-	_style_comic_button(restart_btn, "#e67e22", "#d35400") # Retro Orange
+	# SFX Toggle Button
+	_sfx_btn = Button.new()
+	_sfx_btn.custom_minimum_size = Vector2(250, 58)
+	_sfx_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_sfx_btn.focus_mode = Control.FOCUS_NONE
+	_sfx_btn.pressed.connect(_on_sfx_toggled)
+	_main_vbox.add_child(_sfx_btn)
+	_update_sfx_btn_text()
+	_style_comic_button(_sfx_btn, "#9b59b6", "#8e44ad") # Purple
 
-	# Main Menu button
-	var menu_btn = Button.new()
-	menu_btn.text = "MAIN MENU"
-	menu_btn.custom_minimum_size = Vector2(220, 58)
-	menu_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	menu_btn.focus_mode = Control.FOCUS_NONE
-	menu_btn.pressed.connect(_on_main_menu)
-	_vbox.add_child(menu_btn)
-	_style_comic_button(menu_btn, "#34495e", "#2c3e50") # Slate Gray
+	# Reset Progress Button
+	var reset_btn = Button.new()
+	reset_btn.text = "RESET PROGRESS"
+	reset_btn.custom_minimum_size = Vector2(250, 58)
+	reset_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	reset_btn.focus_mode = Control.FOCUS_NONE
+	reset_btn.pressed.connect(_show_reset_confirmation)
+	_main_vbox.add_child(reset_btn)
+	_style_comic_button(reset_btn, "#e74c3c", "#c0392b") # Red
 
-func show_pause() -> void:
-	get_tree().paused = true
+	# Back Button
+	var back_btn = Button.new()
+	back_btn.text = "BACK"
+	back_btn.custom_minimum_size = Vector2(250, 58)
+	back_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	back_btn.focus_mode = Control.FOCUS_NONE
+	back_btn.pressed.connect(_on_back)
+	_main_vbox.add_child(back_btn)
+	_style_comic_button(back_btn, "#7f8c8d", "#5f6c6d") # Slate Gray
+
+	# ─── State 2: Confirmation VBox ───────────────────────────────────────────
+	_confirm_vbox = VBoxContainer.new()
+	_confirm_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	_confirm_vbox.add_theme_constant_override("separation", 24)
+	_confirm_vbox.visible = false
+	margin.add_child(_confirm_vbox)
+
+	var warn_title = Label.new()
+	warn_title.text = "ARE YOU SURE?"
+	warn_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	warn_title.add_theme_font_override("font", custom_font)
+	warn_title.add_theme_font_size_override("font_size", 48)
+	warn_title.add_theme_color_override("font_color", Color("#e74c3c")) # Warning Red
+	warn_title.add_theme_color_override("font_outline_color", Color.BLACK)
+	warn_title.add_theme_constant_override("outline_size", 8)
+	_confirm_vbox.add_child(warn_title)
+
+	var warn_desc = Label.new()
+	warn_desc.text = "All coins, gems and distance\nwill be deleted forever!"
+	warn_desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	warn_desc.add_theme_font_override("font", custom_font)
+	warn_desc.add_theme_font_size_override("font_size", 22)
+	warn_desc.add_theme_color_override("font_color", Color.WHITE)
+	warn_desc.add_theme_color_override("font_outline_color", Color.BLACK)
+	warn_desc.add_theme_constant_override("outline_size", 5)
+	_confirm_vbox.add_child(warn_desc)
+
+	# Spacer
+	var c_spacer = Control.new()
+	c_spacer.custom_minimum_size = Vector2(0, 10)
+	_confirm_vbox.add_child(c_spacer)
+
+	# Yes/No buttons in an HBox
+	var buttons_hbox = HBoxContainer.new()
+	buttons_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	buttons_hbox.add_theme_constant_override("separation", 20)
+	_confirm_vbox.add_child(buttons_hbox)
+
+	var yes_btn = Button.new()
+	yes_btn.text = "YES, RESET"
+	yes_btn.custom_minimum_size = Vector2(170, 58)
+	yes_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	yes_btn.focus_mode = Control.FOCUS_NONE
+	yes_btn.pressed.connect(_on_confirm_reset)
+	buttons_hbox.add_child(yes_btn)
+	_style_comic_button(yes_btn, "#e74c3c", "#c0392b") # Red
+
+	var no_btn = Button.new()
+	no_btn.text = "NO, CANCEL"
+	no_btn.custom_minimum_size = Vector2(170, 58)
+	no_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	no_btn.focus_mode = Control.FOCUS_NONE
+	no_btn.pressed.connect(_on_cancel_reset)
+	buttons_hbox.add_child(no_btn)
+	_style_comic_button(no_btn, "#7f8c8d", "#5f6c6d") # Slate Gray
+
+func show_settings() -> void:
 	visible = true
 	# Pop-in entry animation
 	_dialog_box.pivot_offset = _dialog_box.size / 2.0
@@ -126,38 +197,85 @@ func show_pause() -> void:
 	var tween = create_tween()
 	tween.tween_property(_dialog_box, "scale", Vector2(1.0, 1.0), 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
-func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		get_viewport().set_input_as_handled()
-		_on_resume()
-
-func _on_resume() -> void:
-	get_tree().paused = false
-	queue_free()
-
-func _on_restart() -> void:
-	get_tree().paused = false
+func _update_music_btn_text() -> void:
 	var gs = get_node_or_null("/root/GameState")
 	if gs:
-		gs.pending_road_seed = randi()
-		gs.is_continuing = false
-		gs.carryover_coins = 0
-		gs.carryover_distance_m = 0.0
-		gs.transition_to_scene("res://main.tscn")
-	else:
-		get_tree().change_scene_to_file("res://main.tscn")
-	queue_free()
+		_music_btn.text = "MUSIC: ON" if gs.music_enabled else "MUSIC: OFF"
+		_music_btn.set_meta("btn_text", _music_btn.text)
+		_music_btn.queue_redraw()
 
-func _on_main_menu() -> void:
-	get_tree().paused = false
+func _update_sfx_btn_text() -> void:
 	var gs = get_node_or_null("/root/GameState")
 	if gs:
-		gs.is_continuing = false
-		gs.carryover_coins = 0
-		gs.carryover_distance_m = 0.0
-		gs.transition_to_scene("res://main_menu/main_menu.tscn")
-	else:
-		get_tree().change_scene_to_file("res://main_menu/main_menu.tscn")
+		_sfx_btn.text = "SFX: ON" if gs.sfx_enabled else "SFX: OFF"
+		_sfx_btn.set_meta("btn_text", _sfx_btn.text)
+		_sfx_btn.queue_redraw()
+
+func _on_music_toggled() -> void:
+	var gs = get_node_or_null("/root/GameState")
+	if gs:
+		gs.music_enabled = not gs.music_enabled
+		gs.save_coins()
+		_update_music_btn_text()
+
+func _on_sfx_toggled() -> void:
+	var gs = get_node_or_null("/root/GameState")
+	if gs:
+		gs.sfx_enabled = not gs.sfx_enabled
+		gs.save_coins()
+		_update_sfx_btn_text()
+
+func _show_reset_confirmation() -> void:
+	# Hide main panel and show confirmation screen
+	_main_vbox.visible = false
+	_confirm_vbox.visible = true
+	
+	# Small bounce squeeze animation on dialog panel when switching screens
+	_dialog_box.pivot_offset = _dialog_box.size / 2.0
+	var tween = create_tween()
+	tween.tween_property(_dialog_box, "scale", Vector2(1.02, 1.02), 0.08)
+	tween.tween_property(_dialog_box, "scale", Vector2(1.0, 1.0), 0.1).set_trans(Tween.TRANS_BACK)
+
+func _on_cancel_reset() -> void:
+	# Return to main view
+	_confirm_vbox.visible = false
+	_main_vbox.visible = true
+
+func _on_confirm_reset() -> void:
+	# Perform the reset
+	var gs = get_node_or_null("/root/GameState")
+	if gs:
+		gs.reset_progress()
+		
+		# Update Main Menu stats if it exists
+		var main_menu = get_tree().root.get_node_or_null("MainMenu")
+		if main_menu and main_menu.has_method("update_stats_display"):
+			main_menu.call("update_stats_display")
+
+		# Show flash text feedback inside main view
+		_confirm_vbox.visible = false
+		_main_vbox.visible = true
+		
+		var feedback = Label.new()
+		feedback.text = "PROGRESS RESET!"
+		feedback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		feedback.add_theme_font_override("font", custom_font)
+		feedback.add_theme_font_size_override("font_size", 28)
+		feedback.add_theme_color_override("font_color", Color("#e74c3c"))
+		feedback.add_theme_color_override("font_outline_color", Color.BLACK)
+		feedback.add_theme_constant_override("outline_size", 6)
+		_main_vbox.add_child(feedback)
+		
+		# Position feedback right above back button
+		_main_vbox.move_child(feedback, _main_vbox.get_child_count() - 2)
+		
+		# Fade and queue_free feedback
+		var tween = create_tween()
+		tween.tween_interval(1.5)
+		tween.tween_property(feedback, "modulate:a", 0.0, 0.4)
+		tween.tween_callback(feedback.queue_free)
+
+func _on_back() -> void:
 	queue_free()
 
 func _style_comic_button(btn: Button, face_color_hex: String, shadow_color_hex: String) -> void:
