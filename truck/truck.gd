@@ -1189,8 +1189,18 @@ func _spawn_retry_menu(cause: String, distance: float) -> void:
 	var menu = CanvasLayer.new()
 	menu.set_script(retry_script)
 	menu.name = "RetryMenu"
+	
+	var coins_collected = 0
+	var gems_collected = 0
+	var hud_stats = get_node_or_null("HUD/HudStats")
+	if hud_stats:
+		if "coins" in hud_stats:
+			coins_collected = hud_stats.coins
+		if "gems" in hud_stats:
+			gems_collected = hud_stats.gems
+			
 	get_tree().root.add_child(menu)
-	menu.call("show_death", cause, distance)
+	menu.call("show_death", cause, distance, coins_collected, gems_collected)
 
 func _spawn_journey_completed_menu() -> void:
 	var journey_menu_script = load("res://ui/journey_completed_menu.gd")
