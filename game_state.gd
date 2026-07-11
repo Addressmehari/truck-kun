@@ -17,6 +17,10 @@ var total_gems: int = 0
 var best_distance: float = 0.0
 var music_enabled: bool = true
 var sfx_enabled: bool = true
+var engine_level: int = 1
+var fuel_level: int = 1
+var air_level: int = 1
+var shield_level: int = 1
 const SAVE_PATH: String = "user://highscore.cfg"
 
 var fade_layer: CanvasLayer
@@ -52,12 +56,20 @@ func load_coins() -> void:
 		best_distance = config.get_value("progression", "best_distance", 0.0)
 		music_enabled = config.get_value("settings", "music_enabled", true)
 		sfx_enabled = config.get_value("settings", "sfx_enabled", true)
+		engine_level = config.get_value("upgrades", "engine_level", 1)
+		fuel_level = config.get_value("upgrades", "fuel_level", 1)
+		air_level = config.get_value("upgrades", "air_level", 1)
+		shield_level = config.get_value("upgrades", "shield_level", 1)
 	else:
 		total_coins = 0
 		total_gems = 0
 		best_distance = 0.0
 		music_enabled = true
 		sfx_enabled = true
+		engine_level = 1
+		fuel_level = 1
+		air_level = 1
+		shield_level = 1
 
 func save_coins() -> void:
 	var config = ConfigFile.new()
@@ -67,6 +79,10 @@ func save_coins() -> void:
 	config.set_value("progression", "total_gems", total_gems)
 	config.set_value("settings", "music_enabled", music_enabled)
 	config.set_value("settings", "sfx_enabled", sfx_enabled)
+	config.set_value("upgrades", "engine_level", engine_level)
+	config.set_value("upgrades", "fuel_level", fuel_level)
+	config.set_value("upgrades", "air_level", air_level)
+	config.set_value("upgrades", "shield_level", shield_level)
 	config.save(SAVE_PATH)
 
 func add_to_total_coins(amount: int) -> void:
@@ -80,6 +96,10 @@ func reset_progress() -> void:
 	total_coins = 0
 	total_gems = 0
 	best_distance = 0.0
+	engine_level = 1
+	fuel_level = 1
+	air_level = 1
+	shield_level = 1
 	
 	var dir = DirAccess.open("user://")
 	if dir and dir.file_exists("highscore.cfg"):
@@ -89,6 +109,10 @@ func reset_progress() -> void:
 	config.set_value("progression", "total_coins", 0)
 	config.set_value("progression", "total_gems", 0)
 	config.set_value("progression", "best_distance", 0.0)
+	config.set_value("upgrades", "engine_level", 1)
+	config.set_value("upgrades", "fuel_level", 1)
+	config.set_value("upgrades", "air_level", 1)
+	config.set_value("upgrades", "shield_level", 1)
 	config.save(SAVE_PATH)
 
 ## Performs a smooth video-like fade-to-black scene transition

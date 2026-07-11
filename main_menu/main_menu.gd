@@ -26,6 +26,7 @@ var elapsed: float = 0.0
 var real_truck: Node2D
 var click_anim_time: float = -1.0
 var beep_bubble_time: float = -1.0
+var cheat_buffer: String = ""
 
 # Node references (will be set in ready)
 @onready var background_layer = $Background
@@ -120,7 +121,6 @@ func _ready() -> void:
 			for child in chassis_node.get_children():
 				if child is CPUParticles2D:
 					child.process_mode = Node.PROCESS_MODE_ALWAYS
-
 func _process(delta: float) -> void:
 	elapsed += delta
 
@@ -235,6 +235,28 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed:
+		var key_unicode = event.unicode
+		if key_unicode >= 32 and key_unicode <= 126:
+			var char_typed = char(key_unicode).to_lower()
+			cheat_buffer += char_typed
+			if cheat_buffer.length() > 20:
+				cheat_buffer = cheat_buffer.substr(cheat_buffer.length() - 20)
+			
+			if cheat_buffer.ends_with("10kcoins"):
+				cheat_buffer = ""
+				var gs = get_node_or_null("/root/GameState")
+				if gs:
+					gs.total_coins += 10000
+					gs.save_coins()
+					update_stats_display()
+					
+					var upgrades_menu = get_node_or_null("UpgradesMenu")
+					if upgrades_menu and upgrades_menu.has_method("_update_coins_display"):
+						upgrades_menu.call("_update_coins_display")
+						upgrades_menu.call("_update_rows")
+					print("CHEAT: 10,000 Coins added!")
+
 	if not is_instance_valid(real_truck):
 		return
 		
@@ -965,6 +987,8 @@ func _on_action_button_pressed(action_name: String) -> void:
 		get_tree().quit()
 	elif action_name == "⚙️":
 		_spawn_settings_menu()
+	elif action_name == "🛒":
+		_spawn_upgrades_menu()
 
 func _spawn_settings_menu() -> void:
 	if has_node("SettingsMenu"):
@@ -978,6 +1002,19 @@ func _spawn_settings_menu() -> void:
 	menu.name = "SettingsMenu"
 	add_child(menu)
 	menu.call("show_settings")
+
+func _spawn_upgrades_menu() -> void:
+	if has_node("UpgradesMenu"):
+		return
+	var upgrades_script = load("res://ui/upgrades_menu.gd")
+	if not upgrades_script:
+		push_error("Upgrades script not found!")
+		return
+	var menu = CanvasLayer.new()
+	menu.set_script(upgrades_script)
+	menu.name = "UpgradesMenu"
+	add_child(menu)
+	menu.call("show_upgrades")
 
 func _on_play_hover(is_hover: bool) -> void:
 	play_btn.pivot_offset = play_btn.size / 2.0

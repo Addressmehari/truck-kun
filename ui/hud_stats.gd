@@ -68,6 +68,12 @@ func _ready() -> void:
 		_distance_m = _distance_offset_m
 		gs.is_continuing = false
 
+	# Apply Fuel Tank Upgrade
+	if gs:
+		var fuel_lvl = gs.get("fuel_level") if gs.get("fuel_level") != null else 1
+		petrol_max = 100.0 + (fuel_lvl - 1) * 25.0 # Up to 200.0 max at Level 5
+		petrol = petrol_max
+
 	# ── Responsive Safe-Zone Setup (1.2x Enlarged Layout) ─────────────
 	anchor_left = 0.0
 	anchor_top = 0.0
