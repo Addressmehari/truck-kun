@@ -1336,10 +1336,10 @@ func _draw_stats_panel(screen_size: Vector2) -> void:
 	var row_h = 82.0
 	
 	var upgrades_data = [
-		{"type": "engine", "name": "ENGINE", "icon": "🚀", "color": Color("#3498db")},
-		{"type": "fuel", "name": "FUEL TANK", "icon": "⛽", "color": Color("#e67e22")},
-		{"type": "air", "name": "TILT CTRL", "icon": "🕹️", "color": Color("#9b59b6")},
-		{"type": "shield", "name": "SHIELD", "icon": "🛡️", "color": Color("#e74c3c")}
+		{"type": "engine", "name": "Engine", "icon": "🚀", "color": Color("#3498db")},
+		{"type": "fuel", "name": "Fuel Tank", "icon": "⛽", "color": Color("#e67e22")},
+		{"type": "air", "name": "Tilt Control", "icon": "🕹️", "color": Color("#9b59b6")},
+		{"type": "shield", "name": "Shield", "icon": "🛡️", "color": Color("#e74c3c")}
 	]
 	
 	var slant := -6.0
@@ -1359,7 +1359,7 @@ func _draw_stats_panel(screen_size: Vector2) -> void:
 				val_str = "%d HP" % int(torque_val / 100)
 			"fuel":
 				var petrol_max = 100.0 + (current_lvl - 1) * 25.0
-				val_str = "%dL" % int(petrol_max)
+				val_str = "%d L" % int(petrol_max)
 			"air":
 				var tilt_pct = 100 + (current_lvl - 1) * 25
 				val_str = "%d%%" % tilt_pct
@@ -1378,7 +1378,7 @@ func _draw_stats_panel(screen_size: Vector2) -> void:
 		draw_string(bold_font, Vector2(x + 18.0, text_y + 2.0), icon_str, HORIZONTAL_ALIGNMENT_LEFT, -1, icon_font_size)
 		
 		# Name & Level in a clean, legible format (dark color for high visibility)
-		var name_str = "%s  Lv. %d" % [data["name"], current_lvl]
+		var name_str = "%s (Lv. %d)" % [data["name"], current_lvl]
 		var name_font_size = 20
 		_draw_menu_comic_text(bold_font, name_str, Vector2(x + 52.0, text_y), name_font_size, Color("#1e272e"), 3.0, Color.WHITE)
 		
