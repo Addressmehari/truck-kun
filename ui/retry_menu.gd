@@ -95,7 +95,7 @@ func _ready() -> void:
 	_style_comic_button(menu_btn, "#34495e", "#2c3e50")
 
 func show_death(cause: String, distance: float) -> void:
-	_cause_label.text = cause.upper()
+	_cause_label.text = cause.to_upper()
 	_distance_label.text = "DISTANCE: %d M" % int(distance)
 	visible = true
 
