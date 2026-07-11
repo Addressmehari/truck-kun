@@ -292,8 +292,8 @@ func _draw() -> void:
 	# ─────────────────────────────────────────────────────────────────
 	# 1. Draw Rotating Comic Sunburst & Halftone Background
 	# ─────────────────────────────────────────────────────────────────
-	# Base fill (soft warm browney / latte cream)
-	draw_rect(Rect2(Vector2.ZERO, screen_size), Color("#dfd5cd"), true)
+	# Base fill (soft sage green #B7C5AE)
+	draw_rect(Rect2(Vector2.ZERO, screen_size), Color("#B7C5AE"), true)
 	
 	var bg_center = screen_size / 2.0
 	
@@ -315,7 +315,7 @@ func _draw() -> void:
 				bg_center + Vector2(cos(a2), sin(a2)) * ray_radius,
 				bg_center
 			])
-			draw_polygon(pts_ray, PackedColorArray([Color("#c8b7ac")])) # Soft warm tan/cocoa
+			draw_polygon(pts_ray, PackedColorArray([Color("#97A991")])) # Darker sage green #97A991
 			
 	# Draw pop-art halftone dots (chunky comic grid)
 	var grid_spacing = 54.0
