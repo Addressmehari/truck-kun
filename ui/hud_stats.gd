@@ -87,6 +87,8 @@ func _ready() -> void:
 
 func save_best_distance() -> void:
 	var config = ConfigFile.new()
+	# Load existing file first to avoid overwriting other keys (e.g. coins, upgrades)
+	var _err = config.load(SAVE_PATH)
 	config.set_value("progression", "best_distance", _best_distance_m)
 	config.save(SAVE_PATH)
 

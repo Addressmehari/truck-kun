@@ -73,10 +73,11 @@ func load_coins() -> void:
 
 func save_coins() -> void:
 	var config = ConfigFile.new()
-	# Load existing file first to avoid overwriting other keys (e.g. best_distance)
+	# Load existing file first to avoid overwriting other keys
 	var _err = config.load(SAVE_PATH)
 	config.set_value("progression", "total_coins", total_coins)
 	config.set_value("progression", "total_gems", total_gems)
+	config.set_value("progression", "best_distance", best_distance)
 	config.set_value("settings", "music_enabled", music_enabled)
 	config.set_value("settings", "sfx_enabled", sfx_enabled)
 	config.set_value("upgrades", "engine_level", engine_level)
