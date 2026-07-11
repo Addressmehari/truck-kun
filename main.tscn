@@ -120,7 +120,6 @@ position = Vector2(-5, 3)
 
 [node name="truck" parent="." instance=ExtResource("1_truck")]
 position = Vector2(-5, 3)
-petrol_drain_rate = 10.0
 unlimited_petrol = false
 
 [node name="CoinSpawner" type="Node" parent="."]

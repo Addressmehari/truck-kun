@@ -68,6 +68,12 @@ func _ready() -> void:
 		_distance_m = _distance_offset_m
 		gs.is_continuing = false
 
+	# Apply Fuel Tank Upgrade
+	if gs:
+		var fuel_lvl = gs.get("fuel_level") if gs.get("fuel_level") != null else 1
+		petrol_max = 100.0 + (fuel_lvl - 1) * 25.0 # Up to 200.0 max at Level 5
+		petrol = petrol_max
+
 	# ── Responsive Safe-Zone Setup (1.2x Enlarged Layout) ─────────────
 	anchor_left = 0.0
 	anchor_top = 0.0
@@ -81,6 +87,8 @@ func _ready() -> void:
 
 func save_best_distance() -> void:
 	var config = ConfigFile.new()
+	# Load existing file first to avoid overwriting other keys (e.g. coins, upgrades)
+	var _err = config.load(SAVE_PATH)
 	config.set_value("progression", "best_distance", _best_distance_m)
 	config.save(SAVE_PATH)
 
