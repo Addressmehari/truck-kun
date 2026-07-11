@@ -10,7 +10,8 @@ var _cards_hbox: HBoxContainer
 
 # Tracking nodes for dynamic updates
 var _card_buttons: Dictionary = {}
-var _level_grids: Dictionary = {}
+var _title_labels: Dictionary = {}
+var _title_names: Dictionary = {}
 var _info_labels: Dictionary = {}
 
 const UPGRADE_COSTS = [150, 300, 600, 1200]
@@ -130,10 +131,10 @@ func _ready() -> void:
 	main_vbox.add_child(_cards_hbox)
 
 	# Create the 4 upgrade cards
-	_create_upgrade_card("engine", "ENGINE", "🚀", "#3498db", "#2980b9")
-	_create_upgrade_card("fuel", "FUEL TANK", "⛽", "#e67e22", "#d35400")
-	_create_upgrade_card("air", "TILT CONTROL", "🕹️", "#9b59b6", "#8e44ad")
-	_create_upgrade_card("shield", "SHIELD", "🛡️", "#e74c3c", "#c0392b")
+	_create_upgrade_card("engine", "Engine", "🚀", "#3498db", "#2980b9")
+	_create_upgrade_card("fuel", "Fuel Tank", "⛽", "#e67e22", "#d35400")
+	_create_upgrade_card("air", "Tilt Control", "🕹️", "#9b59b6", "#8e44ad")
+	_create_upgrade_card("shield", "Shield", "🛡️", "#e74c3c", "#c0392b")
 
 func show_upgrades() -> void:
 	visible = true
@@ -189,23 +190,13 @@ func _create_upgrade_card(type: String, title: String, emoji: String, face_hex: 
 	title_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
 	title_lbl.add_theme_constant_override("outline_size", 4)
 	card_vbox.add_child(title_lbl)
+	_title_labels[type] = title_lbl
+	_title_names[type] = title
 
-	# Level blocks display (5 blocks)
-	var level_hbox = HBoxContainer.new()
-	level_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	level_hbox.add_theme_constant_override("separation", 6)
-	card_vbox.add_child(level_hbox)
-	
-	# Cache level grid nodes
-	var blocks_list = []
-	for i in range(5):
-		var block = Control.new()
-		block.custom_minimum_size = Vector2(18, 8)
-		block.draw.connect(_draw_level_block.bind(block, i, type))
-		level_hbox.add_child(block)
-		blocks_list.append(block)
-		
-	_level_grids[type] = blocks_list
+	# Spacer above info text
+	var top_spacer = Control.new()
+	top_spacer.custom_minimum_size = Vector2(0, 8)
+	card_vbox.add_child(top_spacer)
 
 	# Dynamic Info Label ("450 HP -> 549 HP")
 	var info_lbl = Label.new()
@@ -218,9 +209,9 @@ func _create_upgrade_card(type: String, title: String, emoji: String, face_hex: 
 	card_vbox.add_child(info_lbl)
 	_info_labels[type] = info_lbl
 
-	# Spacer
+	# Spacer above button
 	var c_spacer = Control.new()
-	c_spacer.custom_minimum_size = Vector2(0, 4)
+	c_spacer.custom_minimum_size = Vector2(0, 8)
 	card_vbox.add_child(c_spacer)
 
 	# Purchase Button
@@ -232,41 +223,12 @@ func _create_upgrade_card(type: String, title: String, emoji: String, face_hex: 
 	_style_comic_button(btn, face_hex, shadow_hex)
 	_card_buttons[type] = btn
 
-func _draw_level_block(block: Control, index: int, type: String) -> void:
-	var gs = get_node_or_null("/root/GameState")
-	if not gs:
-		return
-		
-	var lvl = gs.get(type + "_level")
-	var is_filled = (index < lvl)
-	
-	var w = block.size.x
-	var h = block.size.y
-	
-	# Draw background
-	var color = Color("#f1c40f") if is_filled else Color("#7f8c8d").darkened(0.2)
-	var border = Color.BLACK
-	
-	# Draw wobbly box
-	var pts = PackedVector2Array([
-		Vector2(2.0, 1.0),
-		Vector2(w - 2.0, 2.0),
-		Vector2(w - 1.0, h - 2.0),
-		Vector2(1.0, h - 1.0)
-	])
-	var outline = PackedVector2Array()
-	for pt in pts:
-		outline.append(pt)
-	outline.append(pts[0])
-	
-	block.draw_polygon(pts, PackedColorArray([color]))
-	block.draw_polyline(outline, border, 2.0)
+
 
 func _draw_card_panel(panel: PanelContainer, face_color_hex: String) -> void:
 	var w = panel.size.x
 	var h = panel.size.y
 	
-	var face_color = Color(face_color_hex).darkened(0.55) # Darkened card back for contrast
 	var shadow_color = Color.BLACK
 	var shadow_offset = 6.0
 	
@@ -284,14 +246,24 @@ func _draw_card_panel(panel: PanelContainer, face_color_hex: String) -> void:
 	])
 	panel.draw_polygon(shadow_pts, PackedColorArray([shadow_color]))
 	
-	# Face
-	var face_pts = PackedVector2Array([c0, c1, c2, c3])
-	var face_outline = PackedVector2Array()
-	for pt in face_pts:
-		face_outline.append(pt)
-	face_outline.append(face_pts[0])
+	# Interpolate divider coordinates (72px down)
+	var header_y_ratio = 72.0 / h
+	var d_left = c0.lerp(c3, header_y_ratio)
+	var d_right = c1.lerp(c2, header_y_ratio)
 	
-	panel.draw_polygon(face_pts, PackedColorArray([face_color]))
+	# 1. Lower Body Face (dark slate panel)
+	var body_pts = PackedVector2Array([d_left, d_right, c2, c3])
+	panel.draw_polygon(body_pts, PackedColorArray([Color("#151b22")]))
+	
+	# 2. Upper Header Face (accent colored header tab)
+	var header_pts = PackedVector2Array([c0, c1, d_right, d_left])
+	panel.draw_polygon(header_pts, PackedColorArray([Color(face_color_hex)]))
+	
+	# 3. Divider Line
+	panel.draw_line(d_left, d_right, Color.BLACK, 3.5)
+	
+	# 4. Outer Outline
+	var face_outline = PackedVector2Array([c0, c1, c2, c3, c0])
 	panel.draw_polyline(face_outline, Color.BLACK, 3.5)
 
 func _update_rows() -> void:
@@ -302,11 +274,11 @@ func _update_rows() -> void:
 	for type in ["engine", "fuel", "air", "shield"]:
 		var current_lvl = gs.get(type + "_level")
 		var btn = _card_buttons[type]
-		var blocks_list = _level_grids[type]
-
-		# Force level blocks redraw
-		for block in blocks_list:
-			block.queue_redraw()
+		
+		# Update card title with level
+		var title_lbl = _title_labels[type]
+		var base_name = _title_names[type]
+		title_lbl.text = "%s (Lv. %d)" % [base_name, current_lvl]
 		
 		# Dynamic power level calculation
 		var val_curr = 0
