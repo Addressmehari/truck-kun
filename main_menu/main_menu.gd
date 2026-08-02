@@ -121,6 +121,9 @@ func _ready() -> void:
 			for child in chassis_node.get_children():
 				if child is CPUParticles2D:
 					child.process_mode = Node.PROCESS_MODE_ALWAYS
+
+	if get_node_or_null("/root/AudioManager"):
+		get_node("/root/AudioManager").play_music("theme")
 func _process(delta: float) -> void:
 	elapsed += delta
 
@@ -256,6 +259,16 @@ func _input(event: InputEvent) -> void:
 						upgrades_menu.call("_update_coins_display")
 						upgrades_menu.call("_update_rows")
 					print("CHEAT: 10,000 Coins added!")
+	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if is_instance_valid(real_truck):
+			var local_click = event.position
+			var dist = local_click.distance_to(real_truck.position)
+			if dist < 220.0:
+				click_anim_time = 0.0
+				beep_bubble_time = 0.0
+				if get_node_or_null("/root/AudioManager"):
+					get_node("/root/AudioManager").play_sfx("horn")
+
 
 
 

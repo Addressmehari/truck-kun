@@ -135,6 +135,9 @@ func add_coin(amount: int = 1) -> void:
 	var gs = get_node_or_null("/root/GameState")
 	if gs:
 		gs.add_to_total_coins(amount)
+	
+	if get_node_or_null("/root/AudioManager"):
+		get_node("/root/AudioManager").play_sfx("coin")
 
 func add_gem(amount: int = 1) -> void:
 	gems += amount
@@ -144,6 +147,9 @@ func add_gem(amount: int = 1) -> void:
 	var gs = get_node_or_null("/root/GameState")
 	if gs:
 		gs.add_to_total_gems(amount)
+		
+	if get_node_or_null("/root/AudioManager"):
+		get_node("/root/AudioManager").play_sfx("coin")
 
 
 

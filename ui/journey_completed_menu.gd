@@ -62,6 +62,8 @@ func show_completed() -> void:
 	var tween = create_tween()
 	tween.tween_property(_title_label, "modulate:a", 1.0, 2.0)
 	tween.tween_callback(func(): _can_input = true)
+	if get_node_or_null("/root/AudioManager"):
+		get_node("/root/AudioManager").play_sfx("victory")
 
 func _process(delta: float) -> void:
 	if not visible:

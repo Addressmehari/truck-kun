@@ -217,15 +217,17 @@ func _physics_process(delta: float) -> void:
 	if delta > 0.0:
 		var accel = (linear_velocity - last_linear_velocity) / delta
 		# Raised threshold to 800.0 to prevent normal driving vibrations from cracking glass
-		if time_alive > 1.5 and accel.length() > 800.0:
-			# Decreased multiplier to 0.00015 (100x less damage) to make glass extremely resilient to bumps
-			var landing_dmg = (accel.length() - 800.0) * 0.00006
-			for i in range(6):
-				if inventory[i] != null and inventory[i].get("type") == "glass":
-					inventory[i]["health"] -= landing_dmg
-					if inventory[i]["health"] <= 0.0:
-						inventory[i] = null
-						emit_glass_break()
+		if time_alive > 1.5:
+			var acc_len = accel.length()
+			if acc_len > 800.0:
+				# Decreased multiplier to 0.00015 (100x less damage) to make glass extremely resilient to bumps
+				var landing_dmg = (accel.length() - 800.0) * 0.00006
+				for i in range(6):
+					if inventory[i] != null and inventory[i].get("type") == "glass":
+						inventory[i]["health"] -= landing_dmg
+						if inventory[i]["health"] <= 0.0:
+							inventory[i] = null
+							emit_glass_break()
 	last_linear_velocity = linear_velocity
 
 
@@ -498,6 +500,8 @@ func emit_glass_break() -> void:
 	if is_instance_valid(glass_break_particles):
 		glass_break_particles.restart()
 		glass_break_particles.emitting = true
+	if get_node_or_null("/root/AudioManager"):
+		get_node("/root/AudioManager").play_sfx("glass")
 
 func try_add_to_slot(slot_index: int, crate) -> bool:
 	if slot_index < 0 or slot_index >= 6:

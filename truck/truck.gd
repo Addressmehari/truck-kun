@@ -152,6 +152,13 @@ func _ready() -> void:
 		start_tunnel_exit_transition()
 		gs.set("is_biome_transition", false)
 
+	if get_node_or_null("/root/AudioManager") and get_parent() and get_parent().name != "MainMenu":
+		get_node("/root/AudioManager").start_engine()
+
+func _exit_tree() -> void:
+	if get_node_or_null("/root/AudioManager"):
+		get_node("/root/AudioManager").stop_engine()
+
 func _apply_exports() -> void:
 	# Push suspension settings to chassis and container so they match the inspector
 	for body in [chassis, container_body]:
@@ -480,6 +487,9 @@ func _physics_process(delta: float) -> void:
 		boat.drive(move_input, is_braking)
 	else:
 		_drive_wheels(delta, move_input, is_braking)
+
+	if get_node_or_null("/root/AudioManager"):
+		get_node("/root/AudioManager").update_engine(speed_kmh, abs(move_input))
 
 	# Locked differential: synchronise wheel speeds after each tyre updates
 	if not is_water_mode_active:
