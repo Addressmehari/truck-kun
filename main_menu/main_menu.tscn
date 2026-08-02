@@ -146,23 +146,11 @@ layout_mode = 2
 size_flags_vertical = 8
 columns = 5
 
-[node name="Btn1" type="Button" parent="UILayout/BottomLayout/HBoxContainer/LeftButtons"]
-custom_minimum_size = Vector2(110, 110)
-layout_mode = 2
-focus_mode = 0
-text = "👤"
-
 [node name="Btn2" type="Button" parent="UILayout/BottomLayout/HBoxContainer/LeftButtons"]
 custom_minimum_size = Vector2(110, 110)
 layout_mode = 2
 focus_mode = 0
 text = "🛒"
-
-[node name="Btn3" type="Button" parent="UILayout/BottomLayout/HBoxContainer/LeftButtons"]
-custom_minimum_size = Vector2(110, 110)
-layout_mode = 2
-focus_mode = 0
-text = "🏆"
 
 [node name="Btn4" type="Button" parent="UILayout/BottomLayout/HBoxContainer/LeftButtons"]
 custom_minimum_size = Vector2(110, 110)
