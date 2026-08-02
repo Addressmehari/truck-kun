@@ -752,6 +752,8 @@ func start_active_event(event_name: String) -> void:
 	if event_name == "Convoy":
 		is_autopilot = true
 		truck_health = truck_max_health
+		if get_node_or_null("/root/AudioManager"):
+			get_node("/root/AudioManager").play_music("convoy")
 		
 		# Force gear to DRIVE to close the backdoor and stop cargo dragging
 		set_gear(Gear.DRIVE)
@@ -793,6 +795,8 @@ func end_active_event(event_name: String) -> void:
 	print("Truck ending active event: ", event_name)
 	if event_name == "Convoy":
 		is_autopilot = false
+		if get_node_or_null("/root/AudioManager"):
+			get_node("/root/AudioManager").play_music("theme")
 		
 		# Restore camera
 		var camera = get_node_or_null("/root/main/Camera2D")
@@ -815,6 +819,8 @@ func end_active_event(event_name: String) -> void:
 func take_damage(amount: float) -> void:
 	if not is_autopilot:
 		return
+	if get_node_or_null("/root/AudioManager"):
+		get_node("/root/AudioManager").play_sfx("glass")
 	# Scale damage by inspector-configurable multiplier
 	truck_health = max(0.0, truck_health - amount * damage_scale)
 	if truck_health <= 0.0:

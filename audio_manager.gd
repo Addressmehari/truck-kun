@@ -3,6 +3,7 @@ extends Node
 # Preload synthesized audio resources
 var streams: Dictionary = {
 	"theme": preload("res://audio/music_theme.wav"),
+	"convoy": preload("res://audio/music_convoy.wav"),
 	"click": preload("res://audio/sfx_click.wav"),
 	"coin": preload("res://audio/sfx_coin.wav"),
 	"jump": preload("res://audio/sfx_jump.wav"),
@@ -126,6 +127,10 @@ func play_sfx(sfx_name: String) -> void:
 		if last_play_times.has("click") and now - last_play_times["click"] < 80:
 			return
 		last_play_times["click"] = now
+	elif sfx_name == "glass":
+		if last_play_times.has("glass") and now - last_play_times["glass"] < 250:
+			return
+		last_play_times["glass"] = now
 		
 	# Find first available player in pool
 	for p in sfx_pool:

@@ -345,6 +345,102 @@ if max_val > 0.99:
 save_wav("music_theme.wav", bgm_buffer, SAMPLE_RATE)
 
 # ==========================================
+# 1B. GENERATE CONVOY MUSIC THEME (Intense Action Theme)
+# ==========================================
+print("Generating Convoy Music Theme...")
+convoy_BPM = 130
+convoy_step_dur = 60.0 / convoy_BPM / 4.0 # 0.11538 seconds
+convoy_total_steps = 128
+convoy_song_dur = convoy_total_steps * convoy_step_dur # ~14.77 seconds
+convoy_num_samples = int(convoy_song_dur * SAMPLE_RATE)
+convoy_buffer = [0.0] * convoy_num_samples
+
+# Compose Chord Progression Pads (Em, C, D, Bm)
+convoy_pad_progression = [
+    (0, [40, 43, 47, 52], 32),   # Em
+    (32, [36, 40, 43, 48], 32),  # C
+    (64, [38, 42, 45, 50], 32),  # D
+    (96, [35, 38, 42, 47], 32)   # Bm (35, 38, 42, 47)
+]
+
+# Rolling Bass progression
+convoy_bass_progression = [
+    (40, 52), # Em
+    (36, 48), # C
+    (38, 50), # D
+    (35, 47)  # Bm
+]
+convoy_bass_data = []
+for bar in range(8):
+    root, octave = convoy_bass_progression[(bar // 1) % 4]
+    start_step = bar * 16
+    for step in range(0, 16, 2): # 8th notes
+        note = root if (step % 4 == 0) else octave
+        convoy_bass_data.append((start_step + step, note, 2))
+
+# Melody Pluck Arpeggio
+convoy_chords_arp = [
+    [52, 55, 59, 64], # Em
+    [48, 52, 55, 60], # C
+    [50, 54, 57, 62], # D
+    [47, 50, 54, 59]  # Bm
+]
+convoy_arp_data = []
+for bar in range(8):
+    chord_notes = convoy_chords_arp[(bar // 1) % 4]
+    for step in range(16):
+        s = bar * 16 + step
+        note = chord_notes[step % 4]
+        convoy_arp_data.append((s, note, 1))
+
+# Mix Pad Chords
+for step, notes, dur_steps in convoy_pad_progression:
+    chord_samples = generate_pad_chord(notes, dur_steps * convoy_step_dur, SAMPLE_RATE, volume=0.22)
+    mix_samples_wrap(convoy_buffer, int(step * convoy_step_dur * SAMPLE_RATE), chord_samples)
+
+# Mix Rolling Bass
+for step, note, dur_steps in convoy_bass_data:
+    freq = midi_to_freq(note)
+    bass_samples = generate_bass_note(freq, dur_steps * convoy_step_dur, SAMPLE_RATE, volume=0.38)
+    mix_samples_wrap(convoy_buffer, int(step * convoy_step_dur * SAMPLE_RATE), bass_samples)
+
+# Mix Arpeggio Pluck Lead
+convoy_lead_buffer = [0.0] * convoy_num_samples
+for step, note, dur_steps in convoy_arp_data:
+    freq = midi_to_freq(note)
+    n_samples = generate_supersaw(freq, dur_steps * convoy_step_dur, SAMPLE_RATE, detuning=0.005, volume=0.28)
+    for i in range(len(n_samples)):
+        t = i / SAMPLE_RATE
+        env = math.exp(-t * 22.0)
+        n_samples[i] *= env
+    mix_samples_wrap(convoy_lead_buffer, int(step * convoy_step_dur * SAMPLE_RATE), n_samples)
+
+convoy_lead_reverbed = apply_delay_reverb(convoy_lead_buffer, delay_seconds=0.18, decay=0.3, sample_rate=SAMPLE_RATE)
+for i in range(convoy_num_samples):
+    convoy_buffer[i] += convoy_lead_reverbed[i]
+
+# Mix Drums
+ck_samples = generate_modern_kick(SAMPLE_RATE)
+sn_samples = generate_modern_snare(SAMPLE_RATE)
+hh_samples = generate_modern_hihat(SAMPLE_RATE)
+
+for step in range(convoy_total_steps):
+    sample_idx = int(step * convoy_step_dur * SAMPLE_RATE)
+    if step % 4 == 0:
+        mix_samples_wrap(convoy_buffer, sample_idx, ck_samples)
+    if step % 8 == 4:
+        mix_samples_wrap(convoy_buffer, sample_idx, sn_samples)
+    if step % 2 == 1:
+        mix_samples_wrap(convoy_buffer, sample_idx, hh_samples)
+
+# Normalize
+c_max = max(abs(x) for x in convoy_buffer)
+if c_max > 0.99:
+    convoy_buffer = [x / c_max * 0.95 for x in convoy_buffer]
+
+save_wav("music_convoy.wav", convoy_buffer, SAMPLE_RATE)
+
+# ==========================================
 # 2. GENERATE MODERN COIN SFX (Clean Retro Ping)
 # ==========================================
 print("Generating modern coin SFX...")
