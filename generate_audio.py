@@ -345,21 +345,44 @@ if max_val > 0.99:
 save_wav("music_theme.wav", bgm_buffer, SAMPLE_RATE)
 
 # ==========================================
-# 2. GENERATE MODERN COIN SFX (Perfect Fifth Ping)
+# 2. GENERATE MODERN COIN SFX (Clean Retro Ping)
 # ==========================================
 print("Generating modern coin SFX...")
-chime_dur = 0.3
-chime_samples = [0.0] * int(chime_dur * SAMPLE_RATE)
-for i in range(len(chime_samples)):
+# Note 1: E5 (659.25 Hz) for 0.05 seconds
+n1 = []
+for i in range(int(0.05 * SAMPLE_RATE)):
     t = i / SAMPLE_RATE
-    env = math.exp(-t * 22.0) # fast, tight pluck envelope
-    val1 = math.sin(2.0 * math.pi * 1500.0 * t)
-    val2 = math.sin(2.0 * math.pi * 2250.0 * t) # perfect fifth harmonic
-    val = 0.6 * val1 + 0.4 * val2
-    chime_samples[i] = val * env * 0.45
+    phase = 2.0 * math.pi * 659.25 * t
+    norm_p = (phase % (2.0 * math.pi)) / (2.0 * math.pi)
+    tri = norm_p * 4.0 if norm_p < 0.25 else (2.0 - norm_p * 4.0 if norm_p < 0.75 else norm_p * 4.0 - 4.0)
+    sine = math.sin(phase)
+    n1.append((0.6 * tri + 0.4 * sine) * math.exp(-t * 20.0) * 0.45)
 
-chime_samples = apply_delay_reverb(chime_samples, delay_seconds=0.05, decay=0.2, sample_rate=SAMPLE_RATE)
-save_wav("sfx_coin.wav", chime_samples, SAMPLE_RATE)
+# Note 2: B5 (987.77 Hz) for 0.22 seconds
+n2 = []
+for i in range(int(0.22 * SAMPLE_RATE)):
+    t = i / SAMPLE_RATE
+    phase = 2.0 * math.pi * 987.77 * t
+    norm_p = (phase % (2.0 * math.pi)) / (2.0 * math.pi)
+    tri = norm_p * 4.0 if norm_p < 0.25 else (2.0 - norm_p * 4.0 if norm_p < 0.75 else norm_p * 4.0 - 4.0)
+    sine = math.sin(phase)
+    n2.append((0.6 * tri + 0.4 * sine) * math.exp(-t * 20.0) * 0.45)
+
+combined = n1 + n2
+# Apply moving average filter to soften the waveforms (removes raw aliasing buzz)
+filtered = []
+for i in range(len(combined)):
+    val = 0.0
+    count = 0
+    for w in range(5):
+        idx = i - w
+        if idx >= 0:
+            val += combined[idx]
+            count += 1
+    filtered.append(val / count if count > 0 else 0.0)
+
+filtered = apply_delay_reverb(filtered, delay_seconds=0.06, decay=0.25, sample_rate=SAMPLE_RATE)
+save_wav("sfx_coin.wav", filtered, SAMPLE_RATE)
 
 # ==========================================
 # 3. GENERATE MODERN CLICK SFX
