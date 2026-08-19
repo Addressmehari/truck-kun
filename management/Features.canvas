@@ -1,0 +1,23 @@
+{
+	"nodes":[
+		{"id":"5270b4c25125f3f3","type":"text","text":"Mini-Missions (Throgh House)\n\n","x":28,"y":508,"width":250,"height":60},
+		{"id":"9a9f293362f8ead9","type":"text","text":"1) Crusher\n2) Convoy\n3) Rain","x":-280,"y":710,"width":250,"height":116},
+		{"id":"0d96910deeaa18fc","type":"text","text":"1) Tow a truck\n2) Crate Delivery\n3) Race\n4) ","x":28,"y":700,"width":250,"height":126},
+		{"id":"54b981b67143135a","type":"text","text":"1) tentacles\n2) Rocket\n3) ","x":358,"y":700,"width":250,"height":126},
+		{"id":"91d3d332d0d79e10","type":"text","text":"1) Grass\n2) silhoutte night\n3) Water\n4) ","x":671,"y":700,"width":250,"height":126},
+		{"id":"8ca0b1f2713bb904","type":"text","text":"Mini-Events(Through MysteryBox)","x":-280,"y":509,"width":250,"height":60},
+		{"id":"24c09195b51c728f","type":"text","text":"powerups\n","x":358,"y":508,"width":250,"height":60},
+		{"id":"2991229194e08ccc","type":"text","text":"Biomes\n","x":747,"y":508,"width":98,"height":60},
+		{"id":"a85f41d0f833b9e0","type":"text","text":"Truck-Only\n","x":240,"y":240,"width":140,"height":61}
+	],
+	"edges":[
+		{"id":"ef3ae9b204c9d209","fromNode":"a85f41d0f833b9e0","fromSide":"bottom","toNode":"8ca0b1f2713bb904","toSide":"top"},
+		{"id":"290b49cf58174a3f","fromNode":"a85f41d0f833b9e0","fromSide":"bottom","toNode":"5270b4c25125f3f3","toSide":"top"},
+		{"id":"ac10c7e7707248ab","fromNode":"a85f41d0f833b9e0","fromSide":"bottom","toNode":"24c09195b51c728f","toSide":"top"},
+		{"id":"a05302041b85bf5b","fromNode":"8ca0b1f2713bb904","fromSide":"bottom","toNode":"9a9f293362f8ead9","toSide":"top"},
+		{"id":"7a98a9b54bbb07af","fromNode":"5270b4c25125f3f3","fromSide":"bottom","toNode":"0d96910deeaa18fc","toSide":"top"},
+		{"id":"49aed0d5314832a5","fromNode":"24c09195b51c728f","fromSide":"bottom","toNode":"54b981b67143135a","toSide":"top"},
+		{"id":"0da7a8a4201d1f59","fromNode":"2991229194e08ccc","fromSide":"bottom","toNode":"91d3d332d0d79e10","toSide":"top"},
+		{"id":"3ecc92351e3fb72b","fromNode":"a85f41d0f833b9e0","fromSide":"bottom","toNode":"2991229194e08ccc","toSide":"top"}
+	]
+}
